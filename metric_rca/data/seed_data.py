@@ -1,3 +1,14 @@
+"""种子数据生成器：固定种子 + 固定业务日，幂等重建 60 天确定性数据 + 5 个 ground truth。
+
+设计要点：
+  - 完全可复现：固定 SEED 与业务日，`make seed` 可幂等重建（先 DELETE 全表再插入）。
+  - 真实感：周内效应 + 季节性 + 渠道/类目/设备分布，叠加投放/库存/投诉退款的异常注入。
+  - 可评估：写入 anomaly_ground_truth（4 个异常 case 在 TARGET_DATE，1 个无异常 case 在另一天），
+    使后续 eval 能用"真因"逐 case 打分，而非靠人读。
+
+对应 docs/COMPLIANCE_MATRIX.md 第 5 行；docs/MetricRCA.md §10。
+"""
+
 from __future__ import annotations
 
 import json
@@ -20,11 +31,13 @@ from metric_rca.data.anomaly_injection import (
 )
 
 
-SEED = 20260606
+SEED = 20260606  # 固定随机种子：保证可复现
 BUSINESS_TODAY = date(2026, 6, 6)
 HISTORY_DAYS = 60
+# 无异常 case 放在 TARGET_DATE 之外的另一天，避免与"目标日异常"在同指标同日冲突。
 GMV_NO_ANOMALY_DATE = date(2026, 6, 4)
 
+# 9 个商品横跨 electronics/fashion/home 三个类目，商品 1 为质量问题商品。
 PRODUCTS = [
     (1, "Wireless Earbuds", "electronics", Decimal("129.00")),
     (2, "Smart Watch", "electronics", Decimal("219.00")),
@@ -40,6 +53,7 @@ CHANNELS = ["organic", "paid_ads", "affiliate"]
 DEVICES = ["mobile", "desktop"]
 WAREHOUSES = ["tokyo", "osaka"]
 
+# 幂等关键：每次 seed 先按"子表 → 父表"逆序清空，再重建，避免主键/外键冲突与残留。
 TABLES_TO_CLEAR = [
     "eval_case_result",
     "eval_run",
@@ -62,12 +76,13 @@ TABLES_TO_CLEAR = [
 
 
 def main() -> None:
+    """入口：连接应用账号 DB，在单事务内清空并重建全部种子数据。"""
     settings = get_settings()
     engine = create_engine(str(settings.db_dsn), pool_pre_ping=True)
-    _wait_for_mysql(engine)
-    rng = random.Random(SEED)
+    _wait_for_mysql(engine)  # 容器刚起时 MySQL 可能尚未就绪，重试等待
+    rng = random.Random(SEED)  # 局部 RNG，确定性来源
     try:
-        with engine.begin() as conn:
+        with engine.begin() as conn:  # 单事务：要么全部重建成功，要么回滚
             for table in TABLES_TO_CLEAR:
                 conn.execute(text(f"DELETE FROM {table}"))
             _insert_dimensions(conn)
@@ -75,10 +90,11 @@ def main() -> None:
             _insert_business_facts(conn, rng)
             _insert_ground_truth(conn)
     finally:
-        engine.dispose()
+        engine.dispose()  # 释放连接池
 
 
 def _wait_for_mysql(engine) -> None:
+    """最多重试 30 次（每次间隔 1s）等待 MySQL 可连；始终失败则抛出最后一次错误。"""
     last_error: OperationalError | None = None
     for _ in range(30):
         try:
@@ -93,6 +109,7 @@ def _wait_for_mysql(engine) -> None:
 
 
 def _insert_dimensions(conn) -> None:
+    """写维度表：dim_product（9 商品）与 dim_user（80 用户，注册日/城市确定性派生）。"""
     conn.execute(
         text(
             """
@@ -129,6 +146,7 @@ def _insert_dimensions(conn) -> None:
 
 
 def _insert_metric_definitions(conn) -> None:
+    """写 metric_definition：MVP 四个指标的口径（公式/分子分母/来源表/可下钻维度）。"""
     metric_rows = [
         {
             "metric_id": "gmv",
@@ -166,7 +184,7 @@ def _insert_metric_definitions(conn) -> None:
             "formula": "sum(refund_amount)/sum(order_amount)",
             "numerator_sql_fragment": "SUM(refund_amount)",
             "denominator_sql_fragment": "SUM(order_amount)",
-            "higher_is_better": 0,
+            "higher_is_better": 0,  # 退款率越低越好
             "source_table": "fact_order",
             "allowed_dimensions": json.dumps(["channel", "category", "device", "product"]),
         },
@@ -191,6 +209,7 @@ def _insert_metric_definitions(conn) -> None:
 
 
 def _insert_business_facts(conn, rng: random.Random) -> None:
+    """生成 60 天业务事实（投放/库存/流量/订单/工单），目标日叠加异常注入。"""
     traffic_rows = []
     inventory_rows = []
     campaign_rows = []
@@ -198,13 +217,15 @@ def _insert_business_facts(conn, rng: random.Random) -> None:
     ticket_rows = []
     order_id = 1
     ticket_id = 1
+    # 数据窗口：以 TARGET_DATE 为最后一天，往前 60 天（保证前 4 个同星期几基线都存在）。
     start_date = TARGET_DATE - timedelta(days=HISTORY_DAYS - 1)
 
     for offset in range(HISTORY_DAYS):
         business_date = start_date + timedelta(days=offset)
-        weekday_factor = 1.10 if business_date.weekday() < 5 else 0.86
-        seasonal_factor = 1.0 + (offset % 14) * 0.006
+        weekday_factor = 1.10 if business_date.weekday() < 5 else 0.86  # 工作日高、周末低
+        seasonal_factor = 1.0 + (offset % 14) * 0.006  # 轻微的双周季节波动
 
+        # —— 投放（fact_campaign）：目标日 paid_ads 投放骤降 ——
         spend_mult, click_mult = campaign_multiplier(
             business_date=business_date, channel="paid_ads"
         )
@@ -222,6 +243,7 @@ def _insert_business_facts(conn, rng: random.Random) -> None:
         )
 
         for product_id, _, category, price in PRODUCTS:
+            # —— 库存（fact_inventory）：每商品 × 每仓库；目标日 electronics 缺货 ——
             for warehouse_index, warehouse in enumerate(WAREHOUSES):
                 inventory_rows.append(
                     {
@@ -241,6 +263,7 @@ def _insert_business_facts(conn, rng: random.Random) -> None:
                     }
                 )
 
+            # —— 流量（fact_traffic）+ 订单（fact_order）：渠道 × 设备 ——
             for channel in CHANNELS:
                 channel_factor = {"organic": 1.0, "paid_ads": 1.35, "affiliate": 0.72}[channel]
                 for device in DEVICES:
@@ -248,6 +271,7 @@ def _insert_business_facts(conn, rng: random.Random) -> None:
                     category_factor = {"electronics": 1.18, "fashion": 0.95, "home": 0.84}[
                         category
                     ]
+                    # UV 基数 = 各结构因子连乘；再乘异常倍率，并加少量随机抖动。
                     uv_base = (
                         82
                         * weekday_factor
@@ -277,6 +301,7 @@ def _insert_business_facts(conn, rng: random.Random) -> None:
                             "pay_user_cnt": pay_user_cnt,
                         }
                     )
+                    # 每个支付用户落一条订单；目标日问题商品退款概率飙升。
                     for order_index in range(pay_user_cnt):
                         refund_rate = refund_multiplier(
                             business_date=business_date, product_id=product_id
@@ -299,6 +324,7 @@ def _insert_business_facts(conn, rng: random.Random) -> None:
                         )
                         order_id += 1
 
+            # —— 工单（fact_customer_ticket）：目标日问题商品投诉激增 ——
             for ticket_index in range(complaint_count(business_date=business_date, product_id=product_id)):
                 ticket_rows.append(
                     {
@@ -311,6 +337,7 @@ def _insert_business_facts(conn, rng: random.Random) -> None:
                 )
                 ticket_id += 1
 
+    # 批量写入各事实表（executemany）。
     conn.execute(
         text(
             """
@@ -368,6 +395,7 @@ def _insert_business_facts(conn, rng: random.Random) -> None:
 
 
 def _insert_ground_truth(conn) -> None:
+    """写 anomaly_ground_truth：4 个异常 case（TARGET_DATE）+ 1 个无异常 case（另一天）。"""
     rows = [
         {
             "case_id": "gmv_paid_ads_drop",
@@ -406,6 +434,7 @@ def _insert_ground_truth(conn) -> None:
             "element": "1",
         },
         {
+            # 无异常 case：放在 6-04，期望判定为无异常、不建运营任务。
             "case_id": "gmv_no_anomaly",
             "business_date": GMV_NO_ANOMALY_DATE,
             "metric_id": "gmv",
