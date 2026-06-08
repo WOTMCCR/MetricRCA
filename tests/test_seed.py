@@ -21,6 +21,43 @@ HASH_TABLES = [
     "metric_definition",
     "anomaly_ground_truth",
 ]
+TARGET_DATE = date(2026, 6, 5)
+GMV_NO_ANOMALY_DATE = date(2026, 6, 4)
+
+
+def _gmv_anomaly_stats(conn, business_date: date) -> dict[str, float | bool]:
+    baseline_dates = [business_date - timedelta(days=7 * i) for i in range(1, 5)]
+    row = conn.execute(
+        text(
+            """
+            SELECT
+              SUM(CASE WHEN business_date = :business_date THEN daily_gmv ELSE 0 END) AS current_gmv,
+              AVG(CASE WHEN business_date <> :business_date THEN daily_gmv END) AS baseline_mean,
+              STDDEV_SAMP(CASE WHEN business_date <> :business_date THEN daily_gmv END) AS baseline_std
+            FROM (
+              SELECT business_date, SUM(order_amount) AS daily_gmv
+              FROM fact_order
+              WHERE is_paid = 1
+                AND business_date IN :dates
+              GROUP BY business_date
+            ) AS daily
+            """
+        ),
+        {"business_date": business_date, "dates": tuple([*baseline_dates, business_date])},
+    ).mappings().one()
+    current = float(row["current_gmv"])
+    baseline_mean = float(row["baseline_mean"])
+    baseline_std = float(row["baseline_std"])
+    delta_pct = abs((current - baseline_mean) / baseline_mean)
+    z_score = abs((current - baseline_mean) / max(baseline_std, 1e-9))
+    return {
+        "current": current,
+        "baseline_mean": baseline_mean,
+        "baseline_std": baseline_std,
+        "delta_pct": delta_pct,
+        "z_score": z_score,
+        "is_anomaly": delta_pct >= 0.15 and z_score >= 2.0,
+    }
 
 
 def _content_hash() -> str:
@@ -95,6 +132,9 @@ def test_seed_metric_definitions_and_ground_truth_cases() -> None:
             )
             assert cases["gmv_no_anomaly"]["expected_anomaly"] == 0
             assert cases["gmv_no_anomaly"]["root_cause_type"] == "no_anomaly"
+            assert cases["gmv_no_anomaly"]["business_date"] == GMV_NO_ANOMALY_DATE
+            assert cases["gmv_paid_ads_drop"]["business_date"] == TARGET_DATE
+            assert cases["gmv_stockout_electronics"]["business_date"] == TARGET_DATE
     finally:
         engine.dispose()
 
@@ -104,29 +144,11 @@ def test_gmv_no_anomaly_label_matches_same_weekday_baseline() -> None:
     engine = create_engine(str(settings.db_dsn), pool_pre_ping=True)
     try:
         with engine.connect() as conn:
-            row = conn.execute(
-                text(
-                    """
-                    SELECT
-                      SUM(CASE WHEN business_date = '2026-06-05' THEN daily_gmv ELSE 0 END) AS current_gmv,
-                      AVG(CASE WHEN business_date <> '2026-06-05' THEN daily_gmv END) AS baseline_mean,
-                      STDDEV_SAMP(CASE WHEN business_date <> '2026-06-05' THEN daily_gmv END) AS baseline_std
-                    FROM (
-                      SELECT business_date, SUM(order_amount) AS daily_gmv
-                      FROM fact_order
-                      WHERE is_paid = 1
-                        AND business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29','2026-06-05')
-                      GROUP BY business_date
-                    ) AS daily
-                    """
-                )
-            ).mappings().one()
-            current = float(row["current_gmv"])
-            baseline_mean = float(row["baseline_mean"])
-            baseline_std = float(row["baseline_std"])
-            delta_pct = abs((current - baseline_mean) / baseline_mean)
-            z_score = abs((current - baseline_mean) / max(baseline_std, 1e-9))
-            assert delta_pct < 0.15 or z_score < 2.0
+            no_anomaly_stats = _gmv_anomaly_stats(conn, GMV_NO_ANOMALY_DATE)
+            assert no_anomaly_stats["is_anomaly"] is False
+
+            target_stats = _gmv_anomaly_stats(conn, TARGET_DATE)
+            assert target_stats["is_anomaly"] is True
     finally:
         engine.dispose()
 

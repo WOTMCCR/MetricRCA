@@ -23,8 +23,6 @@ def traffic_multiplier(
         pay_user_multiplier *= 0.55
     if business_date == TARGET_DATE and category == "electronics":
         pay_user_multiplier *= 0.62
-    if business_date == TARGET_DATE and channel != "paid_ads" and category != "electronics" and device == "desktop":
-        pay_user_multiplier *= 7.0
     return uv_multiplier, pay_user_multiplier
 
 

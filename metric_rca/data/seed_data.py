@@ -23,6 +23,7 @@ from metric_rca.data.anomaly_injection import (
 SEED = 20260606
 BUSINESS_TODAY = date(2026, 6, 6)
 HISTORY_DAYS = 60
+GMV_NO_ANOMALY_DATE = date(2026, 6, 4)
 
 PRODUCTS = [
     (1, "Wireless Earbuds", "electronics", Decimal("129.00")),
@@ -406,7 +407,7 @@ def _insert_ground_truth(conn) -> None:
         },
         {
             "case_id": "gmv_no_anomaly",
-            "business_date": TARGET_DATE,
+            "business_date": GMV_NO_ANOMALY_DATE,
             "metric_id": "gmv",
             "expected_anomaly": 0,
             "root_cause_type": "no_anomaly",

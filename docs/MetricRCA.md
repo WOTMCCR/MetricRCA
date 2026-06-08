@@ -746,7 +746,7 @@ CREATE TABLE eval_case_result (
 
 种子生成器 `data/seed_data.py`：固定随机种子（`SEED=20260606`）+ 固定业务日。生成包含：周内效应（工作日 / 周末）、季节性、渠道分布、类目分布、投放影响、库存影响、投诉 / 退款影响。
 
-异常注入框架：在「正常基线生成」之后，对 `target_date=2026-06-05` 按 case 配置叠加异常，并写入 `anomaly_ground_truth`。
+异常注入框架：在「正常基线生成」之后，对 `target_date=2026-06-05` 按异常 case 配置叠加异常，并写入 `anomaly_ground_truth`。`gmv_no_anomaly` 是未注入异常的 control case，使用 `2026-06-04`，不得通过补偿其它分群来把 `target_date` 大盘 GMV 压成无异常。
 
 **5 个 MVP 异常 case**：
 
@@ -756,7 +756,7 @@ CREATE TABLE eval_case_result (
 | gmv_stockout_electronics | gmv↓ | electronics 类目 stockout_hours↑ | stockout |
 | cvr_mobile_drop | pay_cvr↓ | mobile 设备 pay_user_cnt 骤降 | conversion_drop |
 | refund_rate_product_quality | refund_rate↑ | 某商品 complaint / refund 激增 | complaint_or_quality_issue |
-| gmv_no_anomaly | gmv | 不注入异常 | no_anomaly（不可强行归因 / 不建任务） |
+| gmv_no_anomaly | gmv | `2026-06-04` 不注入异常 | no_anomaly（不可强行归因 / 不建任务） |
 
 **1 个月 20-case 分类法（节选）**：多渠道同时下降、类目+渠道交叉、AOV 驱动、UV 驱动、价格变更、促销结束回落、单 SKU 爆款缺货、物流时效、季节性误报（应判无异常）等。
 

@@ -410,6 +410,7 @@ SEED = 20260606
 business_today = 2026-06-06
 target_date = 2026-06-05
 history_days = 60
+gmv_no_anomaly_date = 2026-06-04
 ```
 
 必须生成：
@@ -430,7 +431,7 @@ history_days = 60
 | `gmv_stockout_electronics` | `gmv` | `electronics` stockout_hours 上升 | `stockout` |
 | `cvr_mobile_drop` | `pay_cvr` | `mobile` pay_user_cnt 下降 | `conversion_drop` |
 | `refund_rate_product_quality` | `refund_rate` | 某商品投诉和退款激增 | `complaint_or_quality_issue` |
-| `gmv_no_anomaly` | `gmv` | 不注入异常 | `no_anomaly` |
+| `gmv_no_anomaly` | `gmv` | `2026-06-04` 不注入异常；不得用补偿项压平 `target_date` 大盘 GMV | `no_anomaly` |
 
 ### 4.3 异常检测
 
