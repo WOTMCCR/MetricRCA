@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metric_rca"
+version = "0.1.0"
+description = "MetricRCA docs-compliant Phase 1 data and guardrail foundation"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "pydantic>=2,<3",
+  "pydantic-settings>=2,<3",
+  "sqlalchemy>=2,<3",
+  "pymysql>=1.1,<2",
+  "sqlglot>=25,<26",
+  "pandas>=2.2,<3",
+  "pytest>=8,<9",
+]
+
+[tool.setuptools.packages.find]
+include = ["metric_rca*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
