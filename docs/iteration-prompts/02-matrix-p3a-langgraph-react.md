@@ -35,6 +35,12 @@ GLOBAL RULES FOR THIS PHASE
 - This phase must not claim full Matrix P3 completion until Reflection+Memory
   hardening in the next phase is done.
 - Passing 5 cases is not sufficient; architecture proof tests matter.
+- Tests must prove the required positive behavior, not only the absence of a
+  wrong behavior. If a test asserts "no X", add the paired proof that the
+  required Y actually happens.
+- Typed error boundaries include system table persistence, not only metric fact
+  SQL execution. trace_step, agent_run, evidence, and sql_audit write failures
+  must surface as typed failures.
 
 TARGET
 Implement Matrix P3 Part A:
@@ -150,6 +156,13 @@ SCOPE
    - duplicate intent parsing logic (call MetricService.parse_question)
    - bypass SQLRenderer/SQLGuard for fact queries
    - use broad except Exception
+   Additional node contracts:
+   - parse_question node must call MetricService.parse_question(). Graph E2E
+     tests must use the real MetricService + live LLMIntentPlanner path, not
+     MockIntentPlanner, keyword parsing, or a fixture that bypasses parsing.
+   - attribute_rank node must rank only candidates/evidence already present in
+     RCAState for the current run. It must not reconstruct MetricDefinition,
+     rerun attribution from hardcoded rows, or invent candidates outside state.
 
 4. Implement graph:
    - File: metric_rca/agent/graph.py
@@ -159,6 +172,9 @@ SCOPE
    - Graph construction must create MetadataRepository(engine) and
      MetricService(metadata_repo, settings) and pass them to nodes.
      This is the only place where MetricService is constructed.
+   - Production run_rca may construct repositories/services from Settings, but
+     tests must be able to inject settings, repository, metric_service, renderer,
+     and trace writer. Do not hide dependencies behind global singletons.
    - Business limits must use settings:
      max_steps=8
      max_query=12
@@ -183,13 +199,19 @@ SCOPE
    write_memory -> END
 
 6. Trace and persistence:
-   - Implement metric_rca/observability/trace.py if useful.
+   - Implement metric_rca/observability/trace.py with a TraceWriter or
+     equivalent single abstraction. Node modules must use this shared writer
+     instead of each node computing seq/latency/error persistence independently.
    - Every node writes trace_step.
    - execute_tool also records action and tool result.
    - Every failure trace includes error_code.
    - seq must be contiguous per run_id.
    - latency_ms >= 0.
-   - agent_run status and error_code must be persisted.
+   - agent_run lifecycle must be persisted: create running at start, update
+     status/error_code/finished_at on success, no_anomaly, and failure.
+   - trace_step, agent_run, evidence, and sql_audit persistence failures must be
+     mapped to typed errors such as SYSTEM_TABLE_WRITE_FAILED; no raw SQLAlchemy
+     exception may escape a graph/tool boundary.
 
 7. Evidence binding:
    - E1 detect_anomaly
@@ -197,7 +219,8 @@ SCOPE
    - E3 fetch_related_signal
    - E4 calculate_contribution
    - Confirmed/likely candidate must bind current-run E1-E4.
-   - no_anomaly binds E1, skips attribute_rank and create_tasks.
+   - no_anomaly binds E1 only. It must not create E2, E3, E4, candidates,
+     operation_task, or an attribute_rank trace.
    - Candidate without current-run evidence must be rejected by reflection.
 
 8. Core reflection gate in this phase:
@@ -218,6 +241,8 @@ SCOPE
      memory_enabled=false explicitly.
    - If memory_enabled=true and memory_repo is unavailable, return typed
      MEMORY_READ_FAILED or MEMORY_WRITE_FAILED; do not silently no-op.
+   - Tests must cover both sides: memory_enabled=false does not call memory
+     repo, and memory_enabled=true without memory repo fails typed.
    - Full MemoryRepository behavior is next phase and must be listed as
      Remaining deviation.
 
@@ -238,7 +263,7 @@ Must create/update:
 - metric_rca/agent/nodes/create_tasks.py
 - metric_rca/agent/nodes/write_memory.py
 - metric_rca/agent/nodes/error_return.py
-- metric_rca/observability/trace.py if needed
+- metric_rca/observability/trace.py
 - pyproject.toml
 - tests/test_graph.py
 - tests/test_react.py
@@ -265,6 +290,11 @@ FORBIDDEN
 - No constructing MetricDefinition objects in graph or node code.
 - No reimplementing intent parsing logic in graph code. parse_question node
   must call MetricService.parse_question() which delegates to LLMIntentPlanner.
+- No MockIntentPlanner, fake parser, keyword parser, or static ParsedIntent
+  shortcut in graph E2E tests.
+- No per-node ad hoc trace seq counters when a shared TraceWriter exists.
+- No graph-level generic exception catcher that hides the typed error code from
+  trace_step and agent_run.
 
 TDD / PROOF-TEST-FIRST
 Add tests before implementation:
@@ -286,6 +316,29 @@ Add tests before implementation:
     Source scan: metric_rca/agent/graph.py and metric_rca/agent/nodes/*.py
     must not contain MetricDefinition( construction, METRIC_DEFINITIONS,
     SCHEMA_CONTEXT, _CHANNELS, _CATEGORIES, or literal dimension values.
+16. test_trace_writer_is_single_seq_error_latency_boundary
+    Node modules must call the shared TraceWriter; seq is contiguous, latency is
+    non-negative, and error_code is present on failure trace rows.
+17. test_agent_run_lifecycle_persists_status_error_and_finished_at
+    agent_run starts as running and finishes with succeeded/no_anomaly/failed,
+    with error_code persisted for failed runs.
+18. test_system_table_write_failure_returns_typed_graph_error
+    trace_step/agent_run/evidence/sql_audit write failure maps to
+    SYSTEM_TABLE_WRITE_FAILED or a documented typed code; no raw SQLAlchemy
+    exception escapes.
+19. test_graph_e2e_uses_real_metric_service_parse_question_no_mock_planner
+    Source scan plus spy: graph E2E calls MetricService.parse_question and does
+    not instantiate MockIntentPlanner, fake ParsedIntent, or keyword parser.
+20. test_attribute_rank_uses_current_state_evidence_only
+    Candidate ranking must use state.candidates/state.evidences for the current
+    run; missing or foreign-run evidence fails instead of recomputing a new
+    candidate.
+21. test_no_anomaly_has_only_E1_and_no_downstream_artifacts
+    no_anomaly run has exactly E1, no E2/E3/E4, no candidates, no operation_task,
+    and no attribute_rank trace.
+22. test_memory_enabled_true_without_repo_fails_typed_and_false_does_not_call
+    memory_enabled=false does not touch memory repo; memory_enabled=true without
+    repo returns MEMORY_READ_FAILED or MEMORY_WRITE_FAILED.
 
 COMMANDS
 Run:
@@ -301,9 +354,17 @@ ACCEPTANCE CHECKS
 - Node files are real modules with behavior and source paths in their own files.
 - Deterministic ReAct loop appends AgentAction, Observation, Evidence.
 - Invalid actions do not execute tools.
-- no_anomaly has E1 only, no attribute_rank trace, no operation_task.
+- no_anomaly has E1 only, no E2/E3/E4, no candidates, no attribute_rank trace,
+  no operation_task.
 - gmv_paid_ads_drop reaches campaign_traffic_drop only through current-run
   evidence.
+- Graph E2E parse_question uses MetricService.parse_question and live
+  LLMIntentPlanner; no mock planner or keyword parser exists in graph tests.
+- TraceWriter or equivalent shared boundary owns trace_step seq, latency, and
+  error_code persistence.
+- agent_run lifecycle status/error_code/finished_at is persisted for success,
+  no_anomaly, and failure.
+- System table write failures are typed graph/tool failures.
 - Failed reflection produces no report.
 - Full Reflection repair and MemoryRepository are listed as Remaining
   deviations, not as completed work.

@@ -1,3 +1,55 @@
+## ADL-0004: P3A Requires Shared Trace, AgentRun Lifecycle, And Positive Proof Tests
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-09 |
+| 状态 | accepted |
+| 关联迭代 | p3a-preflight-prompt-hardening |
+| 影响范围 | P3A prompt, graph nodes, trace, proof tests |
+
+### 背景与场景
+
+P2 review cycles found that absence-only tests were too weak: net_gmv initially
+proved only that GMV-only decomposition was absent, while missing the required
+gmv/refund split. Tool runtime fixes also showed that typed failures must cover
+system table persistence, not only metric fact SQL execution. P3A will add
+graph nodes, trace persistence, and agent_run lifecycle transitions, so those
+boundaries must be specified before implementation starts.
+
+### 决策
+
+Harden the P3A iteration prompt before coding. Require a shared TraceWriter (or
+equivalent) for trace_step seq, latency, and error_code persistence; require
+agent_run lifecycle persistence for running/succeeded/no_anomaly/failed states;
+require graph dependencies to be injectable in tests; require graph E2E parsing
+through MetricService.parse_question and the live LLMIntentPlanner path; require
+attribute_rank to use only current-run state evidence; and require no_anomaly to
+produce exactly E1 with no downstream E2/E3/E4, candidates, tasks, or
+attribute_rank trace.
+
+### 理由
+
+P3 nodes should orchestrate state, routing, trace, and typed failure propagation
+without duplicating P2 tools or metadata services. A shared trace boundary avoids
+per-node seq drift and inconsistent error mapping. AgentRun lifecycle tests make
+fail-fast behavior observable to API/UI/eval layers later. Positive proof tests
+prevent a shortcut from passing by merely not doing the wrong thing.
+
+### 被否决的方案
+
+Relying on graph-level generic exception handling was rejected because it would
+hide typed error causes from trace_step and agent_run. Allowing MockIntentPlanner
+in graph E2E tests was rejected because P2 intentionally made live LLM parsing
+the production intent boundary. Leaving no_anomaly assertions at "no task" was
+rejected because downstream evidence or candidate creation would still pollute
+the run.
+
+### 后续跟进
+
+P3A implementation should start from the hardened prompt and add the named proof
+tests before graph code. P3B should keep the same positive-proof standard for
+reflection repair and memory pollution tests.
+
 ## ADL-0003: Tool Runtime Errors And Metadata Boundaries Stay Separate
 
 | 字段 | 值 |
