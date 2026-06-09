@@ -127,11 +127,82 @@ def test_gmv_paid_ads_drop_e2e_through_graph_with_E1_to_E4() -> None:
         assert result["candidates"][0].root_cause_type == "campaign_traffic_drop"
         assert result["candidates"][0].evidence_ids == evidence_ids
         assert result["reflection"].passed is True
+        assert _observation_payload(result, "fetch_related_signal")["signal_type"] == "campaign"
+        assert result["query_count"] <= settings.max_query
         assert metric_service.parse_calls == 1
         persisted = _agent_run(settings, "p3a-gmv-paid-ads-drop")
         assert persisted["status"] == "succeeded"
         assert persisted["error_code"] is None
         assert persisted["finished_at"] is not None
+    finally:
+        repository.close()
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("question", "run_id", "expected_signal_type", "expected_signal_metric_id", "expected_root_cause_type"),
+    [
+        (
+            "Why did yesterday category=electronics GMV drop?",
+            "p3a-gmv-stockout-electronics",
+            "inventory",
+            "stockout_rate",
+            "stockout",
+        ),
+        (
+            "Why did yesterday device=mobile pay conversion rate drop?",
+            "p3a-pay-cvr-mobile",
+            "conversion",
+            "pay_cvr",
+            "conversion_drop",
+        ),
+        (
+            "Why did yesterday product=1 refund rate increase?",
+            "p3a-refund-quality-product",
+            "refund_quality",
+            "complaint_rate",
+            "complaint_or_quality_issue",
+        ),
+        (
+            "Why did yesterday channel=paid_ads net GMV drop?",
+            "p3a-net-gmv-paid-ads",
+            "campaign",
+            "gmv",
+            "campaign_traffic_drop",
+        ),
+    ],
+)
+def test_graph_e2e_selects_signal_policy_from_candidate_metric_and_dimension(
+    question: str,
+    run_id: str,
+    expected_signal_type: str,
+    expected_signal_metric_id: str,
+    expected_root_cause_type: str,
+) -> None:
+    seed_main()
+    settings = _settings(memory_enabled=False)
+    repository, metric_service = _real_dependencies(settings)
+    try:
+        result = _run_live_graph(
+            question,
+            run_id=run_id,
+            settings=settings,
+            repository=repository,
+            metric_service=metric_service,
+        )
+        payload = _observation_payload(result, "fetch_related_signal")
+
+        assert result["status"] == "succeeded"
+        assert [evidence.evidence_id for evidence in result["evidences"]] == [
+            f"{run_id}:E1",
+            f"{run_id}:E2",
+            f"{run_id}:E3",
+            f"{run_id}:E4",
+        ]
+        assert payload["signal_type"] == expected_signal_type
+        assert payload["signal_metric_id"] == expected_signal_metric_id
+        assert result["candidates"][0].root_cause_type == expected_root_cause_type
+        assert result["query_count"] <= settings.max_query
     finally:
         repository.close()
 
@@ -285,6 +356,42 @@ def test_tiny_max_steps_stops_by_business_limit_not_GraphRecursionError() -> Non
     assert action.args["error_code"] == "MAX_STEPS_EXCEEDED"
 
 
+def test_query_budget_counts_real_execute_plan_calls_and_blocks_report() -> None:
+    from metric_rca.agent.nodes.execute_tool import execute_tool
+
+    repo = _CountingBudgetRepository()
+    deps = _Dependencies(settings=Settings.model_construct(max_query=3), repository=repo)
+    state = {
+        "run_id": "run-1",
+        "metric_id": "gmv",
+        "target_date": date(2026, 6, 5),
+        "actions": [
+            {
+                "action": "calculate_contribution",
+                "args": {
+                    "run_id": "run-1",
+                    "metric_id": "gmv",
+                    "target_date": "2026-06-05",
+                    "dimension": "channel",
+                    "element": "paid_ads",
+                    "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3"],
+                    "filters": {},
+                },
+            }
+        ],
+        "query_count": 0,
+        "evidences": [_evidence("run-1:E1"), _evidence("run-1:E2"), _evidence("run-1:E3")],
+    }
+
+    result = execute_tool(state, dependencies=deps)
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "QUERY_BUDGET_EXCEEDED"
+    assert result["query_count"] == 3
+    assert repo.executed == 3
+    assert result["evidences"] == []
+
+
 def test_runtime_graph_code_does_not_read_anomaly_ground_truth() -> None:
     offenders = [
         str(path.relative_to(ROOT))
@@ -436,6 +543,13 @@ def _trace_seqs(settings: Settings, run_id: str) -> list[int]:
         engine.dispose()
 
 
+def _observation_payload(result: dict[str, Any], action_name: str) -> dict[str, Any]:
+    for observation in result["observations"]:
+        if observation.action_name == action_name:
+            return observation.payload
+    raise AssertionError(f"observation not found: {action_name}")
+
+
 def _audit_hashes(settings: Settings, run_id: str) -> set[str]:
     engine = create_engine(str(settings.db_dsn), pool_pre_ping=True)
     try:
@@ -515,11 +629,20 @@ class _MetricService:
         self.dimensions = dimensions
 
     def get_metric_definition(self, metric_id: str):
-        return type("Definition", (), {"metric_id": metric_id, "allowed_dimensions": self.dimensions})()
+        return type(
+            "Definition",
+            (),
+            {
+                "metric_id": metric_id,
+                "higher_is_better": True,
+                "allowed_dimensions": self.dimensions,
+                "source_table": "fact_order",
+            },
+        )()
 
 
 class _Dependencies:
-    def __init__(self, settings: Any | None = None) -> None:
+    def __init__(self, settings: Any | None = None, repository: Any | None = None) -> None:
         self.settings = settings or Settings.model_construct(
             max_steps=8,
             max_query=12,
@@ -531,7 +654,7 @@ class _Dependencies:
             signal_metric_by_type={"campaign": "gmv"},
         )
         self.metric_service = _MetricService(["channel"])
-        self.repository = None
+        self.repository = repository
         self.renderer = None
         self.trace_writer = _InMemoryTraceWriter()
         self.memory_repo = None
@@ -554,3 +677,56 @@ class _InMemoryTraceWriter:
 
     def finish_run(self, **kwargs) -> None:
         self.finished.append(kwargs)
+
+
+class _CountingBudgetRepository:
+    def __init__(self) -> None:
+        self.executed = 0
+        self.persisted_evidence = {
+            "run-1:E1": {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
+            "run-1:E2": {"evidence_id": "run-1:E2", "run_id": "run-1", "guard_status": "passed"},
+            "run-1:E3": {"evidence_id": "run-1:E3", "run_id": "run-1", "guard_status": "passed"},
+        }
+
+    def get_agent_run(self, run_id: str) -> dict[str, Any] | None:
+        return {
+            "run_id": run_id,
+            "status": "running",
+            "metric_id": "gmv",
+            "target_date": date(2026, 6, 5),
+        }
+
+    def get_evidence(self, *, run_id: str, evidence_id: str) -> dict[str, Any] | None:
+        row = self.persisted_evidence.get(evidence_id)
+        if row and row["run_id"] == run_id:
+            return row
+        return None
+
+    def execute_plan(self, plan, *, run_id: str):
+        self.executed += 1
+        if "GROUP BY fact_order.channel" in plan.sql and "business_date IN" in plan.sql:
+            rows = [
+                {"business_date": date(2026, 5, 29), "channel": "paid_ads", "metric_value": 100.0},
+                {"business_date": date(2026, 5, 22), "channel": "paid_ads", "metric_value": 100.0},
+                {"business_date": date(2026, 5, 15), "channel": "paid_ads", "metric_value": 100.0},
+                {"business_date": date(2026, 5, 8), "channel": "paid_ads", "metric_value": 100.0},
+            ]
+        elif "GROUP BY fact_order.channel" in plan.sql:
+            rows = [{"channel": "paid_ads", "metric_value": 20.0}]
+        elif "business_date IN" in plan.sql:
+            rows = [
+                {"business_date": date(2026, 5, 29), "metric_value": 100.0},
+                {"business_date": date(2026, 5, 22), "metric_value": 100.0},
+                {"business_date": date(2026, 5, 15), "metric_value": 100.0},
+                {"business_date": date(2026, 5, 8), "metric_value": 100.0},
+            ]
+        else:
+            rows = [{"metric_value": 20.0}]
+        return type("QueryResult", (), {"rows": rows, "row_count": len(rows), "latency_ms": 1})()
+
+    def create_evidence(self, row: dict[str, Any]) -> None:
+        self.persisted_evidence[row["evidence_id"]] = {
+            "evidence_id": row["evidence_id"],
+            "run_id": row["run_id"],
+            "guard_status": row["guard_status"],
+        }

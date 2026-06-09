@@ -175,7 +175,7 @@ def test_empty_result_does_not_enter_attribute_rank() -> None:
     assert route_after_execute_tool(state, dependencies=_Dependencies()) == "error_return"
 
 
-def test_sql_execution_retry_exhausted_fails_run() -> None:
+def test_sql_execution_failure_routes_error_return() -> None:
     state = {
         "observations": [
             Observation(action_name="detect_anomaly", ok=False, error_code="SQL_EXECUTION_FAILED")

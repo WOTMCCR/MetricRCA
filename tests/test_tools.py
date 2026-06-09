@@ -158,7 +158,7 @@ class SpyRepository:
             ]
         elif "GROUP BY fact_order.channel" in sql:
             rows = [
-                {"channel": "paid_ads", "metric_value": 20.0},
+                {"channel": "paid_ads", "metric_value": 60.0},
                 {"channel": "organic", "metric_value": 95.0},
             ]
         elif params.get("filter_channel") == "paid_ads":
@@ -274,6 +274,7 @@ def test_detect_anomaly_paid_ads_flagged_and_persists_run_scoped_evidence() -> N
     assert result.evidences[0].evidence_id == "run-1:E1"
     assert repo.evidence_rows[0]["evidence_id"] == "run-1:E1"
     assert len(repo.executed) == 2
+    assert result.sql_count == 2
 
 
 def test_tool_rejects_args_that_do_not_match_current_run_context() -> None:
@@ -362,6 +363,7 @@ def test_drilldown_tool_uses_renderer_guard_repository_and_persists_evidence() -
     assert result.evidence_alias == "E2"
     assert repo.evidence_rows[0]["guard_status"] == "passed"
     assert len(repo.executed) == 2
+    assert result.sql_count == 2
 
 
 def test_drilldown_tool_rejects_missing_or_unpersisted_current_run_evidence() -> None:

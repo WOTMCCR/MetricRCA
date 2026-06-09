@@ -7,30 +7,11 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from metric_rca.agent.tools.schemas import (
-    CalculateContributionArgs,
-    DetectAnomalyArgs,
-    DrilldownDimensionArgs,
-    FetchRelatedSignalArgs,
-)
+from metric_rca.agent.tools.registry import action_names, get_action_spec, select_signal_type
 from metric_rca.domain.models import AgentAction, Observation
 
 
-ALLOWED_ACTIONS = [
-    "detect_anomaly",
-    "drilldown_dimension",
-    "fetch_related_signal",
-    "calculate_contribution",
-    "finish",
-]
-
-
-_ACTION_SCHEMAS = {
-    "detect_anomaly": DetectAnomalyArgs,
-    "drilldown_dimension": DrilldownDimensionArgs,
-    "fetch_related_signal": FetchRelatedSignalArgs,
-    "calculate_contribution": CalculateContributionArgs,
-}
+ALLOWED_ACTIONS = action_names()
 
 
 def validate_action(action: AgentAction) -> tuple[AgentAction | None, Observation | None]:
@@ -41,11 +22,11 @@ def validate_action(action: AgentAction) -> tuple[AgentAction | None, Observatio
             error_code="ACTION_SCHEMA_INVALID",
             message="action is not allowed",
         )
-    schema = _ACTION_SCHEMAS.get(action.action)
-    if schema is None:
+    spec = get_action_spec(action.action)
+    if spec is None:
         return action, None
     try:
-        schema.model_validate(action.args)
+        spec.args_schema.model_validate(action.args)
     except ValidationError as exc:
         return None, Observation(
             action_name=action.action,
@@ -69,21 +50,12 @@ def next_action(state: dict[str, Any], *, settings: Any, metric_service: Any) ->
             args={"status": "failed", "error_code": "MAX_STEPS_EXCEEDED"},
             rationale="business step limit reached",
         )
-    if int(state.get("query_count") or 0) >= int(getattr(settings, "max_query", 12)):
-        return AgentAction(
-            action="finish",
-            args={"status": "failed", "error_code": "MAX_QUERY_EXCEEDED"},
-            rationale="business query limit reached",
-        )
-    if int(state.get("drilldown_depth") or 0) >= int(getattr(settings, "max_drilldown_depth", 2)) and not _has_evidence(state, "E3"):
-        return AgentAction(
-            action="finish",
-            args={"status": "failed", "error_code": "MAX_DRILLDOWN_DEPTH_EXCEEDED"},
-            rationale="business drilldown limit reached",
-        )
 
     observations = [_as_observation(item) for item in state.get("observations", [])]
     if not observations:
+        limit_action = _query_limit_action(state, settings)
+        if limit_action is not None:
+            return limit_action
         return AgentAction(
             action="detect_anomaly",
             args={
@@ -106,6 +78,9 @@ def next_action(state: dict[str, Any], *, settings: Any, metric_service: Any) ->
     if _has_evidence(state, "E4"):
         return AgentAction(action="finish", args={"reason": "evidence_complete"})
     if _has_evidence(state, "E3"):
+        limit_action = _query_limit_action(state, settings)
+        if limit_action is not None:
+            return limit_action
         dimension, element = _selected_dimension_element(state, metric_service)
         return AgentAction(
             action="calculate_contribution",
@@ -120,6 +95,9 @@ def next_action(state: dict[str, Any], *, settings: Any, metric_service: Any) ->
             },
         )
     if _has_evidence(state, "E2"):
+        limit_action = _query_limit_action(state, settings)
+        if limit_action is not None:
+            return limit_action
         dimension, element = _selected_dimension_element(state, metric_service)
         return AgentAction(
             action="fetch_related_signal",
@@ -127,13 +105,22 @@ def next_action(state: dict[str, Any], *, settings: Any, metric_service: Any) ->
                 "run_id": state["run_id"],
                 "metric_id": state["metric_id"],
                 "target_date": _target_date(state),
-                "signal_type": _signal_type(settings),
+                "signal_type": _signal_type(state, metric_service),
                 "dimension": dimension,
                 "element": element,
                 "evidence_ids": _evidence_ids(state),
             },
         )
     if _has_evidence(state, "E1"):
+        limit_action = _query_limit_action(state, settings)
+        if limit_action is not None:
+            return limit_action
+        if int(state.get("drilldown_depth") or 0) >= int(getattr(settings, "max_drilldown_depth", 2)):
+            return AgentAction(
+                action="finish",
+                args={"status": "failed", "error_code": "MAX_DRILLDOWN_DEPTH_EXCEEDED"},
+                rationale="business drilldown limit reached",
+            )
         dimension = _planned_dimension(state, metric_service)
         return AgentAction(
             action="drilldown_dimension",
@@ -155,6 +142,16 @@ def _llm_required_unavailable(settings: Any) -> bool:
         or not getattr(settings, "llm_provider", None)
         or not getattr(settings, "llm_api_key", None)
     )
+
+
+def _query_limit_action(state: dict[str, Any], settings: Any) -> AgentAction | None:
+    if int(state.get("query_count") or 0) >= int(getattr(settings, "max_query", 12)):
+        return AgentAction(
+            action="finish",
+            args={"status": "failed", "error_code": "MAX_QUERY_EXCEEDED"},
+            rationale="business query limit reached",
+        )
+    return None
 
 
 def _filters(state: dict[str, Any]) -> dict[str, str]:
@@ -231,13 +228,19 @@ def _candidate_payloads(state: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
-def _signal_type(settings: Any) -> str:
-    configured = getattr(settings, "signal_metric_by_type", {}) or {}
-    if "campaign" in configured:
-        return "campaign"
-    if configured:
-        return sorted(configured)[0]
-    raise ValueError("CONFIG_INVALID: signal metric missing")
+def _signal_type(state: dict[str, Any], metric_service: Any) -> str:
+    dimension, _ = _selected_dimension_element(state, metric_service)
+    candidates = _candidate_payloads(state)
+    if not candidates:
+        raise ValueError("ATTRIBUTION_COVERAGE_LOW: no selected candidate")
+    root_cause_type = candidates[0].get("root_cause_type")
+    if root_cause_type is None:
+        raise ValueError("SIGNAL_POLICY_MISSING")
+    return select_signal_type(
+        metric_id=str(state["metric_id"]),
+        dimension=dimension,
+        root_cause_type=str(root_cause_type),
+    )
 
 
 def _as_observation(item: Any) -> Observation:

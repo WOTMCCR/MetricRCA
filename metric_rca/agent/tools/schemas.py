@@ -51,3 +51,4 @@ class ToolResult(StrictModel):
     evidences: list[Evidence] = Field(default_factory=list)
     evidence_alias: str | None = None
     candidates: list[RootCauseCandidate] = Field(default_factory=list)
+    sql_count: int = 0

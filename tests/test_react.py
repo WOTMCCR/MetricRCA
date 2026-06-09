@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from metric_rca.agent.react import ALLOWED_ACTIONS, next_action, validate_action
+from metric_rca.agent.tools.registry import select_signal_type
 from metric_rca.config.settings import Settings
 from metric_rca.domain.models import AgentAction, Observation
 
@@ -105,10 +106,11 @@ def test_policy_yields_documented_gmv_sequence_from_state() -> None:
                     evidence_ids=["run-1:E2"],
                     payload={
                         "candidates": [
-                            {
-                                "dimension": "channel",
-                                "element": "paid_ads",
-                                "contribution_pct": 0.9,
+                                {
+                                    "root_cause_type": "campaign_traffic_drop",
+                                    "dimension": "channel",
+                                    "element": "paid_ads",
+                                    "contribution_pct": 0.9,
                             }
                         ]
                     },
@@ -168,8 +170,10 @@ def test_query_and_drilldown_limits_fail_by_business_error() -> None:
             "target_date": date(2026, 6, 5),
             "parsed_spec": {"filters": {}},
             "actions": [],
-            "observations": [],
-            "evidences": [],
+            "observations": [
+                Observation(action_name="detect_anomaly", ok=True, evidence_ids=["run-1:E1"]).model_dump()
+            ],
+            "evidences": [{"evidence_id": "run-1:E1"}],
             "step_count": 0,
             "query_count": 0,
             "drilldown_depth": 2,
@@ -182,6 +186,29 @@ def test_query_and_drilldown_limits_fail_by_business_error() -> None:
     assert query_limit.args["error_code"] == "MAX_QUERY_EXCEEDED"
     assert drilldown_limit.action == "finish"
     assert drilldown_limit.args["error_code"] == "MAX_DRILLDOWN_DEPTH_EXCEEDED"
+
+
+def test_signal_policy_uses_candidate_metric_dimension_not_default_campaign() -> None:
+    assert select_signal_type(
+        metric_id="gmv",
+        dimension="channel",
+        root_cause_type="campaign_traffic_drop",
+    ) == "campaign"
+    assert select_signal_type(
+        metric_id="gmv",
+        dimension="category",
+        root_cause_type="stockout",
+    ) == "inventory"
+    assert select_signal_type(
+        metric_id="pay_cvr",
+        dimension="device",
+        root_cause_type="conversion_drop",
+    ) == "conversion"
+    assert select_signal_type(
+        metric_id="refund_rate",
+        dimension="product",
+        root_cause_type="complaint_or_quality_issue",
+    ) == "refund_quality"
 
 
 class _MetricService:
