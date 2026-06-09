@@ -202,7 +202,7 @@ def test_projector_helpers_are_deterministic_and_alias_scoped() -> None:
     assert claims == [{"name": "contribution_pct", "value": 0.9, "evidence_id": "run-1:E4"}]
 
 
-def test_project_candidates_from_e4_projects_safe_top_k_identity_fields() -> None:
+def test_project_candidates_from_e4_projects_top_k_display_fields() -> None:
     candidates = project_candidates_from_e4(
         {
             "selected_candidate": _candidate(),
@@ -225,15 +225,20 @@ def test_project_candidates_from_e4_projects_safe_top_k_identity_fields() -> Non
             "dimension": "channel",
             "element": "paid_ads",
             "verdict": "confirmed",
+            "contribution_pct": 0.9,
+            "eng_confidence": 0.85,
+            "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"],
         },
         {
             "root_cause_type": "campaign_traffic_drop",
             "dimension": "channel",
             "element": "organic",
             "verdict": "likely",
+            "contribution_pct": 0.1,
+            "eng_confidence": 0.25,
+            "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"],
         },
     ]
-    assert "contribution_pct" not in candidates[0]
 
 
 def test_project_candidates_from_e4_rejects_malformed_top_k_without_partial_projection() -> None:

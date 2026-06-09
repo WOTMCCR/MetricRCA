@@ -13,6 +13,7 @@ from typing import Any
 
 IDENTITY_FIELDS = ("root_cause_type", "dimension", "element", "verdict")
 NUMERIC_CLAIM_FIELDS = ("contribution_pct",)
+CANDIDATE_DISPLAY_NUMERIC_FIELDS = ("contribution_pct", "eng_confidence")
 
 
 def build_report_from_persisted_artifacts(
@@ -85,10 +86,30 @@ def project_candidates_from_e4(e4_result_summary: dict[str, Any]) -> list[dict[s
     for item in candidates:
         if not isinstance(item, dict):
             return []
-        candidate = {field: item.get(field) for field in IDENTITY_FIELDS}
-        if any(candidate[field] in (None, "") for field in IDENTITY_FIELDS):
+        candidate = _project_candidate_for_top_k(item)
+        if candidate is None:
             return []
         projected.append(candidate)
+    return projected
+
+
+def _project_candidate_for_top_k(candidate: dict[str, Any]) -> dict[str, Any] | None:
+    projected = {field: candidate.get(field) for field in IDENTITY_FIELDS}
+    if any(projected[field] in (None, "") for field in IDENTITY_FIELDS):
+        return None
+
+    for field in CANDIDATE_DISPLAY_NUMERIC_FIELDS:
+        value = candidate.get(field)
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            return None
+        projected[field] = float(value)
+
+    evidence_ids = candidate.get("evidence_ids")
+    if not isinstance(evidence_ids, list) or not evidence_ids:
+        return None
+    projected["evidence_ids"] = [str(evidence_id) for evidence_id in evidence_ids if evidence_id is not None]
+    if len(projected["evidence_ids"]) != len(evidence_ids):
+        return None
     return projected
 
 

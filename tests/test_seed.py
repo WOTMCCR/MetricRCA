@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from sqlalchemy import create_engine, text
 
 from metric_rca.config.settings import get_settings
-from metric_rca.data.seed_data import main as seed_main
+from metric_rca.data.seed_data import DEFAULT_SEED, _resolve_seed, main as seed_main
 from metric_rca.domain.models import METRIC_ALLOWED_DIMENSIONS
 from metric_rca.guardrails.renderer import METRIC_TEMPLATES
 
@@ -25,6 +25,22 @@ HASH_TABLES = [
 ]
 TARGET_DATE = date(2026, 6, 5)
 GMV_NO_ANOMALY_DATE = date(2026, 6, 4)
+
+
+def test_seed_override_is_explicit_and_typed(monkeypatch) -> None:
+    monkeypatch.delenv("METRIC_RCA_DATA_SEED", raising=False)
+    assert _resolve_seed() == DEFAULT_SEED
+
+    monkeypatch.setenv("METRIC_RCA_DATA_SEED", "20260610")
+    assert _resolve_seed() == 20260610
+
+    monkeypatch.setenv("METRIC_RCA_DATA_SEED", "not-a-number")
+    try:
+        _resolve_seed()
+    except ValueError as exc:
+        assert str(exc).startswith("SEED_INVALID")
+    else:
+        raise AssertionError("invalid seed must fail fast")
 
 
 def _gmv_anomaly_stats(conn, business_date: date) -> dict[str, float | bool]:

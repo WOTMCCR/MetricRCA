@@ -57,11 +57,11 @@ def test_pyproject_declares_current_phase_dependencies() -> None:
 def test_makefile_targets_match_documented_commands() -> None:
     expected = {
         "up": "docker compose up -d mysql",
-        "seed": "python -m metric_rca.data.seed_data",
-        "api": "uvicorn metric_rca.api.main:app --reload",
+        "seed": "METRIC_RCA_DATA_SEED=20260606 uv run python -m metric_rca.data.seed_data",
+        "api": "uv run uvicorn metric_rca.api.main:app --reload",
         "ui": "npm run dev --prefix frontend",
-        "eval": "python -m metric_rca.evals.runner",
-        "test": "pytest -q",
+        "eval": "uv run python -m metric_rca.evals.runner",
+        "test": "uv run pytest -q",
     }
     for target, command in expected.items():
         result = subprocess.run(

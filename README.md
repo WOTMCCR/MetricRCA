@@ -5,6 +5,8 @@ usage limited to structured intent parsing; SQL, evidence, attribution,
 reflection, report projection, API output, UI display, and eval scoring are all
 controlled by code and persisted artifacts.
 
+P6 端到端闭环交付证据见 [`项目介绍.md`](项目介绍.md)。
+
 ## Architecture
 
 - Metadata is read from `metric_definition` through `MetadataRepository`.
@@ -34,18 +36,20 @@ currently a typed fail-fast `SQL_EXECUTION_FAILED` path.
 ## Commands
 
 ```bash
-PATH=.venv/bin:$PATH make up
-PATH=.venv/bin:$PATH make seed
-PATH=.venv/bin:$PATH make api
-PATH=.venv/bin:$PATH make ui
-PATH=.venv/bin:$PATH make eval
-PATH=.venv/bin:$PATH make test
+make up
+make seed
+make seed SEED=20260610
+make api
+make ui
+make eval
+make test
 npm test --prefix frontend -- --run
 npm run build --prefix frontend
 ```
 
-Make targets map to `docker compose`, `python`, `uvicorn`, `npm`, and `pytest`
-commands as defined in `Makefile`.
+Make targets map to `docker compose`, `uv run`, `uvicorn`, `npm`, and `pytest`
+commands as defined in `Makefile`. Graph and eval runs require `OPENAI_API_KEY`
+in the same shell; missing keys surface as `LLM_REQUIRED_UNAVAILABLE`.
 
 ## API
 

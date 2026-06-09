@@ -127,12 +127,18 @@ def test_api_returns_top_k_candidates_from_persisted_e4_candidates() -> None:
             "dimension": "channel",
             "element": "paid_ads",
             "verdict": "confirmed",
+            "contribution_pct": 0.9,
+            "eng_confidence": 0.85,
+            "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"],
         },
         {
             "root_cause_type": "campaign_traffic_drop",
             "dimension": "channel",
             "element": "organic",
             "verdict": "likely",
+            "contribution_pct": 0.1,
+            "eng_confidence": 0.25,
+            "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"],
         },
     ]
 
