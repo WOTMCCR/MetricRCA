@@ -99,6 +99,47 @@ def test_projector_report_has_no_unverified_numeric_fields() -> None:
     ]
 
 
+def test_projector_rejects_foreign_or_missing_candidate_evidence_ids() -> None:
+    foreign = {
+        **_candidate(),
+        "evidence_ids": ["run-1:E1", "foreign:E2", "run-1:E3", "run-1:E4"],
+    }
+    missing = {
+        **_candidate(),
+        "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E4"],
+    }
+
+    assert (
+        build_report_from_persisted_artifacts(
+            agent_run=_agent_run(status="succeeded"),
+            evidences=_evidences(e4_summary={"selected_candidate": foreign}),
+            tasks=[],
+        )
+        is None
+    )
+    assert (
+        build_report_from_persisted_artifacts(
+            agent_run=_agent_run(status="succeeded"),
+            evidences=_evidences(e4_summary={"selected_candidate": missing}),
+            tasks=[],
+        )
+        is None
+    )
+
+
+def test_projector_rejects_candidate_evidence_not_persisted_passed() -> None:
+    evidences = _evidences(e4_summary={"selected_candidate": _candidate()})
+    evidences[1] = {**evidences[1], "guard_status": "rejected"}
+
+    report = build_report_from_persisted_artifacts(
+        agent_run=_agent_run(status="succeeded"),
+        evidences=evidences,
+        tasks=[],
+    )
+
+    assert report is None
+
+
 def test_projector_no_unverified_numeric_fields() -> None:
     test_projector_report_has_no_unverified_numeric_fields()
 

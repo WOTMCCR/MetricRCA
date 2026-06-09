@@ -243,7 +243,7 @@ class MemoryRecord(StrictModel):
 
 
 class EvalCase(StrictModel):
-    """eval 用例：通过 anomaly_ground_truth 校验一次 AgentRun。"""
+    """eval 用例：通过评估真因表校验一次 AgentRun。"""
 
     case_id: str
     question: str

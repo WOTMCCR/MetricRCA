@@ -228,3 +228,162 @@ def test_repository_persists_documented_system_tables() -> None:
         "eval_case_result": 1,
     }
     repo.close()
+
+
+def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    repo = MetricRepository(
+        readonly_engine=engine,
+        audit_engine=engine,
+        statement_timeout_ms=3000,
+    )
+    now = datetime(2026, 6, 8, 12, 0, 0)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE agent_run (
+                  run_id TEXT PRIMARY KEY, question TEXT, metric_id TEXT, target_date TEXT,
+                  status TEXT, error_code TEXT, created_at TEXT, finished_at TEXT
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE trace_step (
+                  step_id TEXT PRIMARY KEY, run_id TEXT, seq INTEGER, node TEXT, action TEXT,
+                  input_summary TEXT, output_summary TEXT, error_code TEXT, latency_ms INTEGER, created_at TEXT
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE evidence (
+                  evidence_id TEXT PRIMARY KEY, run_id TEXT, query_spec TEXT, sql_text TEXT,
+                  sql_hash TEXT, guard_status TEXT, result_summary TEXT, data_source TEXT, created_at TEXT
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE sql_audit (
+                  audit_id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT, sql_text TEXT, sql_hash TEXT,
+                  guard_status TEXT, guard_errors TEXT, row_count INTEGER, latency_ms INTEGER, created_at TEXT
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE operation_task (
+                  task_id TEXT PRIMARY KEY, run_id TEXT, title TEXT, root_cause_type TEXT,
+                  payload TEXT, created_at TEXT
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE eval_run (
+                  eval_id TEXT PRIMARY KEY, created_at TEXT, summary TEXT
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE eval_case_result (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT, eval_id TEXT, case_id TEXT,
+                  intent_ok INTEGER, anomaly_ok INTEGER, top1_ok INTEGER, top3_ok INTEGER,
+                  evidence_coverage REAL, sql_safe INTEGER, reflection_repair_ok INTEGER, detail TEXT
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO agent_run
+                VALUES ('run-1', 'why', 'gmv', '2026-06-05', 'succeeded', NULL, :now, :now)
+                """
+            ),
+            {"now": now.isoformat()},
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO trace_step
+                VALUES
+                  ('t2', 'run-1', 2, 'execute_tool', 'detect_anomaly', '{}', '{"b": 2}', NULL, 4, :now),
+                  ('t1', 'run-1', 1, 'parse_question', 'parse_question', '{"a": 1}', '{}', NULL, 1, :now)
+                """
+            ),
+            {"now": now.isoformat()},
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO evidence
+                VALUES (
+                  'run-1:E4', 'run-1', '{"metric_id": "gmv"}', 'SELECT 1', :hash,
+                  'passed', '{"selected_candidate": {"dimension": "channel"}}', 'fact_order', :now
+                )
+                """
+            ),
+            {"hash": "0" * 64, "now": now.isoformat()},
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO sql_audit (
+                  run_id, sql_text, sql_hash, guard_status, guard_errors, row_count, latency_ms, created_at
+                )
+                VALUES ('run-1', 'SELECT 1', :hash, 'passed', '[]', 1, 3, :now)
+                """
+            ),
+            {"hash": "0" * 64, "now": now.isoformat()},
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO operation_task
+                VALUES ('task-1', 'run-1', 'Fix channel', 'campaign_traffic_drop', '{"owner": "ops"}', :now)
+                """
+            ),
+            {"now": now.isoformat()},
+        )
+        conn.execute(
+            text("INSERT INTO eval_run VALUES ('eval-1', :now, '{\"case_total\": 1}')"),
+            {"now": now.isoformat()},
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO eval_case_result (
+                  eval_id, case_id, intent_ok, anomaly_ok, top1_ok, top3_ok,
+                  evidence_coverage, sql_safe, reflection_repair_ok, detail
+                )
+                VALUES ('eval-1', 'gmv_paid_ads_drop', 1, 1, 1, 1, 1.0, 1, 1, '{"ok": true}')
+                """
+            )
+        )
+
+    assert repo.get_agent_run("run-1")["status"] == "succeeded"
+    assert [row["seq"] for row in repo.get_trace_steps("run-1")] == [1, 2]
+    assert repo.get_trace_steps("run-1")[0]["input_summary"] == {"a": 1}
+    assert repo.get_evidences("run-1")[0]["result_summary"]["selected_candidate"]["dimension"] == "channel"
+    assert repo.get_sql_audit_rows("run-1")[0]["guard_errors"] == []
+    assert repo.get_operation_tasks("run-1")[0]["payload"] == {"owner": "ops"}
+    assert repo.get_eval_run("eval-1")["summary"] == {"case_total": 1}
+    assert repo.get_eval_case_results("eval-1")[0]["detail"] == {"ok": True}
+
+    repo.close()

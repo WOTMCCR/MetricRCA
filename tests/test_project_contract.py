@@ -28,12 +28,12 @@ def test_pyproject_declares_current_phase_dependencies() -> None:
         "pandas",
         "langchain-openai",
         "langgraph",
+        "fastapi",
+        "uvicorn",
         "httpx[socks]",
         "pytest",
     }
     forbidden_phase_gt1 = {
-        "fastapi",
-        "uvicorn",
         "langchain-core",
         "streamlit",
         "scikit-learn",
@@ -58,6 +58,8 @@ def test_makefile_targets_match_documented_commands() -> None:
     expected = {
         "up": "docker compose up -d mysql",
         "seed": "python -m metric_rca.data.seed_data",
+        "api": "uvicorn metric_rca.api.main:app --reload",
+        "ui": "npm run dev --prefix frontend",
         "eval": "python -m metric_rca.evals.runner",
         "test": "pytest -q",
     }
@@ -76,7 +78,6 @@ def test_makefile_targets_match_documented_commands() -> None:
         ]
         assert lines[-1] == command
     makefile = (ROOT / "Makefile").read_text()
-    assert "uvicorn" not in makefile
     assert "streamlit" not in makefile
 
 

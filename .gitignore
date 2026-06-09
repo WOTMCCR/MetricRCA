@@ -45,6 +45,13 @@ eval_out/
 *.eval.json
 *.eval.md
 
+# Frontend dependencies/build outputs
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
 # IDE / editor
 .idea/
 .vscode/

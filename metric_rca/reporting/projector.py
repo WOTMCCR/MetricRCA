@@ -45,7 +45,15 @@ def build_report_from_persisted_artifacts(
     numeric_claims = numeric_claims_from_e4(summary, str(e4.get("evidence_id") or ""))
     selected = _selected_candidate(summary)
     evidence_ids = _evidence_ids(selected)
-    if top_candidate is None or not numeric_claims or not evidence_ids:
+    if (
+        top_candidate is None
+        or not numeric_claims
+        or not _candidate_evidence_ids_are_current_run_passed(
+            evidence_ids=evidence_ids,
+            evidences=evidences,
+            run_id=run_id,
+        )
+    ):
         return None
 
     return {
@@ -128,6 +136,28 @@ def _evidence_ids(candidate: dict[str, Any] | None) -> list[str]:
     if not isinstance(evidence_ids, list):
         return []
     return [str(evidence_id) for evidence_id in evidence_ids if evidence_id is not None]
+
+
+def _candidate_evidence_ids_are_current_run_passed(
+    *,
+    evidence_ids: list[str],
+    evidences: list[dict[str, Any]],
+    run_id: str,
+) -> bool:
+    required = {f"{run_id}:E1", f"{run_id}:E2", f"{run_id}:E3", f"{run_id}:E4"}
+    actual = set(evidence_ids)
+    if actual != required:
+        return False
+    by_id = {str(row.get("evidence_id")): row for row in evidences}
+    for evidence_id in required:
+        row = by_id.get(evidence_id)
+        if row is None:
+            return False
+        if row.get("run_id") != run_id:
+            return False
+        if row.get("guard_status") != "passed":
+            return False
+    return True
 
 
 def _date_string(value: Any) -> str | None:
