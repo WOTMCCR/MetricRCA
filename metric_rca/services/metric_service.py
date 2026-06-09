@@ -9,20 +9,15 @@ from typing import TYPE_CHECKING
 from metric_rca.config.settings import Settings, get_settings
 from metric_rca.domain.models import MetricDefinition
 from metric_rca.services.intent_planner import LLMIntentPlanner
-from metric_rca.services.metric_contracts import MetricServiceError, ParsedIntent, metric_id_from_question_family
+from metric_rca.services.metric_contracts import (
+    SUPPORTED_QUESTION_FAMILIES,
+    MetricServiceError,
+    ParsedIntent,
+    metric_id_from_question_family,
+)
 
 if TYPE_CHECKING:
     from metric_rca.repositories.metadata_repository import MetadataRepository
-
-
-SUPPORTED_QUESTION_FAMILIES: tuple[str, ...] = (
-    "gmv_drop",
-    "net_gmv_drop",
-    "pay_cvr_drop",
-    "refund_rate_increase",
-    "channel_gmv_anomaly",
-    "category_gmv_anomaly",
-)
 
 
 class MetricService:

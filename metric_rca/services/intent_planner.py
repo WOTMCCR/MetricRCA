@@ -12,7 +12,7 @@ from openai import OpenAIError
 from pydantic import Field, ValidationError
 
 from metric_rca.domain.models import StrictModel
-from metric_rca.services.metric_contracts import MetricServiceError, ParsedIntent, metric_id_from_question_family
+from metric_rca.services.metric_contracts import MetricServiceError, ParsedIntent, QuestionFamily, metric_id_from_question_family
 
 
 SYSTEM_PROMPT_TEMPLATE = """You are an intent parser for a metric anomaly diagnosis system.
@@ -84,14 +84,7 @@ class _LLMIntentOutput(StrictModel):
     ] | None = Field(description="Typed error code for unsupported questions, otherwise null.")
     metric_id: str | None = Field(description="Metric id from the supported metrics, or null on error.")
     target_date: str | None = Field(description="Target business date in ISO format, or null on error.")
-    question_family: Literal[
-        "gmv_drop",
-        "net_gmv_drop",
-        "pay_cvr_drop",
-        "refund_rate_increase",
-        "channel_gmv_anomaly",
-        "category_gmv_anomaly",
-    ] | None = Field(description="Question family from the supported families, or null on error.")
+    question_family: QuestionFamily | None = Field(description="Question family from the supported families, or null on error.")
     dimension: str | None = Field(description="Primary dimension from supported dimensions, or null.")
     element: str | None = Field(description="Primary dimension value from supported values, or null.")
     filters: list[_LLMIntentFilter] = Field(description="Dimension filters as strict key/value pairs.")

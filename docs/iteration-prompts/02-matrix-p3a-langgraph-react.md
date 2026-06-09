@@ -5,7 +5,8 @@ You are working in the MetricRCA repository after Matrix P2 is complete.
 
 MANDATORY PRELUDE
 Before applying this phase prompt, read and obey:
-docs/iteration-prompts/00-global-iteration-rules.md
+docs/iteration-prompts/00-global-iteration-rules.md (especially Rules 5, 17)
+docs/iteration-prompts/06-review-checklist.md (mandatory post-phase review)
 If this prompt is pasted into another Codex/Goal session, paste the full global
 rules file above this phase prompt. The local rules below are additions and
 phase-specific constraints, not a replacement.
@@ -20,6 +21,16 @@ GLOBAL RULES FOR THIS PHASE
   5. docs/COMPLIANCE_MATRIX.md
 - Preserve QuerySpec -> SQLRenderer -> SQLGuard ->
   MetricRepository.execute_plan as the only metric-fact data path.
+- Preserve MetadataRepository -> MetricService as the only metadata path.
+  Graph nodes must NOT import or construct MetricDefinition directly, nor
+  hardcode metric/dimension/family lists. All metadata access flows through
+  MetricService (which wraps MetadataRepository).
+- parse_question node calls MetricService.parse_question(), which delegates
+  to LLMIntentPlanner. Do not re-implement intent parsing in graph code.
+- QuestionFamily is the single Literal type alias in metric_contracts.py.
+  If a new question family is needed, update QuestionFamily there; both
+  ParsedIntent, LLMIntentPlanner output schema, and SUPPORTED_QUESTION_FAMILIES
+  derive from it automatically via get_args().
 - This phase must implement a real LangGraph StateGraph and ReAct loop.
 - This phase must not claim full Matrix P3 completion until Reflection+Memory
   hardening in the next phase is done.
@@ -59,11 +70,27 @@ Read before modifying code:
 - docs/MetricRCA-roadmap-checklist.md sections 2.2, 3.1, 6, 7, 9 phase 3, 12
 
 DEPENDENCIES
-- Add real LangGraph/LangChain core dependencies to pyproject with bounded
-  compatible constraints.
-- Update tests/test_project_contract.py so Phase 3 dependencies are no longer
-  forbidden.
-- Do not add FastAPI, uvicorn, streamlit, or httpx in this phase.
+- langchain-openai is already declared from P2 fix-001. Add langgraph with
+  bounded compatible constraints. Do not re-declare langchain-openai.
+- Update tests/test_project_contract.py so Phase 3 dependencies (langgraph)
+  are no longer forbidden.
+- Do not add FastAPI, uvicorn, streamlit in this phase. httpx[socks] is
+  already declared from P2 fix-001.
+
+P2 CONTEXT (what is already implemented — do not duplicate)
+- metric_rca/repositories/metadata_repository.py — DB-backed metadata
+- metric_rca/services/metric_service.py — MetricService with lazy
+  LLMIntentPlanner; metadata-only methods work without LLM API key
+- metric_rca/services/intent_planner.py — LLMIntentPlanner via LangChain
+  OpenAI structured output
+- metric_rca/services/metric_contracts.py — QuestionFamily type alias,
+  SUPPORTED_QUESTION_FAMILIES, ParsedIntent, MetricServiceError
+- metric_rca/agent/tools/*.py — 4 deterministic tools accepting
+  metric_service via DI
+- metric_rca/services/anomaly_service.py — pure computation
+- metric_rca/services/attribution_service.py — pure computation,
+  root_cause_type from Settings config
+Graph nodes should import and call these, not rewrite them.
 
 SCOPE
 1. Implement RCAState:
@@ -116,12 +143,22 @@ SCOPE
    - metric_rca/agent/nodes/error_return.py
    Each file must contain real behavior. No empty file, no re-export shell, no
    hiding node logic inside graph.py.
+   CRITICAL: Nodes receive MetricService, MetricRepository, and SQLRenderer
+   via graph state or dependency injection. Nodes must NOT:
+   - import MetricDefinition and construct instances
+   - hardcode metric/dimension/family lists
+   - duplicate intent parsing logic (call MetricService.parse_question)
+   - bypass SQLRenderer/SQLGuard for fact queries
+   - use broad except Exception
 
 4. Implement graph:
    - File: metric_rca/agent/graph.py
    - Must build a real LangGraph StateGraph(RCAState).
    - Must use START, END, add_node, add_edge, add_conditional_edges.
    - run_rca() may be a wrapper, but it must invoke the compiled graph.
+   - Graph construction must create MetadataRepository(engine) and
+     MetricService(metadata_repo, settings) and pass them to nodes.
+     This is the only place where MetricService is constructed.
    - Business limits must use settings:
      max_steps=8
      max_query=12
@@ -222,6 +259,12 @@ FORBIDDEN
 - No Memory-derived conclusion.
 - No broad except Exception: continue.
 - No API/UI/eval implementation in this phase.
+- No hardcoded metric/dimension/family lists in node modules. Nodes must use
+  MetricService for all metadata access. (P2 fix-001 already purged this
+  pattern — do not reintroduce it.)
+- No constructing MetricDefinition objects in graph or node code.
+- No reimplementing intent parsing logic in graph code. parse_question node
+  must call MetricService.parse_question() which delegates to LLMIntentPlanner.
 
 TDD / PROOF-TEST-FIRST
 Add tests before implementation:
@@ -239,6 +282,10 @@ Add tests before implementation:
 12. test_tiny_max_steps_stops_by_business_limit_not_GraphRecursionError
 13. test_runtime_graph_code_does_not_read_anomaly_ground_truth
 14. test_empty_result_does_not_enter_attribute_rank
+15. test_graph_and_node_modules_have_no_hardcoded_metric_metadata
+    Source scan: metric_rca/agent/graph.py and metric_rca/agent/nodes/*.py
+    must not contain MetricDefinition( construction, METRIC_DEFINITIONS,
+    SCHEMA_CONTEXT, _CHANNELS, _CATEGORIES, or literal dimension values.
 
 COMMANDS
 Run:
@@ -260,6 +307,8 @@ ACCEPTANCE CHECKS
 - Failed reflection produces no report.
 - Full Reflection repair and MemoryRepository are listed as Remaining
   deviations, not as completed work.
+- All items in docs/iteration-prompts/06-review-checklist.md pass. Paste
+  actual grep/scan output for sections A and E. A failing item is blocking.
 - Known shortcuts must be exactly empty.
 
 FINAL RESPONSE CONTRACT

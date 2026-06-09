@@ -3,11 +3,23 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import Field
 
 from metric_rca.domain.models import StrictModel
+
+
+QuestionFamily = Literal[
+    "gmv_drop",
+    "net_gmv_drop",
+    "pay_cvr_drop",
+    "refund_rate_increase",
+    "channel_gmv_anomaly",
+    "category_gmv_anomaly",
+]
+
+SUPPORTED_QUESTION_FAMILIES: tuple[str, ...] = get_args(QuestionFamily)
 
 
 class MetricServiceError(ValueError):
@@ -19,14 +31,7 @@ class MetricServiceError(ValueError):
 class ParsedIntent(StrictModel):
     metric_id: str
     target_date: date
-    question_family: Literal[
-        "gmv_drop",
-        "net_gmv_drop",
-        "pay_cvr_drop",
-        "refund_rate_increase",
-        "channel_gmv_anomaly",
-        "category_gmv_anomaly",
-    ]
+    question_family: QuestionFamily
     dimension: str | None = None
     element: str | None = None
     filters: dict[str, str] = Field(default_factory=dict)
