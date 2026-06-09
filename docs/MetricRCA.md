@@ -981,6 +981,15 @@ async def health(): return {"status": "ok"}
 
 **运行生命周期**：POST 创建 run（同步执行图，MVP）→ 返回 run_id + status（succeeded / no_anomaly / failed）；trace / evidence 可后续查询。
 
+**P4 persisted artifact contract**：
+
+- `POST /api/rca/runs` 同步调用 `run_rca()`，返回本次 graph invoke 的状态，同时所有持久化副作用必须已经写入 DB。
+- `GET /api/rca/runs/{run_id}` 不得依赖 POST 时的内存态返回；必须读取 persisted artifacts。
+- P4 采用 ADL-0006 的 deterministic reconstruction 策略：从 `agent_run + evidence + operation_task + trace_step` 重构 final report。
+- final report 不是自由文本生成；它是 P3B Reflection 已验证 artifact 的投影。
+- report 中所有数值只允许出现在 `numeric_claims`，且每条 claim 必须绑定 persisted Evidence。
+- 如果 succeeded run 缺失 E4 或 E4 malformed，API 返回结构化错误，不伪造 report。
+
 ---
 
 ## 15. End-to-end Data Flow（「昨天 GMV 为什么下降？」）
@@ -996,13 +1005,15 @@ async def health(): return {"status": "ok"}
 | 7 calculate_contribution | UV×CVR×AOV | UV 主因 | 读 fact_traffic(经守卫) | evidences+E4 | SQL_EXECUTION_FAILED / QUERY_SPEC_INVALID |
 | 8 attribute_rank | evidences | campaign_traffic_drop | — | candidates | ATTRIBUTION_COVERAGE_LOW |
 | 9 reflection_verify | candidates | passed | — | reflection | repair / 失败显式返回 |
-| 10 generate_report | candidates,evidences | 报告文本 | — | report | — |
+| 10 generate_report | passed reflection + persisted E4 | verified report projection | 读 evidence(E4) | report | REFLECTION_REPAIR_FAILED |
 | 11 create_tasks | candidate | task_id | 写 operation_task | — | — |
 | 12 write_memory | report | ok | 写 memory_record | — | MEMORY_WRITE_FAILED→error_return |
 | 13 trace 持久化 | 每步 | TraceStep | 写 trace_step / sql_audit | — | — |
 | 14 final response | — | run+report | — | status=succeeded | — |
 
 每步均落 trace_step；每条 SQL 落 sql_audit + evidence。
+
+P3B/P4 约束：`generate_report` 只能做 verified artifact projection，不允许在 Reflection 后新增未经 persisted Evidence 验证的数值或因果结论。P4 GET route 必须从 persisted artifacts 重构同一投影。
 
 ---
 
@@ -1024,7 +1035,7 @@ async def health(): return {"status": "ok"}
 
 eval case schema 见第 2 节 `EvalCase`；ground truth 存 `anomaly_ground_truth`。
 
-evaluator pipeline（`make eval`）：对每个 case 跑一次 RCA → 比对 ground truth → 打分 → 写 eval_run / eval_case_result → 输出结构化 JSON + Markdown。
+evaluator pipeline（`make eval`）：对每个 case 跑一次 RCA → 从 DB 读取 persisted artifacts（agent_run / evidence / trace_step / sql_audit / operation_task / reconstructed report）→ 比对 anomaly_ground_truth → 打分 → 写 eval_run / eval_case_result → 输出结构化 JSON + Markdown。Eval 不使用 graph 内存态作为评分来源，避免把未持久化输出误判为系统真实能力。
 
 **指标**：
 - intent-parse accuracy（解析对指标）
@@ -1034,6 +1045,11 @@ evaluator pipeline（`make eval`）：对每个 case 跑一次 RCA → 比对 gr
 - SQL safety（所有 SQL guard_status=passed 比例）
 - Reflection repair success（触发修复的 case 修复成功率）
 - Memory retrieval eval（1 月：命中是否提升正确率，且不污染结论）
+
+P5 必须额外校验：
+- `report_traceable_ok`：final report 每个 numeric_claim 都能在 persisted Evidence.result_summary 中找到。
+- `memory_pollution_ok`：memory hit 不得作为 evidence_id，不得单独生成 candidate / confirmed conclusion。
+- `no_anomaly_correct`：status=no_anomaly，只有 E1，无 operation_task，无 attribute_rank trace，无 confirmed candidate。
 
 字段归属：逐 case 字段写入 `eval_case_result.intent_ok/anomaly_ok/top1_ok/top3_ok/evidence_coverage/sql_safe/reflection_repair_ok`；汇总字段如 `case_total`、`dangerous_sql_blocked`、`no_anomaly_correct`、命中率等写入 `eval_run.summary` JSON。
 

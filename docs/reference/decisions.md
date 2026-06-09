@@ -41,6 +41,73 @@ P4 必须选择并实现一种 report persistence 策略：
 无论选择哪种，API `GET /api/rca/runs/{run_id}` 都不能返回 route-level
 hardcoded data，也不能依赖未持久化的 graph return state。
 
+### P4 选定策略
+
+P4 默认采用策略 3：从 persisted evidence/candidates/trace 做确定性重构，不新增表、不修改 P1 schema。
+
+具体规则：
+
+- API `GET /api/rca/runs/{run_id}` 读取 `agent_run`。
+- succeeded run 读取 persisted `evidence`，尤其是 `{run_id}:E4`。
+- E4 `result_summary.selected_candidate` 是 top candidate 的 persisted source of truth。
+- report 只投影非数值 candidate identity fields 与 numeric_claims。
+- numeric_claims 必须绑定 persisted Evidence。
+- failed run 不返回 report。
+- no_anomaly run 只允许 E1，不返回 candidate/task。
+- 若 persisted E4 缺失或 malformed，返回 typed error，不伪造 report。
+
+P4 可新增 `metric_rca/reporting/projector.py` 作为 graph report 与 API report
+的共享投影层。该模块不得读取 fact tables，不得读取 anomaly_ground_truth，
+不得调用 run_rca。
+
+## ADL-0007: P5 Eval Scores Persisted Artifacts, Not Graph Return State
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-09 |
+| 状态 | accepted |
+| 关联迭代 | p5-eval-docs |
+| 影响范围 | eval runner, scorer, API consistency, reporting projector |
+
+### 背景与场景
+
+P3B 和 P4 建立了 persisted artifact 边界：Evidence、TraceStep、SQL audit、
+OperationTask、MemoryRecord 和 reconstructed report 是 RCA run 的可审计结果。
+Eval 如果直接使用 `run_rca()` 的内存态返回进行评分，可能掩盖 artifact
+persistence、report reconstruction、trace/evidence retrieval 的问题。
+
+### 决策
+
+P5 eval runner 可以调用 `run_rca()` 触发 RCA，但 scorer 必须从 persisted
+artifacts 读取并评分：
+
+- `agent_run`
+- `evidence`
+- `trace_step`
+- `sql_audit`
+- `operation_task`
+- API/reporting projector reconstructed report
+
+Eval scoring 不得依赖 graph invoke 的内存态返回作为最终判断来源。
+
+新增 eval 指标：
+
+- `report_traceable_ok`
+- `memory_pollution_ok`
+- `no_anomaly_task_ok`
+
+### 理由
+
+这保证 P5 测到的是系统对外可观察能力，而不是一次 Python 调用返回的临时对象。
+P4 API/UI 也依赖同一 persisted artifact boundary，因此 eval 与 API 的判断口径必须一致。
+
+### 被否决的方案
+
+直接从 `run_rca()` 返回 state 中读取 `candidates/report/evidences` 打分被拒绝，
+因为它绕过了持久化、API reconstruction 和 DB artifact consistency 的验证。
+将 `dangerous_sql_blocked=True` 写成常量也被拒绝，必须来自真实 SQLGuard
+negative behavior。
+
 ## ADL-0005: P3B Reflection Repair And Memory Stay Evidence-Bound
 
 | 字段 | 值 |
