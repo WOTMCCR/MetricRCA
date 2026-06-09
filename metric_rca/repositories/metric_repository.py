@@ -134,22 +134,25 @@ class MetricRepository:
 
     def get_agent_run(self, run_id: str) -> dict[str, Any] | None:
         """读取当前 run 根记录；工具层用它证明 run_id 是有效当前运行。"""
-        with self._audit_engine.connect() as conn:
-            row = (
-                conn.execute(
-                    text(
-                        """
-                        SELECT run_id, question, metric_id, target_date, status, error_code, created_at, finished_at
-                        FROM agent_run
-                        WHERE run_id = :run_id
-                        LIMIT 1
-                        """
-                    ),
-                    {"run_id": run_id},
+        try:
+            with self._audit_engine.connect() as conn:
+                row = (
+                    conn.execute(
+                        text(
+                            """
+                            SELECT run_id, question, metric_id, target_date, status, error_code, created_at, finished_at
+                            FROM agent_run
+                            WHERE run_id = :run_id
+                            LIMIT 1
+                            """
+                        ),
+                        {"run_id": run_id},
+                    )
+                    .mappings()
+                    .first()
                 )
-                .mappings()
-                .first()
-            )
+        except SQLAlchemyError as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
         return dict(row) if row is not None else None
 
     def get_evidence(self, *, run_id: str, evidence_id: str) -> dict[str, Any] | None:
@@ -184,6 +187,197 @@ class MetricRepository:
             }
         except (TypeError, json.JSONDecodeError) as exc:
             raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
+
+    def get_trace_steps(self, run_id: str) -> list[dict[str, Any]]:
+        try:
+            with self._audit_engine.connect() as conn:
+                rows = (
+                    conn.execute(
+                        text(
+                            """
+                            SELECT step_id, run_id, seq, node, action, input_summary,
+                                   output_summary, error_code, latency_ms, created_at
+                            FROM trace_step
+                            WHERE run_id = :run_id
+                            ORDER BY seq ASC
+                            """
+                        ),
+                        {"run_id": run_id},
+                    )
+                    .mappings()
+                    .all()
+                )
+            return [
+                {
+                    **dict(row),
+                    "input_summary": _decode_json_column(row["input_summary"]),
+                    "output_summary": _decode_json_column(row["output_summary"]),
+                }
+                for row in rows
+            ]
+        except (SQLAlchemyError, TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
+
+    def get_evidences(self, run_id: str) -> list[dict[str, Any]]:
+        try:
+            with self._audit_engine.connect() as conn:
+                rows = (
+                    conn.execute(
+                        text(
+                            """
+                            SELECT evidence_id, run_id, query_spec, sql_text, sql_hash,
+                                   guard_status, result_summary, data_source, created_at
+                            FROM evidence
+                            WHERE run_id = :run_id
+                            ORDER BY created_at ASC, evidence_id ASC
+                            """
+                        ),
+                        {"run_id": run_id},
+                    )
+                    .mappings()
+                    .all()
+                )
+            return [
+                {
+                    **dict(row),
+                    "query_spec": _decode_json_column(row["query_spec"]),
+                    "result_summary": _decode_json_column(row["result_summary"]),
+                }
+                for row in rows
+            ]
+        except (SQLAlchemyError, TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
+
+    def get_sql_audit_rows(self, run_id: str) -> list[dict[str, Any]]:
+        try:
+            with self._audit_engine.connect() as conn:
+                rows = (
+                    conn.execute(
+                        text(
+                            """
+                            SELECT audit_id, run_id, sql_text, sql_hash, guard_status,
+                                   guard_errors, row_count, latency_ms, created_at
+                            FROM sql_audit
+                            WHERE run_id = :run_id
+                            ORDER BY audit_id ASC
+                            """
+                        ),
+                        {"run_id": run_id},
+                    )
+                    .mappings()
+                    .all()
+                )
+            return [
+                {**dict(row), "guard_errors": _decode_json_column(row["guard_errors"])}
+                for row in rows
+            ]
+        except (SQLAlchemyError, TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
+
+    def get_operation_tasks(self, run_id: str) -> list[dict[str, Any]]:
+        try:
+            with self._audit_engine.connect() as conn:
+                rows = (
+                    conn.execute(
+                        text(
+                            """
+                            SELECT task_id, run_id, title, root_cause_type, payload, created_at
+                            FROM operation_task
+                            WHERE run_id = :run_id
+                            ORDER BY created_at ASC, task_id ASC
+                            """
+                        ),
+                        {"run_id": run_id},
+                    )
+                    .mappings()
+                    .all()
+                )
+            return [
+                {**dict(row), "payload": _decode_json_column(row["payload"])}
+                for row in rows
+            ]
+        except (SQLAlchemyError, TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
+
+    def get_eval_run(self, eval_id: str) -> dict[str, Any] | None:
+        try:
+            with self._audit_engine.connect() as conn:
+                row = (
+                    conn.execute(
+                        text(
+                            """
+                            SELECT eval_id, created_at, summary
+                            FROM eval_run
+                            WHERE eval_id = :eval_id
+                            LIMIT 1
+                            """
+                        ),
+                        {"eval_id": eval_id},
+                    )
+                    .mappings()
+                    .first()
+                )
+            if row is None:
+                return None
+            return {**dict(row), "summary": _decode_json_column(row["summary"])}
+        except (SQLAlchemyError, TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
+
+    def get_eval_case_results(self, eval_id: str) -> list[dict[str, Any]]:
+        try:
+            with self._audit_engine.connect() as conn:
+                rows = (
+                    conn.execute(
+                        text(
+                            """
+                            SELECT id, eval_id, case_id, intent_ok, anomaly_ok, top1_ok,
+                                   top3_ok, evidence_coverage, sql_safe,
+                                   reflection_repair_ok, detail
+                            FROM eval_case_result
+                            WHERE eval_id = :eval_id
+                            ORDER BY id ASC
+                            """
+                        ),
+                        {"eval_id": eval_id},
+                    )
+                    .mappings()
+                    .all()
+                )
+            return [
+                {**dict(row), "detail": _decode_json_column(row["detail"])}
+                for row in rows
+            ]
+        except (SQLAlchemyError, TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
+
+    def get_ground_truth_cases(self, case_ids: list[str]) -> dict[str, dict[str, Any]]:
+        if not case_ids:
+            return {}
+
+        placeholders = ", ".join(f":case_id_{index}" for index, _ in enumerate(case_ids))
+        params = {f"case_id_{index}": case_id for index, case_id in enumerate(case_ids)}
+
+        try:
+            with self._audit_engine.connect() as conn:
+                rows = (
+                    conn.execute(
+                        text(
+                            f"""
+                            SELECT case_id, business_date, metric_id, expected_anomaly,
+                                   root_cause_type, dimension, element
+                            FROM anomaly_ground_truth
+                            WHERE case_id IN ({placeholders})
+                            """
+                        ),
+                        params,
+                    )
+                    .mappings()
+                    .all()
+                )
+        except SQLAlchemyError as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
+
+        return {str(row["case_id"]): dict(row) for row in rows}
 
     def close(self) -> None:
         # 显式释放连接池，保证 -W error::ResourceWarning 下无未关闭连接告警。

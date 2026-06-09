@@ -137,7 +137,7 @@ ALLOWED_ACTIONS = [
 
 ```mermaid
 flowchart TB
-  UI[Streamlit Debug UI] --> API[FastAPI]
+  UI[React/Vite Debug UI] --> API[FastAPI]
   API --> GRAPH[LangGraph StateGraph / RCAState]
   GRAPH --> POLICY[Deterministic Action Policy / Optional LLM Selector]
   GRAPH --> TOOLS[Deterministic Tool Layer]
@@ -236,7 +236,7 @@ AgentAction
 | Memory | `metric_rca/memory/memory_repo.py` | memory key/record | hits/write result | memory 不进入最终结论 |
 | Observability | `metric_rca/observability/trace.py` | node/tool/sql events | trace/audit rows | trace 完整性 |
 | Eval | `metric_rca/evals/*.py` | cases/ground truth | score report | no_anomaly、top1/top3 |
-| UI | `metric_rca/ui/app.py` | API data | debug panels | 手动截图验收 |
+| UI | `frontend/` | API data | debug panels | 手动截图验收 |
 
 ## 3. 核心数据结构
 
@@ -610,7 +610,7 @@ GET  /health
 }
 ```
 
-### 8.2 Streamlit Debug UI
+### 8.2 React/Vite Debug UI
 
 只做调试面板：
 
@@ -792,7 +792,7 @@ finish
 ```text
 metric_rca/api/main.py
 metric_rca/api/routes.py
-metric_rca/ui/app.py
+frontend/
 ```
 
 验收：

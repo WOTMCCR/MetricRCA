@@ -8,6 +8,18 @@ from metric_rca.agent.nodes._common import code_from_message, fail, start_timer,
 from metric_rca.agent.reflection import verify_reflection
 
 
+def _issue_summary(issue: Any) -> dict[str, Any]:
+    suggested_action = getattr(issue, "suggested_action", None)
+    return {
+        "check": getattr(issue, "check", None),
+        "severity": getattr(issue, "severity", None),
+        "message": getattr(issue, "message", None),
+        "suggested_action": suggested_action.model_dump(mode="json")
+        if hasattr(suggested_action, "model_dump")
+        else suggested_action,
+    }
+
+
 def reflection_verify(state: dict[str, Any], *, dependencies: Any) -> dict[str, Any]:
     started = start_timer()
     try:
@@ -51,7 +63,13 @@ def reflection_verify(state: dict[str, Any], *, dependencies: Any) -> dict[str, 
         node="reflection_verify",
         action="reflection_verify",
         input_summary={"candidate_count": len(state.get("candidates", []))},
-        output_summary={"passed": result.passed, "issue_count": len(result.issues)},
+        output_summary={
+            "passed": result.passed,
+            "issue_count": len(result.issues),
+            "issues": [_issue_summary(issue) for issue in result.issues],
+            "repair_pending": update.get("repair_pending", False),
+            "repair_count": update.get("repair_count", state.get("repair_count")),
+        },
         error_code=error_code,
         started_at=started,
     )

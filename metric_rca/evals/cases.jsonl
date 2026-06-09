@@ -1,0 +1,5 @@
+{"case_id":"gmv_paid_ads_drop","question":"Why did yesterday channel=paid_ads GMV drop?","tags":["mvp","campaign"]}
+{"case_id":"gmv_stockout_electronics","question":"Why did yesterday category=electronics GMV drop?","tags":["mvp","inventory"]}
+{"case_id":"cvr_mobile_drop","question":"Why did yesterday device=mobile pay conversion rate drop?","tags":["mvp","conversion"]}
+{"case_id":"refund_rate_product_quality","question":"Why did yesterday product=1 refund rate increase?","tags":["mvp","quality"]}
+{"case_id":"gmv_no_anomaly","question":"Why did yesterday GMV drop?","tags":["mvp","no_anomaly"]}
