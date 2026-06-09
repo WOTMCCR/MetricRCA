@@ -6,8 +6,10 @@ import json
 from typing import Any
 
 from sqlalchemy import text
+from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
+from metric_rca.config.settings import Settings
 from metric_rca.domain.models import MetricDefinition
 from metric_rca.services.metric_contracts import MetricServiceError
 
@@ -50,6 +52,10 @@ class MetadataRepository:
 
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
+
+    @classmethod
+    def from_settings(cls, settings: Settings) -> MetadataRepository:
+        return cls(create_engine(str(settings.db_dsn), pool_pre_ping=True))
 
     def get_metric_definition(self, metric_id: str) -> MetricDefinition:
         row = self._metric_row(metric_id)

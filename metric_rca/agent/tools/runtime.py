@@ -60,6 +60,8 @@ def execute_guarded_plan(*, repository: Any, plan: SQLPlan, run_id: str):
             raise ToolRuntimeError(code, "SQL execution failed") from exc
         if code == "SYSTEM_TABLE_WRITE_FAILED":
             raise ToolRuntimeError(code, "system table write failed") from exc
+        if code == "QUERY_BUDGET_EXCEEDED":
+            raise ToolRuntimeError(code, "query budget exceeded") from exc
         raise
 
 

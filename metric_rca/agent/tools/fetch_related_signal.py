@@ -119,4 +119,5 @@ def fetch_related_signal(
         ),
         evidences=[evidence],
         evidence_alias="E3",
+        sql_count=2,
     )

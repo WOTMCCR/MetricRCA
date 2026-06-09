@@ -108,7 +108,7 @@ def detect_anomaly(
         error_code=result.error_code,
         message="no anomaly detected" if result.error_code == "NO_ANOMALY_DETECTED" else None,
     )
-    return ToolResult(observation=observation, evidences=[evidence], evidence_alias="E1")
+    return ToolResult(observation=observation, evidences=[evidence], evidence_alias="E1", sql_count=2)
 
 
 def _guarded_plan(plan: SQLPlan) -> SQLPlan:

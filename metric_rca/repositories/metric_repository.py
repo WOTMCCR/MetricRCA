@@ -191,6 +191,38 @@ class MetricRepository:
             row,
         )
 
+    def update_agent_run_context(self, *, run_id: str, metric_id: str, target_date: Any) -> None:
+        self._write(
+            """
+            UPDATE agent_run
+            SET metric_id = :metric_id, target_date = :target_date
+            WHERE run_id = :run_id
+            """,
+            {"run_id": run_id, "metric_id": metric_id, "target_date": target_date},
+        )
+
+    def finish_agent_run(
+        self,
+        *,
+        run_id: str,
+        status: str,
+        error_code: str | None,
+        finished_at: datetime,
+    ) -> None:
+        self._write(
+            """
+            UPDATE agent_run
+            SET status = :status, error_code = :error_code, finished_at = :finished_at
+            WHERE run_id = :run_id
+            """,
+            {
+                "run_id": run_id,
+                "status": status,
+                "error_code": error_code,
+                "finished_at": finished_at,
+            },
+        )
+
     def create_trace_step(self, row: dict[str, Any]) -> None:
         # input/output_summary 是 JSON 列，序列化后写入。
         payload = {
@@ -313,6 +345,10 @@ class MetricRepository:
         return counts
 
     def _insert(self, sql: str, params: dict[str, Any]) -> None:
+        # 系统表写入统一走应用账号事务（begin() 自动提交/回滚）。
+        self._write(sql, params)
+
+    def _write(self, sql: str, params: dict[str, Any]) -> None:
         # 系统表写入统一走应用账号事务（begin() 自动提交/回滚）。
         try:
             with self._audit_engine.begin() as conn:

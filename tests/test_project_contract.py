@@ -27,13 +27,13 @@ def test_pyproject_declares_current_phase_dependencies() -> None:
         "sqlglot",
         "pandas",
         "langchain-openai",
+        "langgraph",
         "httpx[socks]",
         "pytest",
     }
     forbidden_phase_gt1 = {
         "fastapi",
         "uvicorn",
-        "langgraph",
         "langchain-core",
         "streamlit",
         "scikit-learn",

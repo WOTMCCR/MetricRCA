@@ -111,4 +111,5 @@ def drilldown_dimension(
         evidences=[evidence],
         evidence_alias="E2",
         candidates=attribution.candidates,
+        sql_count=2,
     )

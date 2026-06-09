@@ -114,6 +114,7 @@ def calculate_contribution(
         "selected_candidate": selected_candidate.model_dump(mode="json"),
         "candidates": [candidate.model_dump(mode="json") for candidate in attribution.candidates],
     }
+    sql_count = 2
     if args.metric_id == "gmv":
         try:
             factor_summary = _gmv_factor_decomposition(
@@ -124,6 +125,8 @@ def calculate_contribution(
                 dimension=args.dimension,
                 element=args.element,
                 base_filters=filters,
+                contribution_current_rows=current.rows,
+                contribution_baseline_rows=baseline.rows,
             )
         except ToolRuntimeError as exc:
             return runtime_error(action, exc)
@@ -136,6 +139,7 @@ def calculate_contribution(
             raise
         result_summary["decomposition"] = factor_summary["decomposition"]
         result_summary["factor_query_sources"] = factor_summary["query_sources"]
+        sql_count += int(factor_summary["sql_count"])
     elif args.metric_id == "net_gmv":
         try:
             factor_summary = _net_gmv_factor_decomposition(
@@ -158,6 +162,7 @@ def calculate_contribution(
             raise
         result_summary["net_gmv_decomposition"] = factor_summary["decomposition"]
         result_summary["factor_query_sources"] = factor_summary["query_sources"]
+        sql_count += int(factor_summary["sql_count"])
     else:
         result_summary["metric_contribution"] = _metric_contribution_summary(
             metric_id=args.metric_id,
@@ -189,6 +194,7 @@ def calculate_contribution(
         evidences=[evidence],
         evidence_alias="E4",
         candidates=attribution.candidates,
+        sql_count=sql_count,
     )
 
 
@@ -201,12 +207,18 @@ def _gmv_factor_decomposition(
     dimension: str,
     element: str,
     base_filters: dict[str, str],
+    contribution_current_rows: list[dict[str, Any]],
+    contribution_baseline_rows: list[dict[str, Any]],
 ) -> dict[str, Any]:
     filters = _selected_element_filters(base_filters=base_filters, dimension=dimension, element=element)
-    current_values: dict[str, float] = {}
-    baseline_values: dict[str, float] = {}
+    current_values: dict[str, float] = {
+        "gmv": _selected_metric_value(contribution_current_rows, dimension, element)
+    }
+    baseline_values: dict[str, float] = {
+        "gmv": _selected_baseline_mean(contribution_baseline_rows, dimension, element)
+    }
     factor_query_sources: dict[str, dict[str, Any]] = {}
-    for metric_id in ["gmv", "uv", "pay_cvr"]:
+    for metric_id in ["uv", "pay_cvr"]:
         current_spec = build_query_spec(
             metric_id=metric_id,
             start_date=target_date,
@@ -245,6 +257,7 @@ def _gmv_factor_decomposition(
             },
         ),
         "query_sources": factor_query_sources,
+        "sql_count": len(factor_query_sources) * 2,
     }
 
 
@@ -313,6 +326,7 @@ def _net_gmv_factor_decomposition(
             "largest_driver": max(drivers, key=drivers.get),
         },
         "query_sources": factor_query_sources,
+        "sql_count": len(factor_query_sources) * 2,
     }
 
 
@@ -372,6 +386,18 @@ def _mean_metric_value(rows: list[dict[str, Any]]) -> float:
     if len(values) < 3:
         raise ValueError("INSUFFICIENT_BASELINE_DATA")
     return mean(values)
+
+
+def _selected_metric_value(rows: list[dict[str, Any]], dimension: str, element: str) -> float:
+    for row in rows:
+        if str(row.get(dimension)) == str(element):
+            return _single_metric_value([row])
+    raise ValueError("NO_CURRENT_DATA")
+
+
+def _selected_baseline_mean(rows: list[dict[str, Any]], dimension: str, element: str) -> float:
+    selected = [row for row in rows if str(row.get(dimension)) == str(element)]
+    return _mean_metric_value(selected)
 
 
 def _relative_drop(*, current: float, baseline: float) -> float:
