@@ -13,7 +13,7 @@ from sqlalchemy import create_engine, text
 
 from metric_rca.config.settings import Settings, get_settings
 from metric_rca.data.seed_data import main as seed_main
-from metric_rca.domain.models import Evidence, Observation, RootCauseCandidate
+from metric_rca.domain.models import AgentAction, Evidence, Observation, ReflectionIssue, ReflectionResult, RootCauseCandidate
 from metric_rca.repositories.metadata_repository import MetadataRepository
 from metric_rca.repositories.metric_repository import MetricRepository
 from metric_rca.services.metric_service import MetricService
@@ -508,7 +508,7 @@ def test_graph_with_memory_hit_reorders_drilldown_but_conclusion_requires_E1_to_
                 "mem_key": "gmv|channel",
                 "payload": {"dimension": "channel", "root_cause_type": "campaign_traffic_drop"},
                 "confidence": 0.95,
-                "source": "test",
+                "source": "reflection_verified",
                 "version": 1,
                 "ttl_days": 30,
                 "created_at": datetime(2026, 6, 5, 0, 0, 0),
@@ -549,7 +549,7 @@ def test_graph_low_confidence_memory_does_not_change_plan() -> None:
                 "mem_key": "gmv|category",
                 "payload": {"dimension": "category"},
                 "confidence": 0.10,
-                "source": "test",
+                "source": "reflection_verified",
                 "version": 1,
                 "ttl_days": 30,
                 "created_at": datetime(2026, 6, 5, 0, 0, 0),
@@ -587,7 +587,7 @@ def test_graph_expired_memory_does_not_change_plan() -> None:
                 "mem_key": "gmv|category",
                 "payload": {"dimension": "category"},
                 "confidence": 0.95,
-                "source": "test",
+                "source": "reflection_verified",
                 "version": 1,
                 "ttl_days": 1,
                 "created_at": datetime(2026, 5, 1, 0, 0, 0),
@@ -611,30 +611,222 @@ def test_graph_expired_memory_does_not_change_plan() -> None:
 
 
 @pytest.mark.integration
-def test_graph_reflection_repair_creates_new_evidence_and_then_passes() -> None:
+def test_graph_untrusted_memory_does_not_change_plan() -> None:
+    from metric_rca.memory.memory_repo import MemoryRepository
+
     seed_main()
-    settings = _settings(memory_enabled=False, max_steps=3)
+    settings = _settings(memory_enabled=True, memory_required=True)
     repository, metric_service = _real_dependencies(settings)
+    memory_repo = MemoryRepository.from_settings(settings)
     try:
+        engine = create_engine(str(settings.db_dsn), pool_pre_ping=True)
+        try:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO memory_record (
+                          memory_id, layer, mem_key, payload, confidence, source,
+                          version, ttl_days, created_at
+                        )
+                        VALUES (
+                          :memory_id, :layer, :mem_key, :payload, :confidence, :source,
+                          :version, :ttl_days, :created_at
+                        )
+                        """
+                    ),
+                    {
+                        "memory_id": "p3b-untrusted-memory",
+                        "layer": "case",
+                        "mem_key": "gmv|category",
+                        "payload": json.dumps({"dimension": "category"}),
+                        "confidence": 0.95,
+                        "source": "untrusted",
+                        "version": 1,
+                        "ttl_days": 30,
+                        "created_at": datetime(2026, 6, 5, 0, 0, 0),
+                    },
+                )
+        finally:
+            engine.dispose()
         result = _run_live_graph(
             "Why did yesterday GMV drop?",
-            run_id="p3b-reflection-repair-success",
+            run_id="p3b-memory-untrusted",
             settings=settings,
             repository=repository,
             metric_service=metric_service,
+            memory_repo=memory_repo,
         )
-        trace_nodes = _trace_nodes(settings, "p3b-reflection-repair-success")
 
         assert result["status"] == "succeeded"
-        assert result["repair_count"] == 1
-        assert result["reflection"].passed is True
-        assert result["reflection"].repaired is True
-        assert [e.evidence_id for e in result["evidences"]] == [f"p3b-reflection-repair-success:E{i}" for i in range(1, 5)]
-        assert trace_nodes.count("reflection_verify") == 2
-        assert trace_nodes[trace_nodes.index("reflection_verify") + 1] == "react_step"
-        assert _count(settings, "sql_audit", "run_id", "p3b-reflection-repair-success") == result["query_count"]
+        assert _action_args(result, "drilldown_dimension")["dimension"] == "channel"
+        assert result["memory_hits"] == []
     finally:
         repository.close()
+        memory_repo.close()
+
+
+@pytest.mark.integration
+def test_repair_new_evidence_is_persisted_and_has_sql_audit() -> None:
+    from metric_rca.agent.graph import build_dependencies
+    from metric_rca.agent.nodes.attribute_rank import attribute_rank
+    from metric_rca.agent.nodes.execute_tool import execute_tool
+    from metric_rca.agent.nodes.react_step import react_step
+    from metric_rca.agent.nodes.reflection_verify import reflection_verify
+
+    seed_main()
+    settings = _settings(memory_enabled=False, max_steps=8)
+    repository, metric_service = _real_dependencies(settings)
+    deps = build_dependencies(settings=settings, repository=repository, metric_service=metric_service)
+    run_id = "p3b-reflection-repair-success"
+    try:
+        deps.trace_writer.start_run(run_id=run_id, question="Why did yesterday GMV drop?", target_date=settings.target_date)
+        deps.trace_writer.set_run_context(run_id=run_id, metric_id="gmv", target_date=settings.target_date)
+        state = _initial_running_state(run_id=run_id, settings=settings)
+        state = _apply_update(
+            state,
+            execute_tool(
+                {
+                    **state,
+                    "actions": [
+                        AgentAction(
+                            action="detect_anomaly",
+                            args={"run_id": run_id, "metric_id": "gmv", "target_date": settings.target_date, "filters": {}},
+                        )
+                    ],
+                },
+                dependencies=deps,
+            ),
+        )
+        state = _apply_update(
+            state,
+            execute_tool(
+                {
+                    **state,
+                    "actions": [
+                        AgentAction(
+                            action="drilldown_dimension",
+                            args={
+                                "run_id": run_id,
+                                "metric_id": "gmv",
+                                "target_date": settings.target_date,
+                                "dimension": "channel",
+                                "evidence_ids": [f"{run_id}:E1"],
+                                "filters": {},
+                            },
+                        )
+                    ],
+                },
+                dependencies=deps,
+            ),
+        )
+        top = state["candidates"][0]
+        state = _apply_update(
+            state,
+            execute_tool(
+                {
+                    **state,
+                    "actions": [
+                        AgentAction(
+                            action="fetch_related_signal",
+                            args={
+                                "run_id": run_id,
+                                "metric_id": "gmv",
+                                "target_date": settings.target_date,
+                                "signal_type": "campaign",
+                                "dimension": top.dimension,
+                                "element": top.element,
+                                "evidence_ids": [f"{run_id}:E1", f"{run_id}:E2"],
+                            },
+                        )
+                    ],
+                },
+                dependencies=deps,
+            ),
+        )
+        state = _apply_update(state, attribute_rank(state, dependencies=deps))
+        verified = reflection_verify(state, dependencies=deps)
+        state = _apply_update(state, verified)
+        assert state["repair_pending"] is True
+
+        state = _apply_update(state, react_step(state, dependencies=deps))
+        state = _apply_update(state, execute_tool(state, dependencies=deps))
+        state = _apply_update(state, reflection_verify(state, dependencies=deps))
+
+        e4 = next(evidence for evidence in state["evidences"] if evidence.evidence_id == f"{run_id}:E4")
+        persisted_e4 = repository.get_evidence(run_id=run_id, evidence_id=e4.evidence_id)
+        assert persisted_e4 is not None
+        assert persisted_e4["sql_hash"] == e4.sql_hash
+        assert e4.sql_hash in _audit_hashes(settings, run_id)
+        assert state["repair_count"] == 1
+        assert state["reflection"].passed is True
+        assert state["reflection"].repaired is True
+    finally:
+        repository.close()
+
+
+def test_repair_pending_does_not_bypass_max_steps() -> None:
+    from metric_rca.agent.nodes.react_step import react_step
+    from metric_rca.agent.graph import route_after_react
+
+    state = {
+        "run_id": "run-1",
+        "metric_id": "gmv",
+        "target_date": date(2026, 6, 5),
+        "parsed_spec": {"filters": {}},
+        "step_count": 3,
+        "query_count": 6,
+        "repair_pending": True,
+        "actions": [],
+        "observations": [Observation(action_name="fetch_related_signal", ok=True, evidence_ids=["run-1:E3"])],
+        "evidences": [_evidence("run-1:E1"), _evidence("run-1:E2"), _evidence("run-1:E3")],
+        "candidates": [
+            RootCauseCandidate(
+                root_cause_type="campaign_traffic_drop",
+                dimension="channel",
+                element="paid_ads",
+                contribution_pct=0.90,
+                signal_severity=0.90,
+                evidence_support=1.0,
+                eng_confidence=0.90,
+                verdict="confirmed",
+                evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+            )
+        ],
+        "reflection": ReflectionResult(
+            passed=False,
+            issues=[
+                ReflectionIssue(
+                    check="required_evidence_present",
+                    severity="error",
+                    by="rule",
+                    message="missing E4",
+                    suggested_action=AgentAction(
+                        action="calculate_contribution",
+                        args={
+                            "run_id": "run-1",
+                            "metric_id": "gmv",
+                            "target_date": date(2026, 6, 5),
+                            "dimension": "channel",
+                            "element": "paid_ads",
+                            "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3"],
+                            "filters": {},
+                        },
+                    ),
+                )
+            ],
+            repaired=False,
+            repair_count=1,
+        ),
+    }
+    deps = _Dependencies(settings=Settings.model_construct(max_steps=3, max_query=12, llm_enabled=False, llm_required=False))
+
+    update = react_step(state, dependencies=deps)
+    next_state = _apply_update(state, update)
+
+    assert update["actions"][0].action == "finish"
+    assert update["error_code"] == "MAX_STEPS_EXCEEDED"
+    assert route_after_react(next_state, dependencies=deps) == "error_return"
 
 
 @pytest.mark.integration
@@ -652,7 +844,7 @@ def test_graph_reflection_repair_failed_no_report_no_task() -> None:
         )
 
         assert result["status"] == "failed"
-        assert result["error_code"] == "REFLECTION_REPAIR_FAILED"
+        assert result["error_code"] == "MAX_STEPS_EXCEEDED"
         assert result.get("report") is None
         assert _count(settings, "operation_task", "run_id", "p3b-reflection-repair-failed") == 0
     finally:
@@ -738,6 +930,45 @@ def _run_live_graph(
         metric_service=metric_service,
         memory_repo=memory_repo,
     )
+
+
+def _initial_running_state(*, run_id: str, settings: Settings) -> dict[str, Any]:
+    return {
+        "run_id": run_id,
+        "question": "Why did yesterday GMV drop?",
+        "target_date": settings.target_date,
+        "metric_id": "gmv",
+        "parsed_spec": {
+            "metric_id": "gmv",
+            "target_date": str(settings.target_date),
+            "dimension": None,
+            "element": None,
+            "filters": {},
+        },
+        "memory_hits": [],
+        "actions": [],
+        "observations": [],
+        "evidences": [],
+        "candidates": [],
+        "step_count": 0,
+        "query_count": 0,
+        "drilldown_depth": 0,
+        "repair_count": 0,
+        "repair_pending": False,
+        "status": "running",
+        "error_code": None,
+    }
+
+
+def _apply_update(state: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(state)
+    for key in ["actions", "observations", "evidences"]:
+        if key in update:
+            merged[key] = [*merged.get(key, []), *update[key]]
+    for key, value in update.items():
+        if key not in {"actions", "observations", "evidences"}:
+            merged[key] = value
+    return merged
 
 
 def _real_dependencies(settings: Settings) -> tuple[MetricRepository, "_CountingMetricService"]:
@@ -909,10 +1140,33 @@ class _Dependencies:
             signal_metric_by_type={"campaign": "gmv"},
         )
         self.metric_service = _MetricService(["channel"])
-        self.repository = repository
+        self.repository = repository or _GraphRepository()
         self.renderer = None
         self.trace_writer = _InMemoryTraceWriter()
         self.memory_repo = None
+
+
+class _GraphRepository:
+    def __init__(self) -> None:
+        self.tasks: list[dict[str, Any]] = []
+        self.persisted_evidence = {
+            f"run-1:E{idx}": {
+                "evidence_id": f"run-1:E{idx}",
+                "run_id": "run-1",
+                "guard_status": "passed",
+                "sql_hash": "0" * 64,
+            }
+            for idx in range(1, 5)
+        }
+
+    def get_evidence(self, *, run_id: str, evidence_id: str) -> dict[str, Any] | None:
+        row = self.persisted_evidence.get(evidence_id)
+        if row and row["run_id"] == run_id:
+            return row
+        return None
+
+    def create_operation_task(self, row: dict[str, Any]) -> None:
+        self.tasks.append(row)
 
 
 class _InMemoryTraceWriter:
@@ -984,4 +1238,5 @@ class _CountingBudgetRepository:
             "evidence_id": row["evidence_id"],
             "run_id": row["run_id"],
             "guard_status": row["guard_status"],
+            "sql_hash": row["sql_hash"],
         }

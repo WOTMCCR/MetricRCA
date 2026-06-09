@@ -62,6 +62,9 @@ def write_memory(state: dict[str, Any], *, dependencies: Any) -> dict[str, Any]:
 def _memory_records(state: dict[str, Any]) -> list[dict[str, Any]]:
     if state.get("status") == "no_anomaly":
         return []
+    reflection = state.get("reflection")
+    if state.get("status") != "succeeded" or not getattr(reflection, "passed", False):
+        return []
     metric_id = state.get("metric_id")
     if not metric_id:
         return []
@@ -83,23 +86,6 @@ def _memory_records(state: dict[str, Any]) -> list[dict[str, Any]]:
                 },
                 "confidence": min(1.0, float(candidate.get("eng_confidence") or 0.8)),
                 "source": "reflection_verified",
-                "ttl_days": 30,
-            }
-        ]
-    parsed = state.get("parsed_spec") or {}
-    dimension = parsed.get("dimension")
-    if dimension:
-        return [
-            {
-                "layer": "case",
-                "mem_key": f"{metric_id}|{dimension}",
-                "payload": {
-                    "dimension": dimension,
-                    "status": state.get("status"),
-                    "run_id": state.get("run_id"),
-                },
-                "confidence": 0.8,
-                "source": "run_summary",
                 "ttl_days": 30,
             }
         ]

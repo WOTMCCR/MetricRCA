@@ -105,6 +105,41 @@ def test_reflection_no_anomaly_cannot_have_operation_task() -> None:
     assert "no_anomaly_task_behavior" in _checks(result)
 
 
+def test_no_anomaly_with_E2_E3_or_E4_fails_reflection() -> None:
+    state = {
+        "run_id": "run-1",
+        "status": "no_anomaly",
+        "metric_id": "gmv",
+        "target_date": date(2026, 6, 5),
+        "candidates": [],
+        "evidences": [_evidence("run-1:E1"), _evidence("run-1:E2")],
+        "trace_nodes": ["parse_question", "read_memory", "attribute_rank"],
+    }
+
+    result = verify_reflection(state, max_repair=1)
+
+    assert result.passed is False
+    assert "no_anomaly_evidence_scope" in _checks(result)
+    assert "no_anomaly_downstream_trace" in _checks(result)
+
+
+def test_no_anomaly_state_only_evidence_fails_reflection_node() -> None:
+    state = {
+        "run_id": "run-1",
+        "status": "no_anomaly",
+        "metric_id": "gmv",
+        "target_date": date(2026, 6, 5),
+        "candidates": [],
+        "evidences": [_evidence("run-1:E1")],
+    }
+
+    verified = reflection_verify(state, dependencies=_Dependencies(persisted_evidence={}))
+
+    assert verified["reflection"].passed is False
+    assert verified["error_code"] == "REFLECTION_REPAIR_FAILED"
+    assert "persisted_evidence" in _checks(verified["reflection"])
+
+
 def test_reflection_insufficient_evidence_blocks_confirmed_causal_language() -> None:
     state = _state(
         candidates=[_candidate(evidence_ids=["run-1:E1"], verdict="likely")],
@@ -133,6 +168,53 @@ def test_reflection_repair_suggested_action_reenters_react_tool_guard_repo_and_g
     assert issue.suggested_action is not None
     assert issue.suggested_action.action == "calculate_contribution"
     assert issue.suggested_action.args["evidence_ids"] == ["run-1:E1", "run-1:E2", "run-1:E3"]
+
+
+def test_reflection_state_only_fabricated_evidence_fails() -> None:
+    state = _state()
+
+    verified = reflection_verify(
+        state,
+        dependencies=_Dependencies(persisted_evidence={}),
+    )
+
+    assert verified["reflection"].passed is False
+    assert verified["error_code"] == "REFLECTION_REPAIR_FAILED"
+    assert "persisted_evidence" in _checks(verified["reflection"])
+
+
+def test_reflection_persisted_evidence_sql_hash_mismatch_fails() -> None:
+    state = _state()
+    persisted = _persisted_rows(state["evidences"])
+    persisted["run-1:E4"]["sql_hash"] = "1" * 64
+
+    verified = reflection_verify(
+        state,
+        dependencies=_Dependencies(persisted_evidence=persisted),
+    )
+
+    assert verified["reflection"].passed is False
+    assert verified["error_code"] == "REFLECTION_REPAIR_FAILED"
+    assert "persisted_evidence" in _checks(verified["reflection"])
+
+
+def test_reflection_persisted_evidence_run_id_or_guard_mismatch_fails() -> None:
+    state = _state()
+    for mutated_row in [
+        {"run_id": "foreign-run", "guard_status": "passed", "sql_hash": "0" * 64},
+        {"run_id": "run-1", "guard_status": "rejected", "sql_hash": "0" * 64},
+    ]:
+        persisted = _persisted_rows(state["evidences"])
+        persisted["run-1:E4"].update(mutated_row)
+
+        verified = reflection_verify(
+            state,
+            dependencies=_Dependencies(persisted_evidence=persisted),
+        )
+
+        assert verified["reflection"].passed is False
+        assert verified["error_code"] == "REFLECTION_REPAIR_FAILED"
+        assert "persisted_evidence" in _checks(verified["reflection"])
 
 
 def test_reflection_repair_count_increment_without_new_evidence_does_not_pass() -> None:
@@ -231,16 +313,37 @@ def _checks(result: ReflectionResult) -> set[str]:
     return {issue.check for issue in result.issues}
 
 
+def _persisted_rows(evidences: list[Evidence]) -> dict[str, dict[str, Any]]:
+    return {
+        evidence.evidence_id: {
+            "evidence_id": evidence.evidence_id,
+            "run_id": evidence.evidence_id.split(":", maxsplit=1)[0],
+            "guard_status": evidence.guard_status,
+            "sql_hash": evidence.sql_hash,
+        }
+        for evidence in evidences
+    }
+
+
 class _Dependencies:
-    def __init__(self) -> None:
+    def __init__(self, *, persisted_evidence: dict[str, dict[str, Any]] | None = None) -> None:
         self.settings = Settings.model_construct(max_repair=1)
-        self.repository = _Repository()
+        default_state = _state()
+        default_persisted = _persisted_rows(default_state["evidences"])
+        self.repository = _Repository(default_persisted if persisted_evidence is None else persisted_evidence)
         self.trace_writer = _TraceWriter()
 
 
 class _Repository:
-    def __init__(self) -> None:
+    def __init__(self, persisted_evidence: dict[str, dict[str, Any]]) -> None:
         self.tasks: list[dict[str, Any]] = []
+        self.persisted_evidence = persisted_evidence
+
+    def get_evidence(self, *, run_id: str, evidence_id: str) -> dict[str, Any] | None:
+        row = self.persisted_evidence.get(evidence_id)
+        if row and row.get("run_id") == run_id:
+            return row
+        return None
 
     def create_operation_task(self, row: dict[str, Any]) -> None:
         self.tasks.append(row)

@@ -101,6 +101,7 @@ def build_state_graph(*, dependencies: Any) -> StateGraph:
         {
             "execute_tool": "execute_tool",
             "attribute_rank": "attribute_rank",
+            "reflection_verify": "reflection_verify",
             "generate_report": "generate_report",
             "error_return": "error_return",
         },
@@ -221,7 +222,7 @@ def route_after_react(state: dict[str, Any], *, dependencies: Any) -> str:
     action_args = getattr(action, "args", None) or action.get("args", {})
     if action_name == "finish":
         if action_args.get("status") == "no_anomaly" or state.get("status") == "no_anomaly":
-            return "generate_report"
+            return "reflection_verify"
         if action_args.get("status") == "failed":
             return "error_return"
         return "attribute_rank"

@@ -14,15 +14,39 @@ REQUIRED_EVIDENCE_ALIASES = ("E1", "E2", "E3", "E4")
 ATTRIBUTION_COVERAGE_THRESHOLD = 0.60
 
 
-def verify_reflection(state: dict[str, Any], *, max_repair: int) -> ReflectionResult:
+def verify_reflection(
+    state: dict[str, Any],
+    *,
+    max_repair: int,
+    persisted_evidence_by_id: dict[str, dict[str, Any] | None] | None = None,
+) -> ReflectionResult:
     issues: list[ReflectionIssue] = []
     status = state.get("status")
     repair_count = int(state.get("repair_count") or 0)
     if status == "no_anomaly":
+        aliases = _aliases(state)
+        if aliases != {"E1"}:
+            issues.append(_issue("no_anomaly_evidence_scope", "no_anomaly run must bind exactly E1"))
+        for evidence in [_as_evidence(item) for item in state.get("evidences", [])]:
+            if not evidence.evidence_id.startswith(f"{state.get('run_id')}:"):
+                issues.append(_issue("current_run_evidence", "no_anomaly evidence is not current-run scoped"))
+            elif evidence.guard_status != "passed":
+                issues.append(_issue("sql_guard_status", "no_anomaly evidence guard did not pass"))
+            elif not _persisted_evidence_matches(
+                state=state,
+                evidence=evidence,
+                persisted_evidence_by_id=persisted_evidence_by_id,
+            ):
+                issues.append(_issue("persisted_evidence", "no_anomaly evidence is not persisted guard-passed evidence"))
         if state.get("candidates"):
             issues.append(_issue("no_anomaly_has_candidate", "no_anomaly run has candidates"))
         if state.get("operation_tasks") or state.get("operation_task_created"):
             issues.append(_issue("no_anomaly_task_behavior", "no_anomaly run cannot create operation_task"))
+        if _has_confirmed_root_cause_report(state.get("report")):
+            issues.append(_issue("no_anomaly_report_behavior", "no_anomaly report cannot contain confirmed root cause"))
+        trace_nodes = set(state.get("trace_nodes") or [])
+        if {"attribute_rank", "create_tasks"} & trace_nodes:
+            issues.append(_issue("no_anomaly_downstream_trace", "no_anomaly run cannot visit downstream RCA nodes"))
         return ReflectionResult(
             passed=not issues,
             issues=issues,
@@ -61,6 +85,12 @@ def verify_reflection(state: dict[str, Any], *, max_repair: int) -> ReflectionRe
                 issues.append(_issue("current_run_evidence", "candidate evidence is not current-run scoped"))
             elif evidence.guard_status != "passed":
                 issues.append(_issue("sql_guard_status", "candidate evidence guard did not pass"))
+            elif not _persisted_evidence_matches(
+                state=state,
+                evidence=evidence,
+                persisted_evidence_by_id=persisted_evidence_by_id,
+            ):
+                issues.append(_issue("persisted_evidence", "candidate evidence is not persisted guard-passed evidence"))
         if candidate is candidates[0] and candidate.contribution_pct < ATTRIBUTION_COVERAGE_THRESHOLD:
             issues.append(_issue("ATTRIBUTION_COVERAGE_LOW", "top candidate attribution coverage is below threshold"))
 
@@ -98,6 +128,24 @@ def _issue(check: str, message: str, *, suggested_action: AgentAction | None = N
         by="rule",
         message=message,
         suggested_action=suggested_action,
+    )
+
+
+def _persisted_evidence_matches(
+    *,
+    state: dict[str, Any],
+    evidence: Evidence,
+    persisted_evidence_by_id: dict[str, dict[str, Any] | None] | None,
+) -> bool:
+    if persisted_evidence_by_id is None:
+        return True
+    persisted = persisted_evidence_by_id.get(evidence.evidence_id)
+    if persisted is None:
+        return False
+    return (
+        persisted.get("run_id") == state.get("run_id")
+        and persisted.get("guard_status") == "passed"
+        and persisted.get("sql_hash") == evidence.sql_hash
     )
 
 
@@ -245,6 +293,17 @@ def _has_unsupported_causal_language(state: dict[str, Any], candidates: list[Roo
         candidate.verdict == "confirmed" and not _missing_required_aliases(state, candidate.evidence_ids)
         for candidate in candidates
     )
+
+
+def _has_confirmed_root_cause_report(report: Any) -> bool:
+    if not isinstance(report, dict):
+        return False
+    if report.get("status") == "succeeded" and (report.get("top_candidate") or report.get("root_cause")):
+        return True
+    if report.get("verdict") == "confirmed":
+        return True
+    top_candidate = report.get("top_candidate")
+    return isinstance(top_candidate, dict) and top_candidate.get("verdict") == "confirmed"
 
 
 def _strings(value: Any) -> list[str]:

@@ -27,6 +27,21 @@ def test_memory_repo_is_real_not_reexport_shell() -> None:
     assert "from metric_rca.repositories.metric_repository import MemoryRepository" not in source
 
 
+def test_memory_repo_from_settings_uses_trusted_sources() -> None:
+    from metric_rca.memory.memory_repo import MemoryRepository
+
+    repo = MemoryRepository.from_settings(
+        Settings.model_construct(
+            db_dsn="sqlite+pysqlite:///:memory:",
+            memory_trusted_sources={"test"},
+        )
+    )
+    try:
+        assert repo._trusted_sources == frozenset({"test"})
+    finally:
+        repo.close()
+
+
 def test_memory_exact_key_hit_reorders_drilldown_only() -> None:
     action = next_action(
         {
@@ -67,6 +82,38 @@ def test_memory_low_confidence_ignored() -> None:
     )
 
     assert repo.read("gmv|channel") == []
+
+
+def test_memory_untrusted_source_ignored() -> None:
+    repo = _repo()
+    with repo._engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO memory_record (
+                  memory_id, layer, mem_key, payload, confidence, source,
+                  version, ttl_days, created_at
+                )
+                VALUES (
+                  :memory_id, :layer, :mem_key, :payload, :confidence, :source,
+                  :version, :ttl_days, :created_at
+                )
+                """
+            ),
+            {
+                "memory_id": "untrusted",
+                "layer": "case",
+                "mem_key": "gmv|category",
+                "payload": '{"dimension": "category"}',
+                "confidence": 0.95,
+                "source": "untrusted",
+                "version": 1,
+                "ttl_days": 30,
+                "created_at": datetime(2026, 6, 1),
+            },
+        )
+
+    assert repo.read("gmv|category") == []
 
 
 def test_memory_expired_ignored() -> None:
@@ -201,6 +248,44 @@ def test_memory_invalid_version_write_returns_typed_failure() -> None:
         raise AssertionError("invalid memory version was accepted")
 
 
+def test_memory_invalid_layer_or_ttl_write_returns_MEMORY_WRITE_FAILED() -> None:
+    repo = _repo()
+
+    invalid_records = [
+        {
+            "layer": "runtime",
+            "mem_key": "gmv|channel",
+            "payload": {"dimension": "channel"},
+            "confidence": 0.90,
+            "source": "test",
+            "ttl_days": 30,
+        },
+        {
+            "layer": "case",
+            "mem_key": "gmv|channel",
+            "payload": {"dimension": "channel"},
+            "confidence": 0.90,
+            "source": "test",
+            "ttl_days": 0,
+        },
+        {
+            "layer": "case",
+            "mem_key": "gmv|channel",
+            "payload": {"dimension": "channel"},
+            "confidence": 0.90,
+            "source": "untrusted",
+            "ttl_days": 30,
+        },
+    ]
+    for record in invalid_records:
+        try:
+            repo.write(record)
+        except RuntimeError as exc:
+            assert str(exc) == "MEMORY_WRITE_FAILED"
+        else:
+            raise AssertionError("invalid memory layer/ttl was accepted")
+
+
 def test_memory_required_read_failure_fails_run() -> None:
     result = read_memory(
         {"run_id": "run-1", "metric_id": "gmv", "parsed_spec": {"dimension": "channel"}},
@@ -220,6 +305,7 @@ def test_memory_required_write_failure_fails_run() -> None:
             "parsed_spec": {"dimension": "channel"},
             "report": {"status": "succeeded"},
             "candidates": [_candidate()],
+            "reflection": type("Reflection", (), {"passed": True})(),
         },
         dependencies=_Dependencies(settings=_settings(memory_enabled=True, memory_required=True), memory_repo=_FailingMemoryRepo()),
     )
@@ -250,6 +336,26 @@ def test_no_anomaly_write_memory_does_not_persist_conclusion_status() -> None:
             "parsed_spec": {"dimension": "channel"},
             "report": {"status": "no_anomaly"},
             "candidates": [],
+        },
+        dependencies=deps,
+    )
+
+    assert result == {}
+    assert repo.write_calls == 0
+
+
+def test_candidate_memory_requires_passed_reflection() -> None:
+    repo = _CountingMemoryRepo()
+    deps = _Dependencies(settings=_settings(memory_enabled=True, memory_required=True), memory_repo=repo)
+
+    result = write_memory(
+        {
+            "run_id": "run-1",
+            "status": "succeeded",
+            "metric_id": "gmv",
+            "parsed_spec": {"dimension": "channel"},
+            "report": {"status": "succeeded"},
+            "candidates": [_candidate(evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"])],
         },
         dependencies=deps,
     )
@@ -300,7 +406,7 @@ def _repo(*, now: datetime = datetime(2026, 6, 5)):
                 """
             )
         )
-    return MemoryRepository(engine=engine, now_fn=lambda: now)
+    return MemoryRepository(engine=engine, now_fn=lambda: now, trusted_sources={"test", "reflection_verified"})
 
 
 def _record(mem_key: str, payload: dict[str, Any], *, version: int) -> dict[str, Any]:

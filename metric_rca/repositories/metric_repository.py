@@ -154,22 +154,25 @@ class MetricRepository:
 
     def get_evidence(self, *, run_id: str, evidence_id: str) -> dict[str, Any] | None:
         """读取当前 run 的 guard-passed 证据；工具层用它禁止伪造 evidence_id。"""
-        with self._audit_engine.connect() as conn:
-            row = (
-                conn.execute(
-                    text(
-                        """
-                        SELECT evidence_id, run_id, sql_hash, guard_status, result_summary, data_source, created_at
-                        FROM evidence
-                        WHERE run_id = :run_id AND evidence_id = :evidence_id
-                        LIMIT 1
-                        """
-                    ),
-                    {"run_id": run_id, "evidence_id": evidence_id},
+        try:
+            with self._audit_engine.connect() as conn:
+                row = (
+                    conn.execute(
+                        text(
+                            """
+                            SELECT evidence_id, run_id, sql_hash, guard_status, result_summary, data_source, created_at
+                            FROM evidence
+                            WHERE run_id = :run_id AND evidence_id = :evidence_id
+                            LIMIT 1
+                            """
+                        ),
+                        {"run_id": run_id, "evidence_id": evidence_id},
+                    )
+                    .mappings()
+                    .first()
                 )
-                .mappings()
-                .first()
-            )
+        except SQLAlchemyError as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
         return dict(row) if row is not None else None
 
     def close(self) -> None:

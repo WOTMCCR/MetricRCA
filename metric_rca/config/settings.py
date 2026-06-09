@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     memory_enabled: bool = True
     memory_required: bool = False
+    memory_trusted_sources: set[str] = Field(
+        default_factory=lambda: {"reflection_verified", "system_verified"}
+    )
     signal_metric_by_type: dict[str, str] = Field(
         default_factory=lambda: {
             "campaign": "gmv",
@@ -105,6 +108,8 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"CONFIG_INVALID: signal_metric_by_type metric not supported: {invalid_signal_metrics[0]}"
             )
+        if not self.memory_trusted_sources:
+            raise ValueError("CONFIG_INVALID: memory_trusted_sources must not be empty")
         # Zero-Fallback 前移：如果该运行"要求 LLM"但没有配置 provider，
         # 在配置构造期就抛 typed error，而不是等运行到一半才发现再静默兜底。
         if self.llm_required and (not self.llm_provider or not self.llm_api_key):

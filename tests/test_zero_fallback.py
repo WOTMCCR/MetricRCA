@@ -179,7 +179,20 @@ def test_memory_optional_write_failure_warns_without_failing_run() -> None:
             "metric_id": "gmv",
             "parsed_spec": {"dimension": "channel"},
             "report": {"status": "succeeded"},
-            "candidates": [],
+            "reflection": type("Reflection", (), {"passed": True})(),
+            "candidates": [
+                {
+                    "root_cause_type": "campaign_traffic_drop",
+                    "dimension": "channel",
+                    "element": "paid_ads",
+                    "contribution_pct": 0.9,
+                    "signal_severity": 0.9,
+                    "evidence_support": 1.0,
+                    "eng_confidence": 0.9,
+                    "verdict": "confirmed",
+                    "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"],
+                }
+            ],
         },
         dependencies=deps,
     )

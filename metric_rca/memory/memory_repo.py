@@ -15,6 +15,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from metric_rca.config.settings import Settings
 
 
+ALLOWED_MEMORY_LAYERS = frozenset({"case", "semantic", "episodic", "reflection"})
+DEFAULT_TRUSTED_MEMORY_SOURCES = frozenset({"reflection_verified", "system_verified"})
+
+
 class MemoryRepository:
     """Reads and writes memory_record with confidence, TTL, and version controls."""
 
@@ -23,15 +27,24 @@ class MemoryRepository:
         *,
         engine: Engine,
         min_confidence: float = 0.70,
+        trusted_sources: set[str] | frozenset[str] | None = None,
         now_fn: Callable[[], datetime] | None = None,
     ) -> None:
         self._engine = engine
         self._min_confidence = min_confidence
+        self._trusted_sources = (
+            frozenset(trusted_sources)
+            if trusted_sources is not None
+            else DEFAULT_TRUSTED_MEMORY_SOURCES
+        )
         self._now_fn = now_fn or _now
 
     @classmethod
     def from_settings(cls, settings: Settings) -> MemoryRepository:
-        return cls(engine=create_engine(str(settings.db_dsn), pool_pre_ping=True))
+        return cls(
+            engine=create_engine(str(settings.db_dsn), pool_pre_ping=True),
+            trusted_sources=getattr(settings, "memory_trusted_sources", DEFAULT_TRUSTED_MEMORY_SOURCES),
+        )
 
     def read(self, mem_key: str, *, layer: str = "case") -> list[dict[str, Any]]:
         try:
@@ -91,6 +104,8 @@ class MemoryRepository:
         self._engine.dispose()
 
     def _row_is_usable(self, row: Any) -> bool:
+        if str(row["source"]) not in self._trusted_sources:
+            return False
         if float(row["confidence"]) < self._min_confidence:
             return False
         ttl_days = row["ttl_days"]
@@ -141,7 +156,16 @@ class MemoryRepository:
         confidence = float(record.get("confidence", 0.80))
         if confidence < 0.0 or confidence > 1.0:
             raise RuntimeError("MEMORY_WRITE_FAILED")
-        layer = record.get("layer", "case")
+        layer = str(record.get("layer", "case"))
+        if layer not in ALLOWED_MEMORY_LAYERS:
+            raise RuntimeError("MEMORY_WRITE_FAILED")
+        source = record.get("source")
+        if not source:
+            raise RuntimeError("MEMORY_WRITE_FAILED")
+        source = str(source)
+        if source not in self._trusted_sources:
+            raise RuntimeError("MEMORY_WRITE_FAILED")
+        ttl_days = _normalize_ttl_days(record.get("ttl_days"))
         version = int(record["version"]) if "version" in record else self._next_version(layer=layer, mem_key=mem_key)
         return {
             "memory_id": record.get("memory_id") or f"mem-{uuid4().hex}",
@@ -149,9 +173,9 @@ class MemoryRepository:
             "mem_key": mem_key,
             "payload": json.dumps(payload),
             "confidence": confidence,
-            "source": record.get("source", "system"),
+            "source": source,
             "version": version,
-            "ttl_days": record.get("ttl_days"),
+            "ttl_days": ttl_days,
             "created_at": record.get("created_at") or self._now_fn(),
         }
 
@@ -176,6 +200,17 @@ class MemoryRepository:
 
 def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _normalize_ttl_days(value: Any) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise RuntimeError("MEMORY_WRITE_FAILED")
+    ttl_days = int(value)
+    if ttl_days <= 0:
+        raise RuntimeError("MEMORY_WRITE_FAILED")
+    return ttl_days
 
 
 def _as_datetime(value: Any) -> datetime:

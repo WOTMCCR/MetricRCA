@@ -73,13 +73,15 @@ def next_action(state: dict[str, Any], *, settings: Any, metric_service: Any) ->
         return AgentAction(action="finish", args={"status": "no_anomaly"})
     if _has_evidence(state, "E4"):
         return AgentAction(action="finish", args={"reason": "evidence_complete"})
-    repair_action = _repair_action(state)
-    if repair_action is not None:
-        return repair_action
     if int(state.get("step_count") or 0) >= int(getattr(settings, "max_steps", 8)):
+        if state.get("repair_pending"):
+            return _limit_finish("MAX_STEPS_EXCEEDED", "business step limit reached")
         if state.get("candidates"):
             return AgentAction(action="finish", args={"reason": "reflection_repair_exhausted"})
         return _limit_finish("MAX_STEPS_EXCEEDED", "business step limit reached")
+    repair_action = _repair_action(state)
+    if repair_action is not None:
+        return repair_action
     if _has_evidence(state, "E3"):
         limit_action = _query_limit_action(state, settings)
         if limit_action is not None:

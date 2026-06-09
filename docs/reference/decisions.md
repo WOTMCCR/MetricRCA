@@ -26,9 +26,12 @@ Evidence before Reflection can pass. Add hard gates so `generate_report` and
 
 Implement `metric_rca.memory.memory_repo.MemoryRepository` as a real system-table
 repository over `memory_record`, using exact `(layer, mem_key)` reads and
-confidence, TTL, and version filtering. Memory hits only reorder drilldown
-priority through `memory_hits`; they are never accepted as `evidence_id` values
-or direct conclusions.
+confidence, trusted source, TTL, and version filtering. Memory hits only
+reorder drilldown priority through `memory_hits`; they are never accepted as
+`evidence_id` values or direct conclusions. The `write_memory` node still runs
+at graph termination, but `memory_record` persistence is intentionally limited
+to reflection-verified successful candidate memory; failed, no-anomaly, and
+candidate-free runs do not write memory records.
 
 ### 理由
 
