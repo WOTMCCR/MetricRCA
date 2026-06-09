@@ -191,6 +191,70 @@ class FailingExecutionRepository(SpyRepository):
         raise self.error
 
 
+class FailingEvidenceRepository(SpyRepository):
+    def create_evidence(self, row: dict[str, Any]) -> None:
+        raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED")
+
+
+class NetGmvRefundDriverRepository(SpyRepository):
+    def execute_plan(self, plan: SQLPlan, *, run_id: str):
+        self.executed.append(plan)
+        sql = plan.sql
+        if "GROUP BY fact_order.channel" in sql and "business_date IN" in sql:
+            if "fact_order.order_amount - fact_order.refund_amount" in sql:
+                rows = [
+                    {"business_date": date(2026, 5, 29), "channel": "paid_ads", "metric_value": 90.0},
+                    {"business_date": date(2026, 5, 22), "channel": "paid_ads", "metric_value": 90.0},
+                    {"business_date": date(2026, 5, 15), "channel": "paid_ads", "metric_value": 90.0},
+                    {"business_date": date(2026, 5, 8), "channel": "paid_ads", "metric_value": 90.0},
+                    {"business_date": date(2026, 5, 29), "channel": "organic", "metric_value": 90.0},
+                    {"business_date": date(2026, 5, 22), "channel": "organic", "metric_value": 90.0},
+                    {"business_date": date(2026, 5, 15), "channel": "organic", "metric_value": 90.0},
+                    {"business_date": date(2026, 5, 8), "channel": "organic", "metric_value": 90.0},
+                ]
+            else:
+                rows = [
+                    {"business_date": date(2026, 5, 29), "channel": "paid_ads", "metric_value": 100.0},
+                    {"business_date": date(2026, 5, 22), "channel": "paid_ads", "metric_value": 100.0},
+                    {"business_date": date(2026, 5, 15), "channel": "paid_ads", "metric_value": 100.0},
+                    {"business_date": date(2026, 5, 8), "channel": "paid_ads", "metric_value": 100.0},
+                    {"business_date": date(2026, 5, 29), "channel": "organic", "metric_value": 100.0},
+                    {"business_date": date(2026, 5, 22), "channel": "organic", "metric_value": 100.0},
+                    {"business_date": date(2026, 5, 15), "channel": "organic", "metric_value": 100.0},
+                    {"business_date": date(2026, 5, 8), "channel": "organic", "metric_value": 100.0},
+                ]
+        elif "GROUP BY fact_order.channel" in sql:
+            if "fact_order.order_amount - fact_order.refund_amount" in sql:
+                rows = [
+                    {"channel": "paid_ads", "metric_value": 60.0},
+                    {"channel": "organic", "metric_value": 90.0},
+                ]
+            else:
+                rows = [
+                    {"channel": "paid_ads", "metric_value": 100.0},
+                    {"channel": "organic", "metric_value": 100.0},
+                ]
+        elif "fact_order.order_amount - fact_order.refund_amount" in sql and "business_date IN" in sql:
+            rows = [
+                {"business_date": date(2026, 5, 29), "metric_value": 90.0},
+                {"business_date": date(2026, 5, 22), "metric_value": 90.0},
+                {"business_date": date(2026, 5, 15), "metric_value": 90.0},
+                {"business_date": date(2026, 5, 8), "metric_value": 90.0},
+            ]
+        elif "fact_order.order_amount - fact_order.refund_amount" in sql:
+            rows = [{"metric_value": 60.0}]
+        elif "business_date IN" in sql:
+            rows = [
+                {"business_date": date(2026, 5, 29), "metric_value": 100.0},
+                {"business_date": date(2026, 5, 22), "metric_value": 100.0},
+                {"business_date": date(2026, 5, 15), "metric_value": 100.0},
+                {"business_date": date(2026, 5, 8), "metric_value": 100.0},
+            ]
+        else:
+            rows = [{"metric_value": 100.0}]
+        return type("QueryResult", (), {"rows": rows, "row_count": len(rows), "latency_ms": 1})()
+
+
 def test_detect_anomaly_paid_ads_flagged_and_persists_run_scoped_evidence() -> None:
     repo = SpyRepository()
     result = detect_anomaly(
@@ -456,6 +520,67 @@ def test_tools_execution_failure_returns_typed_observation_without_evidence(
     assert repo.evidence_rows == []
 
 
+@pytest.mark.parametrize(
+    ("tool_name", "args"),
+    [
+        (
+            "detect",
+            DetectAnomalyArgs(run_id="run-1", metric_id="gmv", target_date=date(2026, 6, 5)),
+        ),
+        (
+            "drilldown",
+            DrilldownDimensionArgs(
+                run_id="run-1",
+                metric_id="gmv",
+                target_date=date(2026, 6, 5),
+                dimension="channel",
+                evidence_ids=["run-1:E1"],
+            ),
+        ),
+        (
+            "signal",
+            FetchRelatedSignalArgs(
+                run_id="run-1",
+                metric_id="gmv",
+                target_date=date(2026, 6, 5),
+                signal_type="campaign",
+                dimension="channel",
+                element="paid_ads",
+                evidence_ids=["run-1:E1", "run-1:E2"],
+            ),
+        ),
+        (
+            "contribution",
+            CalculateContributionArgs(
+                run_id="run-1",
+                metric_id="gmv",
+                target_date=date(2026, 6, 5),
+                dimension="channel",
+                element="paid_ads",
+                evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+            ),
+        ),
+    ],
+)
+def test_tools_evidence_persistence_failure_returns_typed_observation(
+    tool_name: str,
+    args,
+) -> None:
+    repo = FailingEvidenceRepository()
+    tool = {
+        "detect": detect_anomaly,
+        "drilldown": drilldown_dimension,
+        "signal": fetch_related_signal,
+        "contribution": calculate_contribution,
+    }[tool_name]
+
+    result = tool(args, repository=repo, metric_service=StaticMetricService())
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == "SYSTEM_TABLE_WRITE_FAILED"
+    assert result.evidences == []
+
+
 def test_fetch_related_signal_covers_campaign_inventory_conversion_refund_quality() -> None:
     repo = SpyRepository()
     scenarios = [
@@ -577,8 +702,8 @@ def test_calculate_contribution_emits_e4_from_current_run_evidence() -> None:
     assert any("fact_traffic" in plan.sql for plan in repo.executed)
 
 
-@pytest.mark.parametrize("metric_id", ["pay_cvr", "refund_rate", "net_gmv"])
-def test_calculate_contribution_non_gmv_does_not_emit_gmv_decomposition(metric_id: str) -> None:
+@pytest.mark.parametrize("metric_id", ["pay_cvr", "refund_rate"])
+def test_calculate_contribution_non_factor_metrics_do_not_emit_gmv_decomposition(metric_id: str) -> None:
     repo = SpyRepository()
     repo.runs["run-1"]["metric_id"] = metric_id
 
@@ -601,6 +726,62 @@ def test_calculate_contribution_non_gmv_does_not_emit_gmv_decomposition(metric_i
     assert "decomposition" not in summary
     assert "factor_query_sources" not in summary
     assert summary["metric_contribution"]["model"] == "dimension_delta"
+
+
+def test_calculate_contribution_net_gmv_emits_gmv_refund_decomposition() -> None:
+    repo = SpyRepository()
+    repo.runs["run-1"]["metric_id"] = "net_gmv"
+
+    result = calculate_contribution(
+        CalculateContributionArgs(
+            run_id="run-1",
+            metric_id="net_gmv",
+            target_date=date(2026, 6, 5),
+            dimension="channel",
+            element="paid_ads",
+            evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is True
+    summary = result.evidences[0].result_summary
+    assert "decomposition" not in summary
+    assert "metric_contribution" not in summary
+    split = summary["net_gmv_decomposition"]
+    assert split["current"] == {"gmv": 60.0, "refund": 0.0, "net_gmv": 60.0}
+    assert split["baseline"] == {"gmv": 100.0, "refund": 0.0, "net_gmv": 100.0}
+    assert split["relative_drops_or_increases"] == {"gmv_drop": 0.4, "refund_increase": 0.0}
+    assert split["largest_driver"] == "gmv_drop"
+    assert set(summary["factor_query_sources"]) == {"gmv", "net_gmv"}
+    assert len([plan for plan in repo.executed if plan.params.get("filter_channel") == "paid_ads"]) >= 4
+
+
+def test_calculate_contribution_net_gmv_can_identify_refund_increase_driver() -> None:
+    repo = NetGmvRefundDriverRepository()
+    repo.runs["run-1"]["metric_id"] = "net_gmv"
+
+    result = calculate_contribution(
+        CalculateContributionArgs(
+            run_id="run-1",
+            metric_id="net_gmv",
+            target_date=date(2026, 6, 5),
+            dimension="channel",
+            element="paid_ads",
+            evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is True
+    split = result.evidences[0].result_summary["net_gmv_decomposition"]
+    assert split["current"] == {"gmv": 100.0, "refund": 40.0, "net_gmv": 60.0}
+    assert split["baseline"] == {"gmv": 100.0, "refund": 10.0, "net_gmv": 90.0}
+    assert split["relative_drops_or_increases"]["gmv_drop"] == 0.0
+    assert split["relative_drops_or_increases"]["refund_increase"] == 3.0
+    assert split["largest_driver"] == "refund_increase"
 
 
 def test_calculate_contribution_rejects_unpersisted_current_run_evidence() -> None:

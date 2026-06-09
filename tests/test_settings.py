@@ -43,3 +43,34 @@ def test_settings_defaults_and_required_dsn_failure(monkeypatch: pytest.MonkeyPa
             readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
             llm_required=True,
         )
+
+
+def test_signal_metric_mapping_must_be_complete_and_metric_whitelisted() -> None:
+    base = {
+        "campaign": "gmv",
+        "inventory": "stockout_rate",
+        "conversion": "pay_cvr",
+        "refund_quality": "complaint_rate",
+    }
+    settings = Settings(
+        db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
+        readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+        signal_metric_by_type=base,
+    )
+    assert settings.signal_metric_by_type == base
+
+    missing = {key: value for key, value in base.items() if key != "conversion"}
+    with pytest.raises(ValidationError, match="CONFIG_INVALID"):
+        Settings(
+            db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
+            readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+            signal_metric_by_type=missing,
+        )
+
+    invalid = {**base, "conversion": "not_a_metric"}
+    with pytest.raises(ValidationError, match="CONFIG_INVALID"):
+        Settings(
+            db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
+            readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+            signal_metric_by_type=invalid,
+        )

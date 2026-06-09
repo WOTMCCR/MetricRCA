@@ -6,12 +6,13 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine, text
+from langchain_core.exceptions import LangChainException
 
 from metric_rca.config.settings import Settings, get_settings
 from metric_rca.data.seed_data import main as seed_main
 from metric_rca.domain.models import MetricDefinition
 from metric_rca.repositories.metadata_repository import MetadataRepository
-from metric_rca.services.intent_planner import IntentPlanner
+from metric_rca.services.intent_planner import LLMIntentPlanner, IntentPlanner
 from metric_rca.services.metric_service import MetricService, MetricServiceError, ParsedIntent
 
 
@@ -324,3 +325,24 @@ def test_intent_planner_system_prompt_has_no_hardcoded_metrics() -> None:
 
 def test_intent_planner_protocol_documents_live_planner_boundary() -> None:
     assert hasattr(IntentPlanner, "parse")
+
+
+def test_llm_intent_planner_maps_langchain_invocation_error_to_typed_error() -> None:
+    class BrokenStructuredModel:
+        def invoke(self, messages):
+            raise LangChainException("transport wrapper failed")
+
+    planner = LLMIntentPlanner(provider="openai", model="gpt-5.4-nano", api_key="test-key")
+    planner._structured_model = BrokenStructuredModel()
+
+    with pytest.raises(MetricServiceError) as exc_info:
+        planner.parse(
+            "Why did yesterday GMV drop?",
+            business_today=date(2026, 6, 6),
+            supported_metrics=["gmv"],
+            supported_dimensions=["channel"],
+            supported_dimension_values={"channel": ["paid_ads"]},
+            supported_families=["gmv_drop"],
+        )
+
+    assert exc_info.value.code == "LLM_REQUIRED_UNAVAILABLE"

@@ -61,6 +61,16 @@ def execute_guarded_plan(*, repository: Any, plan: SQLPlan, run_id: str):
         raise
 
 
+def persist_evidence(*, repository: Any, row: dict[str, Any]) -> None:
+    try:
+        repository.create_evidence(row)
+    except RuntimeError as exc:
+        code = _error_code_from_message(str(exc))
+        if code == "SYSTEM_TABLE_WRITE_FAILED":
+            raise ToolRuntimeError(code, "system table write failed") from exc
+        raise
+
+
 def tool_error(action: str, code: str, message: str) -> ToolResult:
     return ToolResult(
         observation=Observation(action_name=action, ok=False, error_code=code, message=message)

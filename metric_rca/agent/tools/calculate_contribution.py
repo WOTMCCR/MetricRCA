@@ -11,6 +11,7 @@ from metric_rca.agent.tools.runtime import (
     current_run_guarded_evidence,
     evidence_row,
     execute_guarded_plan,
+    persist_evidence,
     query_sources,
     run_context_error,
     runtime_error,
@@ -21,7 +22,11 @@ from metric_rca.domain.models import Evidence, Observation
 from metric_rca.guardrails.query_spec import QuerySpecError, build_query_spec
 from metric_rca.guardrails.renderer import SQLRenderer
 from metric_rca.guardrails.sql_guard import guard_sql
-from metric_rca.services.attribution_service import compute_dimension_contribution, compute_gmv_decomposition
+from metric_rca.services.attribution_service import (
+    compute_dimension_contribution,
+    compute_gmv_decomposition,
+    compute_net_gmv_components,
+)
 from metric_rca.services.metric_service import MetricServiceError
 
 
@@ -108,6 +113,25 @@ def calculate_contribution(
             raise
         result_summary["decomposition"] = factor_summary["decomposition"]
         result_summary["factor_query_sources"] = factor_summary["query_sources"]
+    elif args.metric_id == "net_gmv":
+        try:
+            factor_summary = _net_gmv_factor_decomposition(
+                repository=repository,
+                renderer=renderer,
+                run_id=args.run_id,
+                target_date=args.target_date,
+                dimension=args.dimension,
+                element=args.element,
+            )
+        except ToolRuntimeError as exc:
+            return runtime_error(action, exc)
+        except ValueError as exc:
+            code = str(exc)
+            if code in {"NO_CURRENT_DATA", "INSUFFICIENT_BASELINE_DATA"}:
+                return tool_error(action, code, "factor decomposition failed")
+            raise
+        result_summary["net_gmv_decomposition"] = factor_summary["decomposition"]
+        result_summary["factor_query_sources"] = factor_summary["query_sources"]
     else:
         result_summary["metric_contribution"] = _metric_contribution_summary(
             metric_id=args.metric_id,
@@ -125,7 +149,10 @@ def calculate_contribution(
         data_source=metric_definition.source_table,
         created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
-    repository.create_evidence(evidence_row(args.run_id, evidence))
+    try:
+        persist_evidence(repository=repository, row=evidence_row(args.run_id, evidence))
+    except ToolRuntimeError as exc:
+        return runtime_error(action, exc)
     return ToolResult(
         observation=Observation(
             action_name=action,
@@ -194,6 +221,73 @@ def _gmv_factor_decomposition(
     }
 
 
+def _net_gmv_factor_decomposition(
+    *,
+    repository: Any,
+    renderer: SQLRenderer,
+    run_id: str,
+    target_date,
+    dimension: str,
+    element: str,
+) -> dict[str, Any]:
+    filters = {dimension: element}
+    current_values: dict[str, float] = {}
+    baseline_values: dict[str, float] = {}
+    factor_query_sources: dict[str, dict[str, Any]] = {}
+    for metric_id in ["gmv", "net_gmv"]:
+        current_spec = build_query_spec(
+            metric_id=metric_id,
+            start_date=target_date,
+            end_date=target_date,
+            filters=filters,
+            purpose="current",
+        )
+        baseline_spec = build_query_spec(
+            metric_id=metric_id,
+            start_date=target_date,
+            end_date=target_date,
+            filters=filters,
+            purpose="baseline",
+        )
+        current_plan = guard_sql(renderer.render(current_spec))
+        baseline_plan = guard_sql(renderer.render(baseline_spec))
+        current_result = execute_guarded_plan(repository=repository, plan=current_plan, run_id=run_id)
+        baseline_result = execute_guarded_plan(repository=repository, plan=baseline_plan, run_id=run_id)
+        current_values[metric_id] = _single_metric_value(current_result.rows)
+        baseline_values[metric_id] = _mean_metric_value(baseline_result.rows)
+        factor_query_sources[metric_id] = query_sources(current_plan=current_plan, baseline_plan=baseline_plan)
+
+    current_components = compute_net_gmv_components(
+        gmv=current_values["gmv"],
+        refund=current_values["gmv"] - current_values["net_gmv"],
+    )
+    baseline_components = compute_net_gmv_components(
+        gmv=baseline_values["gmv"],
+        refund=baseline_values["gmv"] - baseline_values["net_gmv"],
+    )
+    gmv_drop = _relative_drop(
+        current=current_components["gmv"],
+        baseline=baseline_components["gmv"],
+    )
+    refund_increase = _relative_increase(
+        current=current_components["refund"],
+        baseline=baseline_components["refund"],
+    )
+    drivers = {
+        "gmv_drop": gmv_drop,
+        "refund_increase": refund_increase,
+    }
+    return {
+        "decomposition": {
+            "current": current_components,
+            "baseline": baseline_components,
+            "relative_drops_or_increases": drivers,
+            "largest_driver": max(drivers, key=drivers.get),
+        },
+        "query_sources": factor_query_sources,
+    }
+
+
 def _metric_contribution_summary(
     *,
     metric_id: str,
@@ -221,3 +315,11 @@ def _mean_metric_value(rows: list[dict[str, Any]]) -> float:
     if len(values) < 3:
         raise ValueError("INSUFFICIENT_BASELINE_DATA")
     return mean(values)
+
+
+def _relative_drop(*, current: float, baseline: float) -> float:
+    return max(0.0, (baseline - current) / baseline) if baseline else 0.0
+
+
+def _relative_increase(*, current: float, baseline: float) -> float:
+    return max(0.0, (current - baseline) / baseline) if baseline else max(0.0, current)

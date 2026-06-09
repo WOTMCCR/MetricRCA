@@ -10,6 +10,7 @@ from metric_rca.agent.tools.runtime import (
     current_run_guarded_evidence,
     evidence_row,
     execute_guarded_plan,
+    persist_evidence,
     query_sources,
     run_context_error,
     runtime_error,
@@ -96,7 +97,10 @@ def drilldown_dimension(
         data_source=metric_definition.source_table,
         created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
-    repository.create_evidence(evidence_row(args.run_id, evidence))
+    try:
+        persist_evidence(repository=repository, row=evidence_row(args.run_id, evidence))
+    except ToolRuntimeError as exc:
+        return runtime_error(action, exc)
     return ToolResult(
         observation=Observation(
             action_name=action,

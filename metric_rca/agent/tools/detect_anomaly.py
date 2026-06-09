@@ -9,6 +9,7 @@ from metric_rca.agent.tools.runtime import (
     ToolRuntimeError,
     evidence_row,
     execute_guarded_plan,
+    persist_evidence,
     query_sources,
     run_context_error,
     runtime_error,
@@ -95,7 +96,10 @@ def detect_anomaly(
         result_summary=result_summary,
         data_source=metric_definition.source_table,
     )
-    repository.create_evidence(evidence_row(args.run_id, evidence))
+    try:
+        persist_evidence(repository=repository, row=evidence_row(args.run_id, evidence))
+    except ToolRuntimeError as exc:
+        return runtime_error(action, exc)
     observation = Observation(
         action_name=action,
         ok=True,

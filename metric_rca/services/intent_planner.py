@@ -6,7 +6,7 @@ import json
 from datetime import date
 from typing import Literal, Protocol
 
-from langchain_core.exceptions import OutputParserException
+from langchain_core.exceptions import LangChainException, OutputParserException
 from langchain_openai import ChatOpenAI
 from openai import OpenAIError
 from pydantic import Field, ValidationError
@@ -144,6 +144,8 @@ class LLMIntentPlanner:
             raise MetricServiceError("LLM_REQUIRED_UNAVAILABLE", "OpenAI intent planner request failed") from exc
         except (OutputParserException, ValidationError) as exc:
             raise MetricServiceError("PARSE_FAILED", "LLM returned invalid intent payload") from exc
+        except LangChainException as exc:
+            raise MetricServiceError("LLM_REQUIRED_UNAVAILABLE", "LangChain intent planner request failed") from exc
 
         if not isinstance(parsed_payload, _LLMIntentOutput):
             raise MetricServiceError("PARSE_FAILED", "LLM returned invalid intent payload type")

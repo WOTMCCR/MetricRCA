@@ -62,3 +62,18 @@
 **Work:** Run local verification, run subagent review with GPT Pro findings and diff context, fix any blocking findings, commit, push. Update the existing draft PR branch.
 
 **Stop/ask if:** Required live OpenAI calls fail due to missing/invalid API credentials or provider outage; report the exact typed failure and do not substitute mocks.
+
+## Review Addendum: GPT Pro Follow-Up Fixes
+
+**Addresses:** Follow-up blocking/major review findings before merging PR #1.
+
+**Files:** `metric_rca/agent/tools/calculate_contribution.py`, `metric_rca/agent/tools/runtime.py`, `metric_rca/config/settings.py`, `metric_rca/services/intent_planner.py`, `metric_rca/repositories/metric_repository.py`, `tests/test_tools.py`, `tests/test_settings.py`, `tests/test_metadata_service.py`.
+
+**Work:**
+- Add a `net_gmv` contribution branch that emits guarded `gmv/refund/net_gmv` decomposition evidence instead of generic dimension-only evidence.
+- Keep `pay_cvr` and `refund_rate` free of GMV-only decomposition.
+- Convert Evidence persistence failures to typed `SYSTEM_TABLE_WRITE_FAILED` tool Observations with no returned Evidence.
+- Validate `signal_metric_by_type` completeness and metric whitelist at Settings construction.
+- Map concrete LangChain invocation exceptions to typed `MetricServiceError` without introducing broad exception fallback or keyword parsing.
+
+**Validation:** Targeted red/green tests for `net_gmv`, Evidence persistence failure, signal config invalidity, and LangChain invocation errors; then full tests, mandatory A/E scans, and subagent review.

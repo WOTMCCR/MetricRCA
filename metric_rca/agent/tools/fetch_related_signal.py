@@ -10,6 +10,7 @@ from metric_rca.agent.tools.runtime import (
     current_run_guarded_evidence,
     evidence_row,
     execute_guarded_plan,
+    persist_evidence,
     query_sources,
     run_context_error,
     runtime_error,
@@ -41,7 +42,9 @@ def fetch_related_signal(
         return tool_error(action, "EVIDENCE_MISSING", "guard-passed current-run evidence is required")
     renderer = renderer or SQLRenderer()
     settings = settings or get_settings()
-    signal_metric_id = settings.signal_metric_by_type[args.signal_type]
+    signal_metric_id = settings.signal_metric_by_type.get(args.signal_type)
+    if signal_metric_id is None:
+        return tool_error(action, "CONFIG_INVALID", f"signal metric missing: {args.signal_type}")
     filters = {args.dimension: args.element}
     signal_hint = "campaign" if args.signal_type == "campaign" else "metric"
     try:
@@ -102,7 +105,10 @@ def fetch_related_signal(
         data_source="fact_campaign" if args.signal_type == "campaign" else metric_definition.source_table,
         created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
-    repository.create_evidence(evidence_row(args.run_id, evidence))
+    try:
+        persist_evidence(repository=repository, row=evidence_row(args.run_id, evidence))
+    except ToolRuntimeError as exc:
+        return runtime_error(action, exc)
     return ToolResult(
         observation=Observation(
             action_name=action,

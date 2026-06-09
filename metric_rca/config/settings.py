@@ -16,6 +16,13 @@ import os
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from metric_rca.domain.models import PHASE1_METRICS
+
+
+REQUIRED_SIGNAL_TYPES: frozenset[str] = frozenset(
+    {"campaign", "inventory", "conversion", "refund_quality"}
+)
+
 
 class Settings(BaseSettings):
     # env_prefix：所有配置走 METRIC_RCA_* 环境变量；extra="forbid" 拒绝未知配置项，
@@ -83,6 +90,21 @@ class Settings(BaseSettings):
     def _required_provider_available(self) -> Settings:
         if self.llm_api_key is None:
             self.llm_api_key = os.getenv("OPENAI_API_KEY")
+        signal_keys = set(self.signal_metric_by_type)
+        if signal_keys != REQUIRED_SIGNAL_TYPES:
+            raise ValueError(
+                "CONFIG_INVALID: signal_metric_by_type must contain exactly campaign, "
+                "inventory, conversion, refund_quality"
+            )
+        invalid_signal_metrics = [
+            metric_id
+            for metric_id in self.signal_metric_by_type.values()
+            if metric_id not in PHASE1_METRICS
+        ]
+        if invalid_signal_metrics:
+            raise ValueError(
+                f"CONFIG_INVALID: signal_metric_by_type metric not supported: {invalid_signal_metrics[0]}"
+            )
         # Zero-Fallback 前移：如果该运行"要求 LLM"但没有配置 provider，
         # 在配置构造期就抛 typed error，而不是等运行到一半才发现再静默兜底。
         if self.llm_required and (not self.llm_provider or not self.llm_api_key):

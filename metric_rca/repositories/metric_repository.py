@@ -314,8 +314,11 @@ class MetricRepository:
 
     def _insert(self, sql: str, params: dict[str, Any]) -> None:
         # 系统表写入统一走应用账号事务（begin() 自动提交/回滚）。
-        with self._audit_engine.begin() as conn:
-            conn.execute(text(sql), params)
+        try:
+            with self._audit_engine.begin() as conn:
+                conn.execute(text(sql), params)
+        except SQLAlchemyError as exc:
+            raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED") from exc
 
     def _write_audit(
         self,
