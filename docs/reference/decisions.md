@@ -1,3 +1,59 @@
+## ADL-0005: P3B Reflection Repair And Memory Stay Evidence-Bound
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-09 |
+| 状态 | accepted |
+| 关联迭代 | p3b-reflection-memory |
+| 影响范围 | reflection verifier, graph repair routing, memory repository, report/task gates |
+
+### 背景与场景
+
+P3A established the real LangGraph/ReAct/Trace foundation, but Reflection still
+needed full deterministic checks and Memory still needed a real repository over
+`memory_record`. P3B also needed to prove that repair cannot pass by incrementing
+`repair_count`, and that memory hits cannot become root-cause evidence or final
+conclusions.
+
+### 决策
+
+Keep Reflection as a deterministic rule verifier. A repairable issue sets
+`repair_pending=True`, increments `repair_count`, and provides a whitelisted
+`AgentAction`; `react_step` consumes that action and `execute_tool` runs the
+normal registry/tool/QuerySpec/Renderer/Guard/Repository path to create new
+Evidence before Reflection can pass. Add hard gates so `generate_report` and
+`create_tasks` require passed Reflection except for `no_anomaly`.
+
+Implement `metric_rca.memory.memory_repo.MemoryRepository` as a real system-table
+repository over `memory_record`, using exact `(layer, mem_key)` reads and
+confidence, TTL, and version filtering. Memory hits only reorder drilldown
+priority through `memory_hits`; they are never accepted as `evidence_id` values
+or direct conclusions.
+
+### 理由
+
+The repair loop must remain auditable and reuse P3A's trace, action schema, SQL
+guard, and evidence persistence boundaries. Letting Reflection execute tools
+directly or marking repaired without new evidence would create a second,
+untraced data path. Memory is useful as a planning prior, but accepting memory
+as evidence would violate the core principle that facts come from current-run
+queries and deterministic algorithms.
+
+### 被否决的方案
+
+Running repair queries inside `reflection_verify` was rejected because it would
+bypass the ReAct/tool boundary. Treating optional memory failures as silent
+no-ops was rejected; optional failures are trace warnings, while required
+failures remain typed run failures. Using memory payload root-cause fields to
+create candidates was rejected as a memory-derived conclusion shortcut.
+
+### 后续跟进
+
+P4/P5 API/UI/eval must surface Reflection issues, repair traces, and memory hits
+from persisted graph outputs without changing the evidence boundary. Bounded SQL
+execution retry remains a separate hardening task if the project decides to
+implement it with a narrow retry policy.
+
 ## ADL-0004: P3A Requires Shared Trace, AgentRun Lifecycle, And Positive Proof Tests
 
 | 字段 | 值 |

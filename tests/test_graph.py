@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import json
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -239,24 +240,24 @@ def test_no_anomaly_generates_no_anomaly_report_skips_attribute_rank_and_create_
 
 
 @pytest.mark.integration
-def test_failed_graph_lifecycle_persists_error_and_finished_at() -> None:
+def test_memory_enabled_graph_lifecycle_uses_real_repo_and_finishes() -> None:
     seed_main()
     settings = _settings(memory_enabled=True)
     repository, metric_service = _real_dependencies(settings)
     try:
         result = _run_live_graph(
             "Why did yesterday GMV drop?",
-            run_id="p3a-memory-read-failed",
+            run_id="p3b-memory-enabled-real-repo",
             settings=settings,
             repository=repository,
             metric_service=metric_service,
         )
-        persisted = _agent_run(settings, "p3a-memory-read-failed")
+        persisted = _agent_run(settings, "p3b-memory-enabled-real-repo")
 
-        assert result["status"] == "failed"
-        assert result["error_code"] == "MEMORY_READ_FAILED"
-        assert persisted["status"] == "failed"
-        assert persisted["error_code"] == "MEMORY_READ_FAILED"
+        assert result["status"] == "succeeded"
+        assert result["error_code"] is None
+        assert persisted["status"] == "succeeded"
+        assert persisted["error_code"] is None
         assert persisted["finished_at"] is not None
     finally:
         repository.close()
@@ -486,9 +487,236 @@ def test_memory_enabled_true_without_repo_fails_typed_and_false_does_not_call() 
     assert read_memory({"run_id": "run-1", "metric_id": "gmv"}, dependencies=false_deps) == {"memory_hits": []}
     assert write_memory({"run_id": "run-1", "status": "succeeded"}, dependencies=false_deps) == {}
 
-    true_deps = _Dependencies(settings=Settings.model_construct(memory_enabled=True))
+    true_deps = _Dependencies(settings=Settings.model_construct(memory_enabled=True, memory_required=True))
     assert read_memory({"run_id": "run-1", "metric_id": "gmv"}, dependencies=true_deps)["error_code"] == "MEMORY_READ_FAILED"
     assert write_memory({"run_id": "run-1", "status": "succeeded"}, dependencies=true_deps)["error_code"] == "MEMORY_WRITE_FAILED"
+
+
+@pytest.mark.integration
+def test_graph_with_memory_hit_reorders_drilldown_but_conclusion_requires_E1_to_E4() -> None:
+    from metric_rca.memory.memory_repo import MemoryRepository
+
+    seed_main()
+    settings = _settings(memory_enabled=True, memory_required=True)
+    _set_metric_dimensions(settings, "gmv", ["category", "channel", "device", "product"])
+    repository, metric_service = _real_dependencies(settings)
+    memory_repo = MemoryRepository.from_settings(settings)
+    try:
+        memory_repo.write(
+            {
+                "layer": "case",
+                "mem_key": "gmv|channel",
+                "payload": {"dimension": "channel", "root_cause_type": "campaign_traffic_drop"},
+                "confidence": 0.95,
+                "source": "test",
+                "version": 1,
+                "ttl_days": 30,
+                "created_at": datetime(2026, 6, 5, 0, 0, 0),
+            }
+        )
+        result = _run_live_graph(
+            "Why did yesterday GMV drop?",
+            run_id="p3b-memory-category-hit",
+            settings=settings,
+            repository=repository,
+            metric_service=metric_service,
+            memory_repo=memory_repo,
+        )
+
+        assert result["status"] == "succeeded"
+        assert _action_args(result, "drilldown_dimension")["dimension"] == "channel"
+        assert result["candidates"][0].root_cause_type == "campaign_traffic_drop"
+        assert result["candidates"][0].evidence_ids == [f"p3b-memory-category-hit:E{i}" for i in range(1, 5)]
+        assert all(evidence.evidence_id.startswith("p3b-memory-category-hit:") for evidence in result["evidences"])
+        assert all(not evidence_id.startswith("memory:") for evidence_id in result["candidates"][0].evidence_ids)
+    finally:
+        repository.close()
+        memory_repo.close()
+
+
+@pytest.mark.integration
+def test_graph_low_confidence_memory_does_not_change_plan() -> None:
+    from metric_rca.memory.memory_repo import MemoryRepository
+
+    seed_main()
+    settings = _settings(memory_enabled=True, memory_required=True)
+    repository, metric_service = _real_dependencies(settings)
+    memory_repo = MemoryRepository.from_settings(settings)
+    try:
+        memory_repo.write(
+            {
+                "layer": "case",
+                "mem_key": "gmv|category",
+                "payload": {"dimension": "category"},
+                "confidence": 0.10,
+                "source": "test",
+                "version": 1,
+                "ttl_days": 30,
+                "created_at": datetime(2026, 6, 5, 0, 0, 0),
+            }
+        )
+        result = _run_live_graph(
+            "Why did yesterday GMV drop?",
+            run_id="p3b-memory-low-confidence",
+            settings=settings,
+            repository=repository,
+            metric_service=metric_service,
+            memory_repo=memory_repo,
+        )
+
+        assert result["status"] == "succeeded"
+        assert _action_args(result, "drilldown_dimension")["dimension"] == "channel"
+        assert result["candidates"][0].root_cause_type == "campaign_traffic_drop"
+    finally:
+        repository.close()
+        memory_repo.close()
+
+
+@pytest.mark.integration
+def test_graph_expired_memory_does_not_change_plan() -> None:
+    from metric_rca.memory.memory_repo import MemoryRepository
+
+    seed_main()
+    settings = _settings(memory_enabled=True, memory_required=True)
+    repository, metric_service = _real_dependencies(settings)
+    memory_repo = MemoryRepository.from_settings(settings)
+    try:
+        memory_repo.write(
+            {
+                "layer": "case",
+                "mem_key": "gmv|category",
+                "payload": {"dimension": "category"},
+                "confidence": 0.95,
+                "source": "test",
+                "version": 1,
+                "ttl_days": 1,
+                "created_at": datetime(2026, 5, 1, 0, 0, 0),
+            }
+        )
+        result = _run_live_graph(
+            "Why did yesterday GMV drop?",
+            run_id="p3b-memory-expired",
+            settings=settings,
+            repository=repository,
+            metric_service=metric_service,
+            memory_repo=memory_repo,
+        )
+
+        assert result["status"] == "succeeded"
+        assert _action_args(result, "drilldown_dimension")["dimension"] == "channel"
+        assert result["candidates"][0].root_cause_type == "campaign_traffic_drop"
+    finally:
+        repository.close()
+        memory_repo.close()
+
+
+@pytest.mark.integration
+def test_graph_reflection_repair_creates_new_evidence_and_then_passes() -> None:
+    seed_main()
+    settings = _settings(memory_enabled=False, max_steps=3)
+    repository, metric_service = _real_dependencies(settings)
+    try:
+        result = _run_live_graph(
+            "Why did yesterday GMV drop?",
+            run_id="p3b-reflection-repair-success",
+            settings=settings,
+            repository=repository,
+            metric_service=metric_service,
+        )
+        trace_nodes = _trace_nodes(settings, "p3b-reflection-repair-success")
+
+        assert result["status"] == "succeeded"
+        assert result["repair_count"] == 1
+        assert result["reflection"].passed is True
+        assert result["reflection"].repaired is True
+        assert [e.evidence_id for e in result["evidences"]] == [f"p3b-reflection-repair-success:E{i}" for i in range(1, 5)]
+        assert trace_nodes.count("reflection_verify") == 2
+        assert trace_nodes[trace_nodes.index("reflection_verify") + 1] == "react_step"
+        assert _count(settings, "sql_audit", "run_id", "p3b-reflection-repair-success") == result["query_count"]
+    finally:
+        repository.close()
+
+
+@pytest.mark.integration
+def test_graph_reflection_repair_failed_no_report_no_task() -> None:
+    seed_main()
+    settings = _settings(memory_enabled=False, max_steps=2)
+    repository, metric_service = _real_dependencies(settings)
+    try:
+        result = _run_live_graph(
+            "Why did yesterday GMV drop?",
+            run_id="p3b-reflection-repair-failed",
+            settings=settings,
+            repository=repository,
+            metric_service=metric_service,
+        )
+
+        assert result["status"] == "failed"
+        assert result["error_code"] == "REFLECTION_REPAIR_FAILED"
+        assert result.get("report") is None
+        assert _count(settings, "operation_task", "run_id", "p3b-reflection-repair-failed") == 0
+    finally:
+        repository.close()
+
+
+@pytest.mark.integration
+def test_graph_no_anomaly_still_has_only_E1_no_task_no_attribute_rank() -> None:
+    seed_main()
+    settings = _settings(business_today=date(2026, 6, 5), target_date=date(2026, 6, 4), memory_enabled=False)
+    repository, metric_service = _real_dependencies(settings)
+    try:
+        result = _run_live_graph(
+            "Why did yesterday GMV drop?",
+            run_id="p3b-no-anomaly-regression",
+            settings=settings,
+            repository=repository,
+            metric_service=metric_service,
+        )
+        trace_nodes = _trace_nodes(settings, "p3b-no-anomaly-regression")
+
+        assert result["status"] == "no_anomaly"
+        assert [e.evidence_id for e in result["evidences"]] == ["p3b-no-anomaly-regression:E1"]
+        assert result.get("candidates", []) == []
+        assert "attribute_rank" not in trace_nodes
+        assert "create_tasks" not in trace_nodes
+        assert _count(settings, "operation_task", "run_id", "p3b-no-anomaly-regression") == 0
+    finally:
+        repository.close()
+
+
+@pytest.mark.integration
+def test_p3_complete_runs_all_p3a_and_p3b_paths_without_known_shortcuts() -> None:
+    seed_main()
+    success_settings = _settings(memory_enabled=False)
+    no_anomaly_settings = _settings(business_today=date(2026, 6, 5), target_date=date(2026, 6, 4), memory_enabled=False)
+    success_repo, success_metric_service = _real_dependencies(success_settings)
+    no_anomaly_repo, no_anomaly_metric_service = _real_dependencies(no_anomaly_settings)
+    try:
+        success = _run_live_graph(
+            "Why did yesterday GMV drop?",
+            run_id="p3b-complete-success",
+            settings=success_settings,
+            repository=success_repo,
+            metric_service=success_metric_service,
+        )
+        no_anomaly = _run_live_graph(
+            "Why did yesterday GMV drop?",
+            run_id="p3b-complete-no-anomaly",
+            settings=no_anomaly_settings,
+            repository=no_anomaly_repo,
+            metric_service=no_anomaly_metric_service,
+        )
+
+        assert success["status"] == "succeeded"
+        assert success["reflection"].passed is True
+        assert len(success["evidences"]) == 4
+        assert no_anomaly["status"] == "no_anomaly"
+        assert len(no_anomaly["evidences"]) == 1
+        assert "known_shortcuts" not in success
+        assert "known_shortcuts" not in no_anomaly
+    finally:
+        success_repo.close()
+        no_anomaly_repo.close()
 
 
 def _run_live_graph(
@@ -498,6 +726,7 @@ def _run_live_graph(
     settings: Settings,
     repository: MetricRepository,
     metric_service: MetricService,
+    memory_repo: Any | None = None,
 ) -> dict:
     from metric_rca.agent.graph import run_rca
 
@@ -507,6 +736,7 @@ def _run_live_graph(
         settings=settings,
         repository=repository,
         metric_service=metric_service,
+        memory_repo=memory_repo,
     )
 
 
@@ -550,6 +780,13 @@ def _observation_payload(result: dict[str, Any], action_name: str) -> dict[str, 
     raise AssertionError(f"observation not found: {action_name}")
 
 
+def _action_args(result: dict[str, Any], action_name: str) -> dict[str, Any]:
+    for action in result["actions"]:
+        if action.action == action_name:
+            return action.args
+    raise AssertionError(f"action not found: {action_name}")
+
+
 def _audit_hashes(settings: Settings, run_id: str) -> set[str]:
     engine = create_engine(str(settings.db_dsn), pool_pre_ping=True)
     try:
@@ -590,6 +827,24 @@ def _agent_run(settings: Settings, run_id: str) -> dict[str, Any]:
                 {"run_id": run_id},
             ).mappings().one()
         return dict(row)
+    finally:
+        engine.dispose()
+
+
+def _set_metric_dimensions(settings: Settings, metric_id: str, dimensions: list[str]) -> None:
+    engine = create_engine(str(settings.db_dsn), pool_pre_ping=True)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    UPDATE metric_definition
+                    SET allowed_dimensions = :allowed_dimensions
+                    WHERE metric_id = :metric_id
+                    """
+                ),
+                {"metric_id": metric_id, "allowed_dimensions": json.dumps(dimensions)},
+            )
     finally:
         engine.dispose()
 

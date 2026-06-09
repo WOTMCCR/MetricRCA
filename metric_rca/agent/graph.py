@@ -22,6 +22,7 @@ from metric_rca.agent.nodes.write_memory import write_memory
 from metric_rca.agent.state import RCAState
 from metric_rca.config.settings import Settings, get_settings
 from metric_rca.guardrails.renderer import SQLRenderer
+from metric_rca.memory.memory_repo import MemoryRepository
 from metric_rca.observability.trace import TraceWriteError, TraceWriter
 from metric_rca.repositories.metadata_repository import MetadataRepository
 from metric_rca.repositories.metric_repository import MetricRepository
@@ -55,13 +56,16 @@ def build_dependencies(
     )
     resolved_renderer = renderer or SQLRenderer()
     resolved_trace_writer = trace_writer or TraceWriter(resolved_repository)
+    resolved_memory_repo = memory_repo
+    if resolved_memory_repo is None and getattr(resolved_settings, "memory_enabled", False):
+        resolved_memory_repo = MemoryRepository.from_settings(resolved_settings)
     return GraphDependencies(
         settings=resolved_settings,
         repository=resolved_repository,
         metric_service=resolved_metric_service,
         renderer=resolved_renderer,
         trace_writer=resolved_trace_writer,
-        memory_repo=memory_repo,
+        memory_repo=resolved_memory_repo,
     )
 
 
@@ -194,6 +198,7 @@ def run_rca(
         "query_count": 0,
         "drilldown_depth": 0,
         "repair_count": 0,
+        "repair_pending": False,
         "status": "running",
         "error_code": None,
     }
@@ -233,6 +238,8 @@ def route_after_reflection(state: dict[str, Any], *, dependencies: Any) -> str:
     reflection = state.get("reflection")
     if reflection is not None and getattr(reflection, "passed", False):
         return "generate_report"
+    if state.get("repair_pending"):
+        return "react_step"
     repair_count = int(state.get("repair_count") or 0)
     max_repair = int(getattr(dependencies.settings, "max_repair", 1))
     issues = getattr(reflection, "issues", []) if reflection is not None else []

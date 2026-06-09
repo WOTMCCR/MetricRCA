@@ -14,11 +14,20 @@ def reflection_verify(state: dict[str, Any], *, dependencies: Any) -> dict[str, 
         state,
         max_repair=getattr(dependencies.settings, "max_repair", 1),
     )
-    update: dict[str, Any] = {"reflection": result}
+    update: dict[str, Any] = {"reflection": result, "repair_pending": False}
     error_code = None
     if not result.passed:
-        error_code = "REFLECTION_REPAIR_FAILED"
-        update.update(fail(error_code))
+        repair_count = int(state.get("repair_count") or 0)
+        max_repair = int(getattr(dependencies.settings, "max_repair", 1))
+        repairable = repair_count < max_repair and any(
+            issue.suggested_action is not None for issue in result.issues
+        )
+        if repairable:
+            update["repair_count"] = repair_count + 1
+            update["repair_pending"] = True
+        else:
+            error_code = "REFLECTION_REPAIR_FAILED"
+            update.update(fail(error_code))
     trace_error = trace(
         dependencies=dependencies,
         state=state,

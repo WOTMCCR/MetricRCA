@@ -64,6 +64,8 @@ def react_step(state: dict[str, Any], *, dependencies: Any) -> dict[str, Any]:
         return trace_error or update
 
     next_update: dict[str, Any] = {"actions": [validated], "step_count": step_count}
+    if state.get("repair_pending"):
+        next_update["repair_pending"] = False
     if validated is not None and validated.action == "finish":
         status = validated.args.get("status")
         error_code = validated.args.get("error_code")

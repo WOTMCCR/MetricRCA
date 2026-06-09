@@ -22,5 +22,6 @@ class RCAState(TypedDict, total=False):
     query_count: int
     drilldown_depth: int
     repair_count: int
+    repair_pending: bool
     error_code: str | None
     status: str

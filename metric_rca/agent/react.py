@@ -44,15 +44,11 @@ def next_action(state: dict[str, Any], *, settings: Any, metric_service: Any) ->
             args={"status": "failed", "error_code": "LLM_REQUIRED_UNAVAILABLE"},
             rationale="required LLM action planner unavailable",
         )
-    if int(state.get("step_count") or 0) >= int(getattr(settings, "max_steps", 8)):
-        return AgentAction(
-            action="finish",
-            args={"status": "failed", "error_code": "MAX_STEPS_EXCEEDED"},
-            rationale="business step limit reached",
-        )
 
     observations = [_as_observation(item) for item in state.get("observations", [])]
     if not observations:
+        if int(state.get("step_count") or 0) >= int(getattr(settings, "max_steps", 8)):
+            return _limit_finish("MAX_STEPS_EXCEEDED", "business step limit reached")
         limit_action = _query_limit_action(state, settings)
         if limit_action is not None:
             return limit_action
@@ -77,6 +73,13 @@ def next_action(state: dict[str, Any], *, settings: Any, metric_service: Any) ->
         return AgentAction(action="finish", args={"status": "no_anomaly"})
     if _has_evidence(state, "E4"):
         return AgentAction(action="finish", args={"reason": "evidence_complete"})
+    repair_action = _repair_action(state)
+    if repair_action is not None:
+        return repair_action
+    if int(state.get("step_count") or 0) >= int(getattr(settings, "max_steps", 8)):
+        if state.get("candidates"):
+            return AgentAction(action="finish", args={"reason": "reflection_repair_exhausted"})
+        return _limit_finish("MAX_STEPS_EXCEEDED", "business step limit reached")
     if _has_evidence(state, "E3"):
         limit_action = _query_limit_action(state, settings)
         if limit_action is not None:
@@ -134,6 +137,14 @@ def next_action(state: dict[str, Any], *, settings: Any, metric_service: Any) ->
             },
         )
     return AgentAction(action="finish", args={"status": "failed", "error_code": "EVIDENCE_MISSING"})
+
+
+def _limit_finish(error_code: str, rationale: str) -> AgentAction:
+    return AgentAction(
+        action="finish",
+        args={"status": "failed", "error_code": error_code},
+        rationale=rationale,
+    )
 
 
 def _llm_required_unavailable(settings: Any) -> bool:
@@ -226,6 +237,31 @@ def _candidate_payloads(state: dict[str, Any]) -> list[dict[str, Any]]:
         if payload_candidates:
             return [dict(item) for item in payload_candidates]
     return []
+
+
+def _repair_action(state: dict[str, Any]) -> AgentAction | None:
+    if not state.get("repair_pending"):
+        return None
+    reflection = state.get("reflection")
+    issues = getattr(reflection, "issues", []) if reflection is not None else []
+    for issue in issues:
+        action = getattr(issue, "suggested_action", None)
+        if action is not None:
+            if isinstance(action, dict):
+                action = AgentAction.model_validate(action)
+            if not _repair_target_already_present(state, action):
+                return action
+    return None
+
+
+def _repair_target_already_present(state: dict[str, Any], action: AgentAction) -> bool:
+    if action.action == "fetch_related_signal":
+        return _has_evidence(state, "E3")
+    if action.action == "calculate_contribution":
+        return _has_evidence(state, "E4")
+    if action.action == "drilldown_dimension":
+        return _has_evidence(state, "E2")
+    return False
 
 
 def _signal_type(state: dict[str, Any], metric_service: Any) -> str:

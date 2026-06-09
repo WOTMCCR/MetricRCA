@@ -6,6 +6,7 @@ import pytest
 
 from metric_rca.agent.graph import route_after_execute_tool
 from metric_rca.agent.nodes.create_tasks import create_tasks
+from metric_rca.agent.nodes.generate_report import generate_report
 from metric_rca.agent.nodes.read_memory import read_memory
 from metric_rca.agent.nodes.write_memory import write_memory
 from metric_rca.agent.react import next_action, validate_action
@@ -136,7 +137,7 @@ def test_illegal_action_records_error_and_does_not_execute_tool() -> None:
 def test_memory_required_read_failure_fails_run() -> None:
     result = read_memory(
         {"run_id": "run-1", "metric_id": "gmv", "parsed_spec": {"dimension": "channel"}},
-        dependencies=_Dependencies(Settings.model_construct(memory_enabled=True)),
+        dependencies=_Dependencies(Settings.model_construct(memory_enabled=True, memory_required=True)),
     )
 
     assert result["status"] == "failed"
@@ -146,11 +147,75 @@ def test_memory_required_read_failure_fails_run() -> None:
 def test_memory_required_write_failure_fails_run() -> None:
     result = write_memory(
         {"run_id": "run-1", "status": "succeeded"},
-        dependencies=_Dependencies(Settings.model_construct(memory_enabled=True)),
+        dependencies=_Dependencies(Settings.model_construct(memory_enabled=True, memory_required=True)),
     )
 
     assert result["status"] == "failed"
     assert result["error_code"] == "MEMORY_WRITE_FAILED"
+
+
+def test_memory_optional_read_failure_warns_without_changing_conclusion() -> None:
+    deps = _Dependencies(Settings.model_construct(memory_enabled=True, memory_required=False))
+    deps.memory_repo = _FailingMemoryRepo()
+
+    result = read_memory(
+        {"run_id": "run-1", "metric_id": "gmv", "parsed_spec": {"dimension": "channel"}},
+        dependencies=deps,
+    )
+
+    assert result["memory_hits"] == []
+    assert "error_code" not in result
+    assert deps.trace_writer.steps[-1]["error_code"] == "MEMORY_READ_FAILED"
+
+
+def test_memory_optional_write_failure_warns_without_failing_run() -> None:
+    deps = _Dependencies(Settings.model_construct(memory_enabled=True, memory_required=False))
+    deps.memory_repo = _FailingMemoryRepo()
+
+    result = write_memory(
+        {
+            "run_id": "run-1",
+            "status": "succeeded",
+            "metric_id": "gmv",
+            "parsed_spec": {"dimension": "channel"},
+            "report": {"status": "succeeded"},
+            "candidates": [],
+        },
+        dependencies=deps,
+    )
+
+    assert result == {}
+    assert deps.trace_writer.steps[-1]["error_code"] == "MEMORY_WRITE_FAILED"
+    assert deps.trace_writer.finished[-1]["status"] == "succeeded"
+
+
+def test_failed_reflection_cannot_generate_report_or_task() -> None:
+    state = {
+        "run_id": "run-1",
+        "status": "failed",
+        "error_code": "REFLECTION_REPAIR_FAILED",
+        "reflection": type("Reflection", (), {"passed": False})(),
+        "candidates": [
+            {
+                "root_cause_type": "campaign_traffic_drop",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "contribution_pct": 0.9,
+                "signal_severity": 0.9,
+                "evidence_support": 1.0,
+                "eng_confidence": 0.9,
+                "verdict": "confirmed",
+                "evidence_ids": ["run-1:E1"],
+            }
+        ],
+    }
+
+    report = generate_report(state, dependencies=_Dependencies())
+    task = create_tasks(state, dependencies=_Dependencies())
+
+    assert report["error_code"] == "REFLECTION_REPAIR_FAILED"
+    assert "report" not in report
+    assert task["error_code"] == "REFLECTION_REPAIR_FAILED"
 
 
 def test_missing_trace_writer_fails_typed_not_silent_noop() -> None:
@@ -242,8 +307,22 @@ class _Repo:
 
 
 class _InMemoryTraceWriter:
+    def __init__(self) -> None:
+        self.steps: list[dict] = []
+        self.finished: list[dict] = []
+
     def write_step(self, **kwargs) -> None:
+        self.steps.append(kwargs)
         return None
 
     def finish_run(self, **kwargs) -> None:
+        self.finished.append(kwargs)
         return None
+
+
+class _FailingMemoryRepo:
+    def read(self, *args, **kwargs):
+        raise RuntimeError("MEMORY_READ_FAILED")
+
+    def write(self, *args, **kwargs):
+        raise RuntimeError("MEMORY_WRITE_FAILED")
