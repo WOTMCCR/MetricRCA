@@ -154,23 +154,36 @@ class MetricRepository:
 
     def get_evidence(self, *, run_id: str, evidence_id: str) -> dict[str, Any] | None:
         """读取当前 run 的 guard-passed 证据；工具层用它禁止伪造 evidence_id。"""
-        with self._audit_engine.connect() as conn:
-            row = (
-                conn.execute(
-                    text(
-                        """
-                        SELECT evidence_id, run_id, sql_hash, guard_status, result_summary, data_source, created_at
-                        FROM evidence
-                        WHERE run_id = :run_id AND evidence_id = :evidence_id
-                        LIMIT 1
-                        """
-                    ),
-                    {"run_id": run_id, "evidence_id": evidence_id},
+        try:
+            with self._audit_engine.connect() as conn:
+                row = (
+                    conn.execute(
+                        text(
+                            """
+                            SELECT evidence_id, run_id, query_spec, sql_hash, guard_status,
+                                   result_summary, data_source, created_at
+                            FROM evidence
+                            WHERE run_id = :run_id AND evidence_id = :evidence_id
+                            LIMIT 1
+                            """
+                        ),
+                        {"run_id": run_id, "evidence_id": evidence_id},
+                    )
+                    .mappings()
+                    .first()
                 )
-                .mappings()
-                .first()
-            )
-        return dict(row) if row is not None else None
+        except SQLAlchemyError as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
+        if row is None:
+            return None
+        try:
+            return {
+                **dict(row),
+                "query_spec": _decode_json_column(row["query_spec"]),
+                "result_summary": _decode_json_column(row["result_summary"]),
+            }
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
 
     def close(self) -> None:
         # 显式释放连接池，保证 -W error::ResourceWarning 下无未关闭连接告警。
@@ -388,3 +401,9 @@ class MetricRepository:
                 "created_at": datetime.now(timezone.utc).replace(tzinfo=None),
             },
         )
+
+
+def _decode_json_column(value: Any) -> Any:
+    if isinstance(value, str):
+        return json.loads(value)
+    return value

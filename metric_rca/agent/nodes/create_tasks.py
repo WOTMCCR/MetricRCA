@@ -11,6 +11,20 @@ from metric_rca.agent.nodes._common import dump_model, fail, start_timer, trace
 
 def create_tasks(state: dict[str, Any], *, dependencies: Any) -> dict[str, Any]:
     started = start_timer()
+    reflection = state.get("reflection")
+    if state.get("status") != "no_anomaly" and (reflection is None or not getattr(reflection, "passed", False)):
+        error_code = state.get("error_code") or "REFLECTION_REPAIR_FAILED"
+        update = fail(str(error_code))
+        return trace(
+            dependencies=dependencies,
+            state=state,
+            node="create_tasks",
+            action="create_tasks",
+            input_summary={"status": state.get("status")},
+            output_summary={"error_code": error_code},
+            error_code=str(error_code),
+            started_at=started,
+        ) or update
     if state.get("status") == "no_anomaly" or not state.get("candidates"):
         trace_error = trace(
             dependencies=dependencies,

@@ -23,7 +23,7 @@ def read_memory(state: dict[str, Any], *, dependencies: Any) -> dict[str, Any]:
         return trace_error or update
     repo = getattr(dependencies, "memory_repo", None)
     if repo is None:
-        update = fail("MEMORY_READ_FAILED")
+        update = _memory_failure_update(dependencies)
         trace_error = trace(
             dependencies=dependencies,
             state=state,
@@ -36,9 +36,11 @@ def read_memory(state: dict[str, Any], *, dependencies: Any) -> dict[str, Any]:
         )
         return trace_error or update
     try:
-        hits = repo.read(_memory_key(state))
+        hits = []
+        for key in _memory_keys(state, dependencies):
+            hits.extend(repo.read(key))
     except RuntimeError:
-        update = fail("MEMORY_READ_FAILED")
+        update = _memory_failure_update(dependencies)
         trace_error = trace(
             dependencies=dependencies,
             state=state,
@@ -63,9 +65,16 @@ def read_memory(state: dict[str, Any], *, dependencies: Any) -> dict[str, Any]:
     return trace_error or update
 
 
-def _memory_key(state: dict[str, Any]) -> str:
+def _memory_keys(state: dict[str, Any], dependencies: Any) -> list[str]:
     parsed = state.get("parsed_spec") or {}
     dimension = parsed.get("dimension")
-    if not dimension:
-        dimension = "metric"
-    return f"{state.get('metric_id')}|{dimension}"
+    if dimension:
+        return [f"{state.get('metric_id')}|{dimension}"]
+    definition = dependencies.metric_service.get_metric_definition(state["metric_id"])
+    return [f"{state.get('metric_id')}|{dimension}" for dimension in definition.allowed_dimensions]
+
+
+def _memory_failure_update(dependencies: Any) -> dict[str, Any]:
+    if getattr(dependencies.settings, "memory_required", False):
+        return fail("MEMORY_READ_FAILED")
+    return {"memory_hits": []}
