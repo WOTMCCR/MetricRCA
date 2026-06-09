@@ -58,6 +58,8 @@ def execute_guarded_plan(*, repository: Any, plan: SQLPlan, run_id: str):
         code = _error_code_from_message(str(exc))
         if code == "SQL_EXECUTION_FAILED":
             raise ToolRuntimeError(code, "SQL execution failed") from exc
+        if code == "SYSTEM_TABLE_WRITE_FAILED":
+            raise ToolRuntimeError(code, "system table write failed") from exc
         raise
 
 

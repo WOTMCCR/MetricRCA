@@ -329,29 +329,26 @@ class MetricRepository:
         latency_ms: int,
     ) -> None:
         # 每条执行的 SQL 都落 sql_audit：sql 文本 / hash / 守卫状态 / 守卫错误 / 行数 / 时延。
-        with self._audit_engine.begin() as conn:
-            conn.execute(
-                text(
-                    """
-                    INSERT INTO sql_audit (
-                      run_id, sql_text, sql_hash, guard_status, guard_errors,
-                      row_count, latency_ms, created_at
-                    )
-                    VALUES (
-                      :run_id, :sql_text, :sql_hash, :guard_status, :guard_errors,
-                      :row_count, :latency_ms, :created_at
-                    )
-                    """
-                ),
-                {
-                    "run_id": run_id,
-                    "sql_text": plan.sql,
-                    "sql_hash": plan.sql_hash,
-                    "guard_status": plan.guard_status,
-                    "guard_errors": json.dumps(plan.guard_errors),
-                    "row_count": row_count,
-                    "latency_ms": latency_ms,
-                    # 系统时间戳用 UTC（去 tzinfo 以匹配 DATETIME 列）。
-                    "created_at": datetime.now(timezone.utc).replace(tzinfo=None),
-                },
+        self._insert(
+            """
+            INSERT INTO sql_audit (
+              run_id, sql_text, sql_hash, guard_status, guard_errors,
+              row_count, latency_ms, created_at
             )
+            VALUES (
+              :run_id, :sql_text, :sql_hash, :guard_status, :guard_errors,
+              :row_count, :latency_ms, :created_at
+            )
+            """,
+            {
+                "run_id": run_id,
+                "sql_text": plan.sql,
+                "sql_hash": plan.sql_hash,
+                "guard_status": plan.guard_status,
+                "guard_errors": json.dumps(plan.guard_errors),
+                "row_count": row_count,
+                "latency_ms": latency_ms,
+                # 系统时间戳用 UTC（去 tzinfo 以匹配 DATETIME 列）。
+                "created_at": datetime.now(timezone.utc).replace(tzinfo=None),
+            },
+        )

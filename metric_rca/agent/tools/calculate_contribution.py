@@ -45,6 +45,13 @@ def calculate_contribution(
         return tool_error(action, "EVIDENCE_MISSING", "guard-passed current-run evidence is required")
     renderer = renderer or SQLRenderer()
     filters = {**args.filters}
+
+    if filters.get(args.dimension) not in {None, args.element}:
+        return tool_error(
+            action,
+            "QUERY_SPEC_INVALID",
+            "filters conflict with selected contribution element",
+        )
     try:
         metric_definition = metric_service.get_metric_definition(args.metric_id)
         current_spec = build_query_spec(
@@ -86,12 +93,25 @@ def calculate_contribution(
     if not attribution.ok:
         return tool_error(action, attribution.error_code or "ATTRIBUTION_COVERAGE_LOW", "attribution coverage low")
 
+    selected_candidate = _top_candidate_for_selected_element(
+        candidates=attribution.candidates,
+        dimension=args.dimension,
+        element=args.element,
+    )
+    if selected_candidate is None:
+        return tool_error(
+            action,
+            "ATTRIBUTION_COVERAGE_LOW",
+            "selected element is not the top attributed candidate",
+        )
+
     result_summary = {
         "metric_id": args.metric_id,
         "dimension": args.dimension,
         "element": args.element,
         "input_evidence_ids": args.evidence_ids,
         "query_sources": query_sources(current_plan=current_plan, baseline_plan=baseline_plan),
+        "selected_candidate": selected_candidate.model_dump(mode="json"),
         "candidates": [candidate.model_dump(mode="json") for candidate in attribution.candidates],
     }
     if args.metric_id == "gmv":
@@ -103,9 +123,12 @@ def calculate_contribution(
                 target_date=args.target_date,
                 dimension=args.dimension,
                 element=args.element,
+                base_filters=filters,
             )
         except ToolRuntimeError as exc:
             return runtime_error(action, exc)
+        except QuerySpecError as exc:
+            return tool_error(action, exc.code, str(exc))
         except ValueError as exc:
             code = str(exc)
             if code in {"NO_CURRENT_DATA", "INSUFFICIENT_BASELINE_DATA"}:
@@ -122,9 +145,12 @@ def calculate_contribution(
                 target_date=args.target_date,
                 dimension=args.dimension,
                 element=args.element,
+                base_filters=filters,
             )
         except ToolRuntimeError as exc:
             return runtime_error(action, exc)
+        except QuerySpecError as exc:
+            return tool_error(action, exc.code, str(exc))
         except ValueError as exc:
             code = str(exc)
             if code in {"NO_CURRENT_DATA", "INSUFFICIENT_BASELINE_DATA"}:
@@ -174,8 +200,9 @@ def _gmv_factor_decomposition(
     target_date,
     dimension: str,
     element: str,
+    base_filters: dict[str, str],
 ) -> dict[str, Any]:
-    filters = {dimension: element}
+    filters = _selected_element_filters(base_filters=base_filters, dimension=dimension, element=element)
     current_values: dict[str, float] = {}
     baseline_values: dict[str, float] = {}
     factor_query_sources: dict[str, dict[str, Any]] = {}
@@ -229,8 +256,9 @@ def _net_gmv_factor_decomposition(
     target_date,
     dimension: str,
     element: str,
+    base_filters: dict[str, str],
 ) -> dict[str, Any]:
-    filters = {dimension: element}
+    filters = _selected_element_filters(base_filters=base_filters, dimension=dimension, element=element)
     current_values: dict[str, float] = {}
     baseline_values: dict[str, float] = {}
     factor_query_sources: dict[str, dict[str, Any]] = {}
@@ -286,6 +314,35 @@ def _net_gmv_factor_decomposition(
         },
         "query_sources": factor_query_sources,
     }
+
+
+def _selected_element_filters(
+    *,
+    base_filters: dict[str, str],
+    dimension: str,
+    element: str,
+) -> dict[str, str]:
+    existing = base_filters.get(dimension)
+    if existing is not None and existing != element:
+        raise QuerySpecError(
+            "QUERY_SPEC_INVALID",
+            "filters conflict with selected contribution element",
+        )
+    return {**base_filters, dimension: element}
+
+
+def _top_candidate_for_selected_element(
+    *,
+    candidates: list[Any],
+    dimension: str,
+    element: str,
+) -> Any | None:
+    if not candidates:
+        return None
+    top_candidate = candidates[0]
+    if top_candidate.dimension == dimension and str(top_candidate.element) == str(element):
+        return top_candidate
+    return None
 
 
 def _metric_contribution_summary(

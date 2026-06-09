@@ -441,6 +441,7 @@ def test_tool_guard_rejection_returns_typed_error_and_does_not_call_execute_plan
     ("raised", "expected_code"),
     [
         (RuntimeError("SQL_EXECUTION_FAILED"), "SQL_EXECUTION_FAILED"),
+        (RuntimeError("SYSTEM_TABLE_WRITE_FAILED"), "SYSTEM_TABLE_WRITE_FAILED"),
         (ValueError("SQL_PLAN_INVALID: forged plan"), "SQL_PLAN_INVALID"),
         (ValueError("SQL_GUARD_REJECTED: repository revalidation failed"), "SQL_GUARD_REJECTED"),
     ],
@@ -699,7 +700,80 @@ def test_calculate_contribution_emits_e4_from_current_run_evidence() -> None:
         "run-1:E3",
         "run-1:E4",
     ]
+    assert result.evidences[0].result_summary["selected_candidate"]["element"] == "paid_ads"
     assert any("fact_traffic" in plan.sql for plan in repo.executed)
+
+
+def test_calculate_contribution_rejects_element_that_is_not_top_attributed_candidate() -> None:
+    repo = SpyRepository()
+
+    result = calculate_contribution(
+        CalculateContributionArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            dimension="channel",
+            element="organic",
+            evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == "ATTRIBUTION_COVERAGE_LOW"
+    assert result.evidences == []
+    assert repo.evidence_rows == []
+
+
+def test_calculate_contribution_factor_queries_keep_base_filters() -> None:
+    repo = SpyRepository()
+
+    result = calculate_contribution(
+        CalculateContributionArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            dimension="channel",
+            element="paid_ads",
+            filters={"device": "mobile"},
+            evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is True
+    factor_plans = [
+        plan
+        for plan in repo.executed
+        if plan.params.get("filter_channel") == "paid_ads"
+    ]
+    assert factor_plans
+    assert all(plan.params.get("filter_device") == "mobile" for plan in factor_plans)
+
+
+def test_calculate_contribution_rejects_filters_conflicting_with_selected_element() -> None:
+    repo = SpyRepository()
+
+    result = calculate_contribution(
+        CalculateContributionArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            dimension="channel",
+            element="paid_ads",
+            filters={"channel": "organic"},
+            evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == "QUERY_SPEC_INVALID"
+    assert result.evidences == []
+    assert repo.evidence_rows == []
 
 
 @pytest.mark.parametrize("metric_id", ["pay_cvr", "refund_rate"])
