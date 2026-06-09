@@ -8,6 +8,8 @@ from sqlalchemy import create_engine, text
 
 from metric_rca.config.settings import get_settings
 from metric_rca.data.seed_data import main as seed_main
+from metric_rca.domain.models import METRIC_ALLOWED_DIMENSIONS
+from metric_rca.guardrails.renderer import METRIC_TEMPLATES
 
 
 HASH_TABLES = [
@@ -100,6 +102,7 @@ def test_seed_is_idempotent_and_has_required_calendar() -> None:
 
 
 def test_seed_metric_definitions_and_ground_truth_cases() -> None:
+    seed_main()
     settings = get_settings()
     engine = create_engine(str(settings.db_dsn), pool_pre_ping=True)
     try:
@@ -108,9 +111,14 @@ def test_seed_metric_definitions_and_ground_truth_cases() -> None:
                 row.metric_id: row
                 for row in conn.execute(text("SELECT * FROM metric_definition")).mappings()
             }
-            assert {"gmv", "net_gmv", "pay_cvr", "refund_rate"} <= set(metrics)
+            assert set(metrics) == set(METRIC_TEMPLATES)
+            assert set(metrics) == set(METRIC_ALLOWED_DIMENSIONS)
             assert metrics["gmv"]["source_table"] == "fact_order"
             assert "channel" in metrics["gmv"]["allowed_dimensions"]
+            for metric_id, template in METRIC_TEMPLATES.items():
+                allowed_dimensions = set(json.loads(metrics[metric_id]["allowed_dimensions"]))
+                assert metrics[metric_id]["source_table"] == template.fact_table
+                assert allowed_dimensions == METRIC_ALLOWED_DIMENSIONS[metric_id]
 
             cases = {
                 row.case_id: dict(row)

@@ -1,14 +1,14 @@
-"""MetricRepository：取数链路的终点——只执行"通过且可溯源"的 SQLPlan，并负责所有审计/系统表写入。
+"""MetricRepository: 取数链路的终点——只执行"通过且可溯源"的 SQLPlan , 并负责所有审计/系统表写入。
 
 两套引擎职责分离：
-  - readonly_engine（只读账号）：执行业务查询，DB 层第二道防线；
-  - audit_engine（应用账号）：写 sql_audit 与各系统表。
+  - readonly_engine(只读账号): 执行业务查询 , DB 层第二道防线；
+  - audit_engine(应用账号) :写 sql_audit 与各系统表。
 
-执行前的"五重门禁"是本仓库的安全核心：guard_status=passed → sql_hash 匹配 → 渲染器签名有效 →
-守卫签名有效 → 再 guard 一次复核。任何一关不过即抛 typed error，绝不执行——这把
+执行前的"五重门禁"是本仓库的安全核心: guard_status=passed → sql_hash 匹配 → 渲染器签名有效 →
+守卫签名有效 → 再 guard 一次复核。任何一关不过即抛 typed error, 绝不执行——这把
 "SQLGuard 不可旁路 / 危险 SQL 不可执行"做成了结构上不可绕过。
 
-对应 docs/COMPLIANCE_MATRIX.md 第 10 行；docs/MetricRCA.md §11 执行层、§9 系统表。
+对应 docs/COMPLIANCE_MATRIX.md 第 10 行; docs/MetricRCA.md §11 执行层、§9 系统表。
 """
 
 from __future__ import annotations
@@ -131,6 +131,46 @@ class MetricRepository:
                 .one()
             )
         return dict(row)
+
+    def get_agent_run(self, run_id: str) -> dict[str, Any] | None:
+        """读取当前 run 根记录；工具层用它证明 run_id 是有效当前运行。"""
+        with self._audit_engine.connect() as conn:
+            row = (
+                conn.execute(
+                    text(
+                        """
+                        SELECT run_id, question, metric_id, target_date, status, error_code, created_at, finished_at
+                        FROM agent_run
+                        WHERE run_id = :run_id
+                        LIMIT 1
+                        """
+                    ),
+                    {"run_id": run_id},
+                )
+                .mappings()
+                .first()
+            )
+        return dict(row) if row is not None else None
+
+    def get_evidence(self, *, run_id: str, evidence_id: str) -> dict[str, Any] | None:
+        """读取当前 run 的 guard-passed 证据；工具层用它禁止伪造 evidence_id。"""
+        with self._audit_engine.connect() as conn:
+            row = (
+                conn.execute(
+                    text(
+                        """
+                        SELECT evidence_id, run_id, sql_hash, guard_status, result_summary, data_source, created_at
+                        FROM evidence
+                        WHERE run_id = :run_id AND evidence_id = :evidence_id
+                        LIMIT 1
+                        """
+                    ),
+                    {"run_id": run_id, "evidence_id": evidence_id},
+                )
+                .mappings()
+                .first()
+            )
+        return dict(row) if row is not None else None
 
     def close(self) -> None:
         # 显式释放连接池，保证 -W error::ResourceWarning 下无未关闭连接告警。
@@ -274,8 +314,11 @@ class MetricRepository:
 
     def _insert(self, sql: str, params: dict[str, Any]) -> None:
         # 系统表写入统一走应用账号事务（begin() 自动提交/回滚）。
-        with self._audit_engine.begin() as conn:
-            conn.execute(text(sql), params)
+        try:
+            with self._audit_engine.begin() as conn:
+                conn.execute(text(sql), params)
+        except SQLAlchemyError as exc:
+            raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED") from exc
 
     def _write_audit(
         self,
@@ -286,28 +329,26 @@ class MetricRepository:
         latency_ms: int,
     ) -> None:
         # 每条执行的 SQL 都落 sql_audit：sql 文本 / hash / 守卫状态 / 守卫错误 / 行数 / 时延。
-        with self._audit_engine.begin() as conn:
-            conn.execute(
-                text(
-                    """
-                    INSERT INTO sql_audit (
-                      run_id, sql_text, sql_hash, guard_status, guard_errors,
-                      row_count, latency_ms, created_at
-                    )
-                    VALUES (
-                      :run_id, :sql_text, :sql_hash, :guard_status, :guard_errors,
-                      :row_count, :latency_ms, :created_at
-                    )
-                    """
-                ),
-                {
-                    "run_id": run_id,
-                    "sql_text": plan.sql,
-                    "sql_hash": plan.sql_hash,
-                    "guard_status": plan.guard_status,
-                    "guard_errors": json.dumps(plan.guard_errors),
-                    "row_count": row_count,
-                    # 系统时间戳用 UTC（去 tzinfo 以匹配 DATETIME 列）。
-                    "created_at": datetime.now(timezone.utc).replace(tzinfo=None),
-                },
+        self._insert(
+            """
+            INSERT INTO sql_audit (
+              run_id, sql_text, sql_hash, guard_status, guard_errors,
+              row_count, latency_ms, created_at
             )
+            VALUES (
+              :run_id, :sql_text, :sql_hash, :guard_status, :guard_errors,
+              :row_count, :latency_ms, :created_at
+            )
+            """,
+            {
+                "run_id": run_id,
+                "sql_text": plan.sql,
+                "sql_hash": plan.sql_hash,
+                "guard_status": plan.guard_status,
+                "guard_errors": json.dumps(plan.guard_errors),
+                "row_count": row_count,
+                "latency_ms": latency_ms,
+                # 系统时间戳用 UTC（去 tzinfo 以匹配 DATETIME 列）。
+                "created_at": datetime.now(timezone.utc).replace(tzinfo=None),
+            },
+        )

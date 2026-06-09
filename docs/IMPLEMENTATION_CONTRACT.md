@@ -50,6 +50,8 @@ These shortcuts are P0 violations:
 - No empty placeholder node/tool modules.
 - No CLI print pretending to be FastAPI.
 - No print(json) pretending to be Streamlit.
+- No runtime hardcoded metric metadata or schema context pretending to satisfy
+  DB-backed metadata contracts.
 - No regex SQLGuard pretending to be sqlglot AST guard.
 - No hardcoded eval success.
 - No `dangerous_sql_blocked = null`.
@@ -131,6 +133,14 @@ Each tool must:
 `QuerySpec -> SQLRenderer -> SQLGuard -> Repository` is the only data access
 path for metric facts and related signals.
 
+Metric metadata is not metric-fact data, but it still must be a real persisted
+metadata contract. `get_metric_definition` and `get_schema_context` must be
+backed by `metric_definition`, schema metadata, or an explicit metadata
+repository. Runtime services must not duplicate metric definitions, schema
+context, seeded dimension values, channel/category lists, or product IDs as
+hardcoded constants. Fixed MVP question families constrain parsing; they do not
+authorize hardcoded metadata.
+
 ### SQLGuard
 
 - SQLGuard must use sqlglot AST.
@@ -209,6 +219,9 @@ During implementation:
 - Do not add out-of-scope features unless explicitly requested.
 - Keep failure behavior fail-fast with typed errors.
 - Actively search for fallback-like behavior when reviewing or modifying code.
+- Actively search for metadata-hardcoding shortcuts when touching parser,
+  service, tool, repository, schema, or seed code. If any remain, list them as
+  remaining deviations and do not report `Known shortcuts: []`.
 
 Before claiming completion:
 

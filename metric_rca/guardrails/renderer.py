@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+from datetime import timedelta
 from dataclasses import dataclass
 
 from metric_rca.domain.models import QuerySpec, SQLPlan
@@ -102,6 +103,9 @@ DIMENSION_COLUMNS: dict[str, dict[str, str]] = {
         "product": "fact_customer_ticket.product_id",
         "category": "dim_product.category",
     },
+    "fact_campaign": {
+        "channel": "fact_campaign.channel",
+    },
 }
 
 
@@ -130,7 +134,7 @@ class SQLRenderer:
     """QuerySpec → SQLPlan 的确定性渲染器。"""
 
     def render(self, spec: QuerySpec) -> SQLPlan:
-        template = METRIC_TEMPLATES[spec.metric_id]
+        template = self._template_for(spec)
         select_parts: list[str] = []
         group_parts: list[str] = []
         joins: list[str] = []
@@ -139,6 +143,13 @@ class SQLRenderer:
             "start_date": spec.time_range.start_date,
             "end_date": spec.time_range.end_date,
         }
+        baseline = spec.purpose == "baseline"
+        if baseline:
+            target_date = spec.time_range.start_date
+            params = {
+                f"baseline_d{index}": target_date - timedelta(days=7 * (index + 1))
+                for index in range(4)
+            }
 
         # 下钻维度：拼 SELECT 列 + GROUP BY 列；若该(表,维度)需要 JOIN，则加入白名单 JOIN。
         for dimension in spec.group_by:
@@ -156,12 +167,21 @@ class SQLRenderer:
                 joins.append(join)
 
         # 指标聚合列统一别名 metric_value，方便下游解析与排序。
+        if baseline:
+            business_date_column = f"{template.fact_table}.business_date"
+            select_parts.insert(0, f"{business_date_column} AS business_date")
+            group_parts.append(business_date_column)
         select_parts.append(f"{template.expression} AS metric_value")
 
         # WHERE：事实表 business_date 区间（绑定参数）是守卫的硬性要求；过滤值也走绑定参数。
-        where_parts = [
-            f"{template.fact_table}.business_date BETWEEN :start_date AND :end_date"
-        ]
+        if baseline:
+            where_parts = [
+                f"{template.fact_table}.business_date IN (:baseline_d0, :baseline_d1, :baseline_d2, :baseline_d3)"
+            ]
+        else:
+            where_parts = [
+                f"{template.fact_table}.business_date BETWEEN :start_date AND :end_date"
+            ]
         for dimension, value in sorted(spec.filters.items()):  # sorted 保证 SQL 文本确定性
             column = DIMENSION_COLUMNS[template.fact_table][dimension]
             param_name = f"filter_{dimension}"
@@ -189,3 +209,8 @@ class SQLRenderer:
             # 盖上渲染器签名：证明"本进程渲染器生成"，供守卫放行 JOIN、供仓库验证溯源。
             renderer_signature=_renderer_signature(hashlib.sha256(sql.encode("utf-8")).hexdigest()),
         )
+
+    def _template_for(self, spec: QuerySpec) -> MetricTemplate:
+        if spec.signal_type == "campaign" and spec.metric_id == "gmv" and "channel" in spec.filters:
+            return MetricTemplate("fact_campaign", "SUM(fact_campaign.clicks)")
+        return METRIC_TEMPLATES[spec.metric_id]

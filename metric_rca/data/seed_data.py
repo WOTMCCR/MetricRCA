@@ -146,7 +146,7 @@ def _insert_dimensions(conn) -> None:
 
 
 def _insert_metric_definitions(conn) -> None:
-    """写 metric_definition：MVP 四个指标的口径（公式/分子分母/来源表/可下钻维度）。"""
+    """写 metric_definition：所有 renderer 支持指标的口径。"""
     metric_rows = [
         {
             "metric_id": "gmv",
@@ -187,6 +187,46 @@ def _insert_metric_definitions(conn) -> None:
             "higher_is_better": 0,  # 退款率越低越好
             "source_table": "fact_order",
             "allowed_dimensions": json.dumps(["channel", "category", "device", "product"]),
+        },
+        {
+            "metric_id": "uv",
+            "display_name": "UV",
+            "formula": "sum(uv)",
+            "numerator_sql_fragment": "SUM(uv)",
+            "denominator_sql_fragment": None,
+            "higher_is_better": 1,
+            "source_table": "fact_traffic",
+            "allowed_dimensions": json.dumps(["channel", "category", "device", "product"]),
+        },
+        {
+            "metric_id": "aov",
+            "display_name": "AOV",
+            "formula": "sum(order_amount where is_paid=1)/count(paid orders)",
+            "numerator_sql_fragment": "SUM(order_amount)",
+            "denominator_sql_fragment": "COUNT(order_id)",
+            "higher_is_better": 1,
+            "source_table": "fact_order",
+            "allowed_dimensions": json.dumps(["channel", "category", "device", "product"]),
+        },
+        {
+            "metric_id": "stockout_rate",
+            "display_name": "Stockout Rate",
+            "formula": "sum(stockout_hours)/sum(avail_hours)",
+            "numerator_sql_fragment": "SUM(stockout_hours)",
+            "denominator_sql_fragment": "SUM(avail_hours)",
+            "higher_is_better": 0,
+            "source_table": "fact_inventory",
+            "allowed_dimensions": json.dumps(["category", "warehouse", "product"]),
+        },
+        {
+            "metric_id": "complaint_rate",
+            "display_name": "Complaint Rate",
+            "formula": "sum(is_complaint)/count(ticket_id)",
+            "numerator_sql_fragment": "SUM(is_complaint)",
+            "denominator_sql_fragment": "COUNT(ticket_id)",
+            "higher_is_better": 0,
+            "source_table": "fact_customer_ticket",
+            "allowed_dimensions": json.dumps(["category", "product"]),
         },
     ]
     conn.execute(

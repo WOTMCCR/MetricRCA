@@ -98,6 +98,7 @@ class QuerySpec(StrictModel):
     filters: dict[str, str] = Field(default_factory=dict)
     limit: int = Field(default=1000, le=5000)  # 强制上限，渲染器还会再拼 LIMIT
     purpose: Literal["current", "baseline", "drilldown", "signal"] = "current"
+    signal_type: Literal["metric", "campaign"] = "metric"
 
     @field_validator("metric_id")
     @classmethod
