@@ -19,6 +19,24 @@ def test_health_ok() -> None:
     assert client.get("/health").json() == {"status": "ok"}
 
 
+def test_local_ui_cors_preflight_allows_rca_and_eval_posts() -> None:
+    client = TestClient(create_app(ApiDependencies(repository=_Repository(), rca_runner=_run_rca)))
+
+    for path in ["/api/rca/runs", "/api/evals/run"]:
+        response = client.options(
+            path,
+            headers={
+                "origin": "http://127.0.0.1:5173",
+                "access-control-request-method": "POST",
+                "access-control-request-headers": "content-type",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+        assert "POST" in response.headers["access-control-allow-methods"]
+
+
 def test_post_rca_runs_invokes_run_rca_and_persists_agent_run() -> None:
     repo = _Repository()
 
