@@ -217,6 +217,101 @@ def test_reflection_persisted_evidence_run_id_or_guard_mismatch_fails() -> None:
         assert "persisted_evidence" in _checks(verified["reflection"])
 
 
+def test_reflection_persisted_evidence_result_summary_mismatch_fails() -> None:
+    state = _state()
+    persisted = _persisted_rows(state["evidences"])
+    persisted["run-1:E4"]["result_summary"] = {"metric_id": "gmv", "target_date": "2026-06-05", "value": 0.10}
+
+    verified = reflection_verify(state, dependencies=_Dependencies(persisted_evidence=persisted))
+
+    assert verified["reflection"].passed is False
+    assert verified["error_code"] == "REFLECTION_REPAIR_FAILED"
+    assert "persisted_evidence" in _checks(verified["reflection"])
+
+
+def test_reflection_persisted_evidence_query_spec_mismatch_fails() -> None:
+    state = _state()
+    persisted = _persisted_rows(state["evidences"])
+    persisted["run-1:E4"]["query_spec"]["metric_id"] = "pay_cvr"
+
+    verified = reflection_verify(state, dependencies=_Dependencies(persisted_evidence=persisted))
+
+    assert verified["reflection"].passed is False
+    assert verified["error_code"] == "REFLECTION_REPAIR_FAILED"
+    assert "persisted_evidence" in _checks(verified["reflection"])
+
+
+def test_reflection_numeric_claim_must_match_persisted_result_summary_not_state_summary() -> None:
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2"),
+        _evidence(
+            "run-1:E3",
+            summary={"metric_id": "gmv", "target_date": "2026-06-05", "value": 0.90},
+        ),
+        _evidence(
+            "run-1:E4",
+            summary={"metric_id": "gmv", "target_date": "2026-06-05", "value": 7.77},
+        ),
+    ]
+    state = _state(
+        evidences=evidences,
+        report={"status": "succeeded", "numeric_claims": [{"name": "unsafe_state_only", "value": 7.77}]},
+    )
+    persisted = _persisted_rows(evidences)
+    persisted["run-1:E4"]["result_summary"] = {"metric_id": "gmv", "target_date": "2026-06-05", "value": 0.90}
+
+    verified = reflection_verify(state, dependencies=_Dependencies(persisted_evidence=persisted))
+
+    assert verified["reflection"].passed is False
+    assert "numeric_traceability" in _checks(verified["reflection"])
+
+
+def test_reflection_wrong_signal_type_for_candidate_fails() -> None:
+    state = _state(
+        evidences=[
+            _evidence("run-1:E1"),
+            _evidence("run-1:E2"),
+            _evidence(
+                "run-1:E3",
+                summary={
+                    "signal_type": "inventory",
+                    "signal_metric_id": "stockout_rate",
+                    "dimension": "channel",
+                    "element": "paid_ads",
+                    "value": 0.90,
+                },
+            ),
+            _evidence("run-1:E4"),
+        ]
+    )
+
+    result = verify_reflection(state, max_repair=1)
+
+    assert result.passed is False
+    assert "signal_consistency" in _checks(result)
+
+
+def test_reflection_e3_dimension_or_element_mismatch_fails() -> None:
+    for summary in [
+        {"signal_type": "campaign", "dimension": "category", "element": "paid_ads"},
+        {"signal_type": "campaign", "dimension": "channel", "element": "organic"},
+    ]:
+        state = _state(
+            evidences=[
+                _evidence("run-1:E1"),
+                _evidence("run-1:E2"),
+                _evidence("run-1:E3", summary={**summary, "signal_metric_id": "gmv", "value": 0.90}),
+                _evidence("run-1:E4"),
+            ]
+        )
+
+        result = verify_reflection(state, max_repair=1)
+
+        assert result.passed is False
+        assert "signal_consistency" in _checks(result)
+
+
 def test_reflection_repair_count_increment_without_new_evidence_does_not_pass() -> None:
     state = _state(
         repair_count=1,
@@ -242,6 +337,59 @@ def test_reflection_repair_failed_routes_error_return_no_report() -> None:
     assert "report" not in reported
     assert reported["error_code"] == "REFLECTION_REPAIR_FAILED"
     assert tasked["error_code"] == "REFLECTION_REPAIR_FAILED"
+
+
+def test_generate_report_has_no_unverified_numeric_claims() -> None:
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2"),
+        _evidence("run-1:E3"),
+        _evidence("run-1:E4", summary={"selected_candidate": _candidate().model_dump(mode="json")}),
+    ]
+    state = _state(
+        evidences=evidences,
+        report={"status": "succeeded", "numeric_claims": [{"name": "ignored_prior_report", "value": 999.0}]},
+        reflection=ReflectionResult(passed=True, issues=[], repaired=False, repair_count=0),
+    )
+
+    result = generate_report(state, dependencies=_Dependencies(persisted_evidence=_persisted_rows(evidences)))
+
+    assert result["status"] == "succeeded"
+    assert result["report"]["numeric_claims"] == [
+        {"name": "contribution_pct", "value": 0.90, "evidence_id": "run-1:E4"}
+    ]
+
+
+def test_generate_report_after_failed_or_missing_reflection_fails() -> None:
+    for reflection in [None, ReflectionResult(passed=False, issues=[], repaired=False, repair_count=0)]:
+        state = _state(reflection=reflection)
+
+        result = generate_report(state, dependencies=_Dependencies())
+
+        assert result["status"] == "failed"
+        assert result["error_code"] == "REFLECTION_REPAIR_FAILED"
+        assert "report" not in result
+
+
+def test_final_report_numbers_are_traceable_to_persisted_evidence() -> None:
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2"),
+        _evidence("run-1:E3"),
+        _evidence("run-1:E4", summary={"selected_candidate": _candidate().model_dump(mode="json")}),
+    ]
+    persisted = _persisted_rows(evidences)
+    persisted["run-1:E4"]["result_summary"] = {"selected_candidate": {"contribution_pct": 0.10}}
+    state = _state(
+        evidences=evidences,
+        reflection=ReflectionResult(passed=True, issues=[], repaired=False, repair_count=0),
+    )
+
+    result = generate_report(state, dependencies=_Dependencies(persisted_evidence=persisted))
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "REFLECTION_REPAIR_FAILED"
+    assert "report" not in result
 
 
 def _state(**overrides: Any) -> dict[str, Any]:
@@ -292,6 +440,16 @@ def _evidence(
     guard_status: str = "passed",
     summary: dict[str, Any] | None = None,
 ) -> Evidence:
+    if summary is None and evidence_id.endswith(":E3"):
+        summary = {
+            "metric_id": metric_id,
+            "target_date": str(target_date),
+            "signal_type": "campaign",
+            "signal_metric_id": "gmv",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "value": 0.90,
+        }
     return Evidence(
         evidence_id=evidence_id,
         query_spec=build_query_spec(
@@ -320,6 +478,8 @@ def _persisted_rows(evidences: list[Evidence]) -> dict[str, dict[str, Any]]:
             "run_id": evidence.evidence_id.split(":", maxsplit=1)[0],
             "guard_status": evidence.guard_status,
             "sql_hash": evidence.sql_hash,
+            "query_spec": evidence.query_spec.model_dump(mode="json"),
+            "result_summary": dict(evidence.result_summary),
         }
         for evidence in evidences
     }

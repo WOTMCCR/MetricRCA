@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import date
+import json
+from json import JSONDecodeError
 import math
 from typing import Any
 
@@ -93,6 +95,12 @@ def verify_reflection(
                 issues.append(_issue("persisted_evidence", "candidate evidence is not persisted guard-passed evidence"))
         if candidate is candidates[0] and candidate.contribution_pct < ATTRIBUTION_COVERAGE_THRESHOLD:
             issues.append(_issue("ATTRIBUTION_COVERAGE_LOW", "top candidate attribution coverage is below threshold"))
+        if candidate is candidates[0] and not _e3_signal_matches_candidate(
+            state=state,
+            candidate=candidate,
+            evidence_by_id=evidence_by_id,
+        ):
+            issues.append(_issue("signal_consistency", "E3 signal does not match selected candidate"))
 
     for evidence in evidence_by_id.values():
         if not evidence.evidence_id.startswith(f"{state.get('run_id')}:"):
@@ -104,7 +112,13 @@ def verify_reflection(
         if not _metric_matches(evidence, state.get("metric_id")):
             issues.append(_issue("metric_consistency", "evidence metric_id does not match run metric"))
 
-    if not _report_numbers_are_traceable(state.get("report"), evidence_by_id.values()):
+    if not _report_numbers_are_traceable(
+        state.get("report"),
+        _traceability_summaries(
+            evidences=evidence_by_id.values(),
+            persisted_evidence_by_id=persisted_evidence_by_id,
+        ),
+    ):
         issues.append(_issue("numeric_traceability", "report numeric claim is not traceable to evidence"))
     if _has_unsupported_causal_language(state, candidates):
         issues.append(_issue("causal_language", "confirmed causal language requires complete current-run evidence"))
@@ -146,6 +160,35 @@ def _persisted_evidence_matches(
         persisted.get("run_id") == state.get("run_id")
         and persisted.get("guard_status") == "passed"
         and persisted.get("sql_hash") == evidence.sql_hash
+        and _canonical(persisted.get("query_spec")) == _canonical(evidence.query_spec)
+        and _canonical(persisted.get("result_summary")) == _canonical(evidence.result_summary)
+    )
+
+
+def _e3_signal_matches_candidate(
+    *,
+    state: dict[str, Any],
+    candidate: RootCauseCandidate,
+    evidence_by_id: dict[str, Evidence],
+) -> bool:
+    e3 = evidence_by_id.get(f"{state.get('run_id')}:E3")
+    if e3 is None or f"{state.get('run_id')}:E3" not in candidate.evidence_ids:
+        return True
+    summary = e3.result_summary
+    if not summary:
+        return False
+    try:
+        expected_signal_type = select_signal_type(
+            metric_id=str(state.get("metric_id")),
+            dimension=candidate.dimension,
+            root_cause_type=candidate.root_cause_type,
+        )
+    except ValueError:
+        return False
+    return (
+        summary.get("signal_type") == expected_signal_type
+        and summary.get("dimension") == candidate.dimension
+        and str(summary.get("element")) == str(candidate.element)
     )
 
 
@@ -242,12 +285,26 @@ def _metric_matches(evidence: Evidence, metric_id: Any) -> bool:
     return evidence.query_spec.metric_id == metric_id
 
 
-def _report_numbers_are_traceable(report: Any, evidences: Any) -> bool:
+def _report_numbers_are_traceable(report: Any, summaries: Any) -> bool:
     if not report:
         return True
-    evidence_numbers = [_round_number(value) for evidence in evidences for value in _numbers(evidence.result_summary)]
+    evidence_numbers = [_round_number(value) for summary in summaries for value in _numbers(summary)]
     claims = _numeric_claims(report)
     return all(_round_number(claim) in evidence_numbers for claim in claims)
+
+
+def _traceability_summaries(
+    *,
+    evidences: Any,
+    persisted_evidence_by_id: dict[str, dict[str, Any] | None] | None,
+) -> list[dict[str, Any]]:
+    if persisted_evidence_by_id is None:
+        return [evidence.result_summary for evidence in evidences]
+    return [
+        dict(row.get("result_summary") or {})
+        for row in persisted_evidence_by_id.values()
+        if row is not None
+    ]
 
 
 def _numeric_claims(report: Any) -> list[float]:
@@ -282,6 +339,27 @@ def _numbers(value: Any) -> list[float]:
 
 def _round_number(value: float) -> float:
     return round(float(value), 6)
+
+
+def _canonical(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        return _canonical(value.model_dump(mode="json"))
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, str):
+        if not value.startswith(("{", "[")):
+            return value
+        try:
+            return _canonical(json.loads(value))
+        except JSONDecodeError:
+            return value
+    if isinstance(value, dict):
+        return {str(key): _canonical(value[key]) for key in sorted(value)}
+    if isinstance(value, list):
+        return [_canonical(item) for item in value]
+    if isinstance(value, float):
+        return _round_number(value)
+    return value
 
 
 def _has_unsupported_causal_language(state: dict[str, Any], candidates: list[RootCauseCandidate]) -> bool:

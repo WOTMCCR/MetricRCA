@@ -21,8 +21,12 @@ Keep Reflection as a deterministic rule verifier. A repairable issue sets
 `repair_pending=True`, increments `repair_count`, and provides a whitelisted
 `AgentAction`; `react_step` consumes that action and `execute_tool` runs the
 normal registry/tool/QuerySpec/Renderer/Guard/Repository path to create new
-Evidence before Reflection can pass. Add hard gates so `generate_report` and
-`create_tasks` require passed Reflection except for `no_anomaly`.
+Evidence before Reflection can pass. Reflection must validate candidate evidence
+against persisted `evidence` rows, including `query_spec` and `result_summary`
+content consistency, not only state-held evidence objects. Add hard gates so
+`generate_report` and `create_tasks` require passed Reflection except for
+`no_anomaly`; final reports may expose only mechanically derived numeric claims
+that are traceable to persisted evidence rows.
 
 Implement `metric_rca.memory.memory_repo.MemoryRepository` as a real system-table
 repository over `memory_record`, using exact `(layer, mem_key)` reads and

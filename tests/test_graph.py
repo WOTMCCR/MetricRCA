@@ -757,6 +757,10 @@ def test_repair_new_evidence_is_persisted_and_has_sql_audit() -> None:
         persisted_e4 = repository.get_evidence(run_id=run_id, evidence_id=e4.evidence_id)
         assert persisted_e4 is not None
         assert persisted_e4["sql_hash"] == e4.sql_hash
+        assert isinstance(persisted_e4["query_spec"], dict)
+        assert persisted_e4["query_spec"]["metric_id"] == e4.query_spec.metric_id
+        assert isinstance(persisted_e4["result_summary"], dict)
+        assert persisted_e4["result_summary"]["selected_candidate"]["element"] == top.element
         assert e4.sql_hash in _audit_hashes(settings, run_id)
         assert state["repair_count"] == 1
         assert state["reflection"].passed is True
