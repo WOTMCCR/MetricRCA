@@ -5,7 +5,7 @@ usage limited to structured intent parsing; SQL, evidence, attribution,
 reflection, report projection, API output, UI display, and eval scoring are all
 controlled by code and persisted artifacts.
 
-P6 端到端闭环交付证据见 [`项目介绍.md`](项目介绍.md)。
+完整项目介绍、架构流程与端到端闭环证据见 [`项目介绍.md`](项目介绍.md)。
 
 ## Architecture
 
