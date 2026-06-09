@@ -8,6 +8,7 @@ from sqlalchemy import create_engine, text
 
 from metric_rca.config.settings import get_settings
 from metric_rca.data.seed_data import main as seed_main
+from metric_rca.domain.models import METRIC_ALLOWED_DIMENSIONS
 from metric_rca.guardrails.renderer import METRIC_TEMPLATES
 
 
@@ -111,8 +112,13 @@ def test_seed_metric_definitions_and_ground_truth_cases() -> None:
                 for row in conn.execute(text("SELECT * FROM metric_definition")).mappings()
             }
             assert set(metrics) == set(METRIC_TEMPLATES)
+            assert set(metrics) == set(METRIC_ALLOWED_DIMENSIONS)
             assert metrics["gmv"]["source_table"] == "fact_order"
             assert "channel" in metrics["gmv"]["allowed_dimensions"]
+            for metric_id, template in METRIC_TEMPLATES.items():
+                allowed_dimensions = set(json.loads(metrics[metric_id]["allowed_dimensions"]))
+                assert metrics[metric_id]["source_table"] == template.fact_table
+                assert allowed_dimensions == METRIC_ALLOWED_DIMENSIONS[metric_id]
 
             cases = {
                 row.case_id: dict(row)

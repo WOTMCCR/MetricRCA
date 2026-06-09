@@ -16,6 +16,7 @@ from metric_rca.agent.tools.schemas import (
     DrilldownDimensionArgs,
     FetchRelatedSignalArgs,
 )
+from metric_rca.config.settings import Settings
 from metric_rca.domain.models import MetricDefinition, SQLPlan
 
 
@@ -87,6 +88,22 @@ class SpyRepository:
             ]
         elif "fact_campaign" in sql:
             rows = [{"metric_value": 250.0}]
+        elif "GROUP BY fact_traffic.channel" in sql and "business_date IN" in sql:
+            rows = [
+                {"business_date": date(2026, 5, 29), "channel": "paid_ads", "metric_value": 0.10},
+                {"business_date": date(2026, 5, 22), "channel": "paid_ads", "metric_value": 0.10},
+                {"business_date": date(2026, 5, 15), "channel": "paid_ads", "metric_value": 0.10},
+                {"business_date": date(2026, 5, 8), "channel": "paid_ads", "metric_value": 0.10},
+                {"business_date": date(2026, 5, 29), "channel": "organic", "metric_value": 0.10},
+                {"business_date": date(2026, 5, 22), "channel": "organic", "metric_value": 0.10},
+                {"business_date": date(2026, 5, 15), "channel": "organic", "metric_value": 0.10},
+                {"business_date": date(2026, 5, 8), "channel": "organic", "metric_value": 0.10},
+            ]
+        elif "GROUP BY fact_traffic.channel" in sql:
+            rows = [
+                {"channel": "paid_ads", "metric_value": 0.02},
+                {"channel": "organic", "metric_value": 0.09},
+            ]
         elif "SUM(fact_traffic.pay_user_cnt)" in sql and "business_date IN" in sql:
             rows = [
                 {"business_date": date(2026, 5, 29), "metric_value": 0.10},
@@ -111,6 +128,22 @@ class SpyRepository:
                 {"business_date": date(2026, 5, 22), "metric_value": 101.0},
                 {"business_date": date(2026, 5, 15), "metric_value": 99.0},
                 {"business_date": date(2026, 5, 8), "metric_value": 100.0},
+            ]
+        elif "SUM(fact_order.refund_amount)" in sql and "GROUP BY fact_order.channel" in sql and "business_date IN" in sql:
+            rows = [
+                {"business_date": date(2026, 5, 29), "channel": "paid_ads", "metric_value": 0.10},
+                {"business_date": date(2026, 5, 22), "channel": "paid_ads", "metric_value": 0.10},
+                {"business_date": date(2026, 5, 15), "channel": "paid_ads", "metric_value": 0.10},
+                {"business_date": date(2026, 5, 8), "channel": "paid_ads", "metric_value": 0.10},
+                {"business_date": date(2026, 5, 29), "channel": "organic", "metric_value": 0.10},
+                {"business_date": date(2026, 5, 22), "channel": "organic", "metric_value": 0.10},
+                {"business_date": date(2026, 5, 15), "channel": "organic", "metric_value": 0.10},
+                {"business_date": date(2026, 5, 8), "channel": "organic", "metric_value": 0.10},
+            ]
+        elif "SUM(fact_order.refund_amount)" in sql and "GROUP BY fact_order.channel" in sql:
+            rows = [
+                {"channel": "paid_ads", "metric_value": 0.35},
+                {"channel": "organic", "metric_value": 0.10},
             ]
         elif "GROUP BY fact_order.channel" in sql and "business_date IN" in sql:
             rows = [
@@ -146,6 +179,16 @@ class SpyRepository:
 class RejectingRenderer:
     def render(self, spec):
         return SQLPlan(sql="SELECT * FROM fact_order", sql_hash="bad")
+
+
+class FailingExecutionRepository(SpyRepository):
+    def __init__(self, error: Exception) -> None:
+        super().__init__()
+        self.error = error
+
+    def execute_plan(self, plan: SQLPlan, *, run_id: str):
+        self.executed.append(plan)
+        raise self.error
 
 
 def test_detect_anomaly_paid_ads_flagged_and_persists_run_scoped_evidence() -> None:
@@ -330,6 +373,89 @@ def test_tool_guard_rejection_returns_typed_error_and_does_not_call_execute_plan
     assert repo.evidence_rows == []
 
 
+@pytest.mark.parametrize(
+    ("raised", "expected_code"),
+    [
+        (RuntimeError("SQL_EXECUTION_FAILED"), "SQL_EXECUTION_FAILED"),
+        (ValueError("SQL_PLAN_INVALID: forged plan"), "SQL_PLAN_INVALID"),
+        (ValueError("SQL_GUARD_REJECTED: repository revalidation failed"), "SQL_GUARD_REJECTED"),
+    ],
+)
+def test_detect_anomaly_execution_failure_returns_typed_error_without_evidence(
+    raised: Exception,
+    expected_code: str,
+) -> None:
+    repo = FailingExecutionRepository(raised)
+
+    result = detect_anomaly(
+        DetectAnomalyArgs(run_id="run-1", metric_id="gmv", target_date=date(2026, 6, 5)),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == expected_code
+    assert result.evidences == []
+    assert repo.evidence_rows == []
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "args"),
+    [
+        (
+            "drilldown",
+            DrilldownDimensionArgs(
+                run_id="run-1",
+                metric_id="gmv",
+                target_date=date(2026, 6, 5),
+                dimension="channel",
+                evidence_ids=["run-1:E1"],
+            ),
+        ),
+        (
+            "signal",
+            FetchRelatedSignalArgs(
+                run_id="run-1",
+                metric_id="gmv",
+                target_date=date(2026, 6, 5),
+                signal_type="campaign",
+                dimension="channel",
+                element="paid_ads",
+                evidence_ids=["run-1:E1", "run-1:E2"],
+            ),
+        ),
+        (
+            "contribution",
+            CalculateContributionArgs(
+                run_id="run-1",
+                metric_id="gmv",
+                target_date=date(2026, 6, 5),
+                dimension="channel",
+                element="paid_ads",
+                evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+            ),
+        ),
+    ],
+)
+def test_tools_execution_failure_returns_typed_observation_without_evidence(
+    tool_name: str,
+    args,
+) -> None:
+    repo = FailingExecutionRepository(RuntimeError("SQL_EXECUTION_FAILED"))
+    tool = {
+        "drilldown": drilldown_dimension,
+        "signal": fetch_related_signal,
+        "contribution": calculate_contribution,
+    }[tool_name]
+
+    result = tool(args, repository=repo, metric_service=StaticMetricService())
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == "SQL_EXECUTION_FAILED"
+    assert result.evidences == []
+    assert repo.evidence_rows == []
+
+
 def test_fetch_related_signal_covers_campaign_inventory_conversion_refund_quality() -> None:
     repo = SpyRepository()
     scenarios = [
@@ -383,6 +509,39 @@ def test_fetch_campaign_signal_uses_fact_campaign_for_current_and_baseline() -> 
     assert repo.evidence_rows[0]["data_source"] == "fact_campaign"
 
 
+def test_fetch_related_signal_uses_configured_signal_metric_override() -> None:
+    repo = SpyRepository()
+    settings = Settings(
+        db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
+        readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+        signal_metric_by_type={
+            "campaign": "gmv",
+            "inventory": "stockout_rate",
+            "conversion": "uv",
+            "refund_quality": "complaint_rate",
+        },
+    )
+
+    result = fetch_related_signal(
+        FetchRelatedSignalArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            signal_type="conversion",
+            dimension="channel",
+            element="paid_ads",
+            evidence_ids=["run-1:E1", "run-1:E2"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+        settings=settings,
+    )
+
+    assert result.observation.ok is True
+    assert result.evidences[0].result_summary["signal_metric_id"] == "uv"
+    assert all("fact_traffic" in plan.sql for plan in repo.executed)
+
+
 def test_calculate_contribution_emits_e4_from_current_run_evidence() -> None:
     repo = SpyRepository()
     result = calculate_contribution(
@@ -416,6 +575,32 @@ def test_calculate_contribution_emits_e4_from_current_run_evidence() -> None:
         "run-1:E4",
     ]
     assert any("fact_traffic" in plan.sql for plan in repo.executed)
+
+
+@pytest.mark.parametrize("metric_id", ["pay_cvr", "refund_rate", "net_gmv"])
+def test_calculate_contribution_non_gmv_does_not_emit_gmv_decomposition(metric_id: str) -> None:
+    repo = SpyRepository()
+    repo.runs["run-1"]["metric_id"] = metric_id
+
+    result = calculate_contribution(
+        CalculateContributionArgs(
+            run_id="run-1",
+            metric_id=metric_id,
+            target_date=date(2026, 6, 5),
+            dimension="channel",
+            element="paid_ads",
+            evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is True
+    summary = result.evidences[0].result_summary
+    assert summary["metric_id"] == metric_id
+    assert "decomposition" not in summary
+    assert "factor_query_sources" not in summary
+    assert summary["metric_contribution"]["model"] == "dimension_delta"
 
 
 def test_calculate_contribution_rejects_unpersisted_current_run_evidence() -> None:

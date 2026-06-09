@@ -50,14 +50,7 @@ class MetricService:
             dimension: metadata_repo.list_dimension_values(dimension)
             for dimension in self._supported_dimensions
         }
-        if self._settings.llm_enabled and self._settings.llm_provider:
-            self._intent_planner = LLMIntentPlanner(
-                provider=self._settings.llm_provider,
-                model=self._settings.llm_model,
-                api_key=self._settings.llm_api_key,
-            )
-        else:
-            raise MetricServiceError("LLM_REQUIRED_UNAVAILABLE", "intent planner is required")
+        self._intent_planner: LLMIntentPlanner | None = None
 
     @property
     def supported_metrics(self) -> list[str]:
@@ -81,12 +74,24 @@ class MetricService:
         return parse_question(
             question,
             business_today=business_today,
-            intent_planner=self._intent_planner,
+            intent_planner=self._get_intent_planner(),
             supported_metrics=self._supported_metrics,
             supported_dimensions=self._supported_dimensions,
             supported_dimension_values=self._dimension_values,
             supported_families=[*SUPPORTED_QUESTION_FAMILIES],
         )
+
+    def _get_intent_planner(self) -> LLMIntentPlanner:
+        if self._intent_planner is not None:
+            return self._intent_planner
+        if not self._settings.llm_enabled or not self._settings.llm_provider:
+            raise MetricServiceError("LLM_REQUIRED_UNAVAILABLE", "intent planner is required")
+        self._intent_planner = LLMIntentPlanner(
+            provider=self._settings.llm_provider,
+            model=self._settings.llm_model,
+            api_key=self._settings.llm_api_key,
+        )
+        return self._intent_planner
 
 
 def parse_question(

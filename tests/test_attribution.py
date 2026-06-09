@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
+
+from metric_rca.config.settings import Settings
 from metric_rca.domain.models import MetricDefinition
+import metric_rca.services.attribution_service as attribution_service
 from metric_rca.services.attribution_service import (
     compute_dimension_contribution,
     compute_gmv_decomposition,
@@ -90,6 +94,32 @@ def test_attribution_mobile_cvr_top1_conversion_drop() -> None:
     assert result.ok is True
     assert result.candidates[0].root_cause_type == "conversion_drop"
     assert result.candidates[0].element == "mobile"
+
+
+def test_root_cause_mapping_uses_config_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = Settings(
+        db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
+        readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+        root_cause_type_by_metric={},
+        root_cause_type_by_dimension={"channel": "custom_channel_rule"},
+        root_cause_type_by_dimension_element={},
+    )
+    monkeypatch.setattr(attribution_service, "get_settings", lambda: settings)
+
+    result = compute_dimension_contribution(
+        metric_definition=_metric("gmv"),
+        dimension="channel",
+        current_rows=[
+            {"channel": "paid_ads", "metric_value": 20.0},
+            {"channel": "organic", "metric_value": 95.0},
+        ],
+        baseline_rows=_baseline("channel", {"paid_ads": 100.0, "organic": 100.0}),
+        evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        top_threshold=0.60,
+    )
+
+    assert result.ok is True
+    assert result.candidates[0].root_cause_type == "custom_channel_rule"
 
 
 def test_attribution_refund_rate_uses_increase_direction() -> None:

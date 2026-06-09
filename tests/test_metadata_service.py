@@ -67,6 +67,17 @@ def _live_settings() -> Settings:
     )
 
 
+def _settings_without_llm_key() -> Settings:
+    return Settings(
+        db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
+        readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+        llm_enabled=True,
+        llm_provider="openai",
+        llm_model="gpt-5.4-nano",
+        llm_api_key=None,
+    )
+
+
 def test_get_metric_definition_reads_from_metadata_repo_not_dict() -> None:
     custom = _metric("custom_metric", dimensions=["warehouse"])
     service = MetricService(
@@ -75,6 +86,76 @@ def test_get_metric_definition_reads_from_metadata_repo_not_dict() -> None:
     )
 
     assert service.get_metric_definition("custom_metric") == custom
+
+
+def test_metadata_methods_do_not_require_openai_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("METRIC_RCA_LLM_API_KEY", raising=False)
+    custom = _metric("custom_metric", dimensions=["warehouse"])
+    service = MetricService(
+        FakeMetadataRepository([custom]),
+        settings=_settings_without_llm_key(),
+    )
+
+    assert service.get_metric_definition("custom_metric") == custom
+    assert service.get_schema_context("custom_metric")["allowed_dimensions"] == ["warehouse"]
+
+    with pytest.raises(MetricServiceError) as exc_info:
+        service.parse_question("Why did yesterday GMV drop?", business_today=date(2026, 6, 6))
+    assert exc_info.value.code == "LLM_REQUIRED_UNAVAILABLE"
+
+
+def test_metric_service_runtime_reads_mutated_persisted_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("METRIC_RCA_LLM_API_KEY", raising=False)
+    seed_main()
+    settings = get_settings()
+    engine = create_engine(str(settings.db_dsn), pool_pre_ping=True)
+    metric_id = "temporary_runtime_metric"
+    try:
+        repo = MetadataRepository(engine)
+        service = MetricService(repo, settings=_settings_without_llm_key())
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO metric_definition (
+                      metric_id, display_name, formula, numerator_sql_fragment,
+                      denominator_sql_fragment, higher_is_better, source_table,
+                      allowed_dimensions
+                    )
+                    VALUES (
+                      :metric_id, 'Temporary Runtime Metric', 'sum(test)', NULL,
+                      NULL, 1, 'fact_order', '["channel"]'
+                    )
+                    """
+                ),
+                {"metric_id": metric_id},
+            )
+
+        assert service.get_metric_definition(metric_id).allowed_dimensions == ["channel"]
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    UPDATE metric_definition
+                    SET allowed_dimensions = '["category"]'
+                    WHERE metric_id = :metric_id
+                    """
+                ),
+                {"metric_id": metric_id},
+            )
+        assert service.get_metric_definition(metric_id).allowed_dimensions == ["category"]
+
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM metric_definition WHERE metric_id = :metric_id"), {"metric_id": metric_id})
+        with pytest.raises(MetricServiceError) as exc_info:
+            service.get_metric_definition(metric_id)
+        assert exc_info.value.code == "METRIC_NOT_FOUND"
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM metric_definition WHERE metric_id = :metric_id"), {"metric_id": metric_id})
+        engine.dispose()
 
 
 def test_drop_metric_from_metadata_repo_raises_metric_not_found() -> None:
