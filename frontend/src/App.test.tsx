@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test } from 'vitest';
 import { App } from './App';
@@ -27,6 +27,33 @@ describe('MetricRCA UI', () => {
     expect(screen.getByText('case_total')).toBeInTheDocument();
   });
 
+  test('renders every root cause candidate with the required top-k columns', () => {
+    render(<App apiClient={fakeClient()} initialData={loadedRun()} />);
+
+    const panel = within(screen.getByRole('region', { name: 'Root Cause Top-K' }));
+
+    for (const column of ['root_cause_type', 'dimension', 'element', 'verdict']) {
+      expect(panel.getByRole('columnheader', { name: column })).toBeInTheDocument();
+    }
+    expect(panel.getByText('campaign_traffic_drop')).toBeInTheDocument();
+    expect(panel.getByText('stockout')).toBeInTheDocument();
+    expect(panel.getByText('paid_ads')).toBeInTheDocument();
+    expect(panel.getByText('electronics')).toBeInTheDocument();
+    expect(panel.getByText('likely')).toBeInTheDocument();
+  });
+
+  test('renders reflection_verify output summary details', () => {
+    render(<App apiClient={fakeClient()} initialData={loadedRun()} />);
+
+    const panel = within(screen.getByRole('region', { name: 'Reflection Issues' }));
+
+    expect(panel.getByRole('columnheader', { name: 'seq' })).toBeInTheDocument();
+    expect(panel.getByRole('columnheader', { name: 'error_code' })).toBeInTheDocument();
+    expect(panel.getByRole('columnheader', { name: 'output_summary' })).toBeInTheDocument();
+    expect(panel.getByText(/evidence_coverage/)).toBeInTheDocument();
+    expect(panel.getByText(/candidate_missing_evidence/)).toBeInTheDocument();
+  });
+
   test('uses injected API client for normal run workflow', async () => {
     const client = fakeClient();
     render(<App apiClient={client} />);
@@ -47,6 +74,21 @@ describe('MetricRCA UI', () => {
     expect(await screen.findByText('paid_ads')).toBeInTheDocument();
   });
 
+  test('does not load success panels when artifact fetch fails with typed API error', async () => {
+    const client = fakeClient({
+      getRunError: new Error('RUN_NOT_FOUND:run not found'),
+    });
+    render(<App apiClient={client} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Run RCA' }));
+
+    expect(await screen.findByText('RUN_NOT_FOUND:run not found')).toBeInTheDocument();
+    expect(screen.getByLabelText('run status')).toHaveTextContent('failed');
+    expect(screen.getByRole('region', { name: 'Root Cause Top-K' })).toHaveTextContent(
+      'No persisted rows.',
+    );
+  });
+
   test('runs eval only from the eval panel control', async () => {
     const client = fakeClient();
     render(<App apiClient={client} />);
@@ -58,7 +100,7 @@ describe('MetricRCA UI', () => {
   });
 });
 
-function fakeClient(): MetricRcaApiClient & { calls: string[] } {
+function fakeClient(options: { getRunError?: Error } = {}): MetricRcaApiClient & { calls: string[] } {
   const calls: string[] = [];
   return {
     calls,
@@ -68,6 +110,9 @@ function fakeClient(): MetricRcaApiClient & { calls: string[] } {
     },
     async getRun(runId: string) {
       calls.push(`getRun:${runId}`);
+      if (options.getRunError) {
+        throw options.getRunError;
+      }
       return loadedRun().run;
     },
     async getTrace(runId: string) {
@@ -111,12 +156,30 @@ function loadedRun() {
           element: 'paid_ads',
           verdict: 'confirmed',
         },
+        {
+          root_cause_type: 'stockout',
+          dimension: 'category',
+          element: 'electronics',
+          verdict: 'likely',
+        },
       ],
       tasks: [{ task_id: 'task-1', title: 'Fix channel' }],
     },
     trace: [
       { step_id: 's1', seq: 1, node: 'parse_question', action: 'parse_question' },
-      { step_id: 's2', seq: 2, node: 'reflection_verify', action: 'reflection_verify' },
+      {
+        step_id: 's2',
+        seq: 2,
+        node: 'reflection_verify',
+        action: 'reflection_verify',
+        error_code: 'ATTRIBUTION_COVERAGE_LOW',
+        output_summary: {
+          passed: false,
+          issue_count: 1,
+          issues: [{ check: 'evidence_coverage', message: 'candidate_missing_evidence' }],
+          repair_count: 0,
+        },
+      },
     ],
     evidence: [{ evidence_id: 'run-1:E4', guard_status: 'passed', sql_hash: 'abc' }],
     sqlAudit: [{ audit_id: 1, guard_status: 'passed', row_count: 1 }],

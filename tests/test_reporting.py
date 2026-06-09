@@ -8,6 +8,7 @@ from metric_rca.reporting.projector import (
     evidence_by_alias,
     numeric_claims_from_e4,
     project_candidate_from_e4,
+    project_candidates_from_e4,
 )
 
 
@@ -199,6 +200,53 @@ def test_projector_helpers_are_deterministic_and_alias_scoped() -> None:
         "verdict": "confirmed",
     }
     assert claims == [{"name": "contribution_pct", "value": 0.9, "evidence_id": "run-1:E4"}]
+
+
+def test_project_candidates_from_e4_projects_safe_top_k_identity_fields() -> None:
+    candidates = project_candidates_from_e4(
+        {
+            "selected_candidate": _candidate(),
+            "candidates": [
+                _candidate(),
+                {
+                    **_candidate(),
+                    "element": "organic",
+                    "verdict": "likely",
+                    "contribution_pct": 0.1,
+                    "eng_confidence": 0.25,
+                },
+            ],
+        }
+    )
+
+    assert candidates == [
+        {
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "verdict": "confirmed",
+        },
+        {
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "organic",
+            "verdict": "likely",
+        },
+    ]
+    assert "contribution_pct" not in candidates[0]
+
+
+def test_project_candidates_from_e4_rejects_malformed_top_k_without_partial_projection() -> None:
+    candidates = project_candidates_from_e4(
+        {
+            "candidates": [
+                _candidate(),
+                {**_candidate(), "element": ""},
+            ],
+        }
+    )
+
+    assert candidates == []
 
 
 def _agent_run(*, status: str, error_code: str | None = None) -> dict[str, Any]:

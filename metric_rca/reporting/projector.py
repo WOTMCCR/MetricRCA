@@ -76,6 +76,22 @@ def project_candidate_from_e4(e4_result_summary: dict[str, Any]) -> dict[str, An
     return projected
 
 
+def project_candidates_from_e4(e4_result_summary: dict[str, Any]) -> list[dict[str, Any]]:
+    candidates = e4_result_summary.get("candidates")
+    if not isinstance(candidates, list):
+        return []
+
+    projected: list[dict[str, Any]] = []
+    for item in candidates:
+        if not isinstance(item, dict):
+            return []
+        candidate = {field: item.get(field) for field in IDENTITY_FIELDS}
+        if any(candidate[field] in (None, "") for field in IDENTITY_FIELDS):
+            return []
+        projected.append(candidate)
+    return projected
+
+
 def numeric_claims_from_e4(e4_result_summary: dict[str, Any], e4_id: str) -> list[dict[str, Any]]:
     selected = _selected_candidate(e4_result_summary)
     if selected is None or not e4_id:

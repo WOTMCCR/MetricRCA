@@ -98,9 +98,23 @@ def test_docs_do_not_claim_unimplemented_streamlit_ui() -> None:
     docs = "\n".join(
         [
             (ROOT / "README.md").read_text(),
+            (ROOT / "docs" / "MetricRCA.md").read_text(),
             (ROOT / "docs" / "architecture.md").read_text(),
             (ROOT / "docs" / "final-compliance.md").read_text(),
         ]
     )
     assert "Streamlit" not in docs
+    assert "streamlit" not in docs
     assert "React/Vite" in docs
+    assert "frontend/" in docs
+    assert "npm run dev --prefix frontend" in docs
+
+
+def test_metricrca_doc_uses_react_vite_not_streamlit() -> None:
+    metric_rca = (ROOT / "docs" / "MetricRCA.md").read_text()
+
+    assert "Streamlit" not in metric_rca
+    assert "streamlit" not in metric_rca
+    assert "React/Vite" in metric_rca
+    assert "frontend/" in metric_rca
+    assert "npm run dev --prefix frontend" in metric_rca

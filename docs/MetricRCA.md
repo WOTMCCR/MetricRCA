@@ -10,7 +10,7 @@ Metric-RCA Agent 是一个「Agentic Analytics」系统：当电商经营方观�
 
 核心设计原则：**LLM 不直接判定事实**。事实来自 MySQL 查询结果与确定性算法。LLM 仅负责：问题解析辅助、在受控动作空间内选择下一步、根据 observation 选择下钻方向、把结构化证据组织成报告文本；在 Reflection 修复阶段可提议「后续查询动作」，但该动作必须经过 schema 校验与 SQL Guardrail。
 
-- **3 天 MVP 达成**：固定问题族（6 类）、确定性异常检测（前 4 个同星期几基线）、GMV = UV × CVR × AOV 分解、维度贡献归因、sqlglot AST SQL 守卫、ReAct 动作 / 观察循环、Reflection 校验器（规则为主）、三层 Memory（working / session / case）、证据绑定报告、5 个带 ground truth 的 eval case、trace 持久化、Streamlit 调试 UI。可通过 `make up/seed/api/ui/eval/test` 启动验证。
+- **3 天 MVP 达成**：固定问题族（6 类）、确定性异常检测（前 4 个同星期几基线）、GMV = UV × CVR × AOV 分解、维度贡献归因、sqlglot AST SQL 守卫、ReAct 动作 / 观察循环、Reflection 校验器（规则为主）、三层 Memory（working / session / case）、证据绑定报告、5 个带 ground truth 的 eval case、trace 持久化、React/Vite 调试 UI。可通过 `make up/seed/api/ui/eval/test` 启动验证。
 - **1 个月增强**：Adtributor 风格的「解释力 + Surprise」多维归因、净 GMV 链路分解、语义 / 情景 / 反思记忆与（按需）向量库、20 类异常 case 库、SQL 守卫扩展、可观测性增强、可选 MCP/Multi-Agent。
 
 ---
@@ -279,7 +279,7 @@ class AgentRun(BaseModel):
 
 ```mermaid
 flowchart TB
-  UI[Streamlit 调试 UI] --> API[FastAPI]
+  UI[React/Vite 调试 UI] --> API[FastAPI]
   API --> ORCH[LangGraph 编排器 / RCAState]
   ORCH --> AGENT[ReAct 动作选择 - LLM]
   ORCH --> TOOLS[确定性工具层]
@@ -1025,7 +1025,7 @@ P3B/P4 约束：`generate_report` 只能做 verified artifact projection，不�
 - **error event**：trace_step.error_code + agent_run.error_code。
 - **latency 指标**：每 node latency_ms；run 总时长。
 - **token usage（可选）**：1 月接入。
-- **UI 展示 trace**：Streamlit 按 run_id 列出 trace_step 时序、每步动作 / 观察、evidence、SQL。
+- **UI 展示 trace**：React/Vite debug UI 通过 FastAPI 按 run_id 读取 trace_step 时序、每步动作 / 观察、evidence、SQL audit、Reflection issues 与 memory status。
 - **失败 RCA 复盘**：查 status=failed 的 run，看 error_code 落在哪个 node。
 - **重放 / 重构**：因 QuerySpec / SQL / seed 确定，可用相同 run 输入 + 固定 seed 重构同一 RCA 过程；trace_step 提供完整时序还原。
 
@@ -1082,18 +1082,40 @@ P5 必须额外校验：
 
 ---
 
-## 19. Frontend / Debug UI（Streamlit）
+## 19. Frontend / Debug UI（React/Vite）
 
-仅服务调试，无营销页。展示：
+前端采用独立 React/Vite 应用，位于 `frontend/`。它只作为调试和可观测 UI，不承担 RCA 计算逻辑。
+
+**前后端边界**：
+
+- 前端只通过 FastAPI 读取数据。
+- 前端不得 import `metric_rca.agent.graph`、tools、services 或 repositories。
+- 前端不得直接访问数据库。
+- 前端不得调用 OpenAI / LLM。
+- 前端不得构造 root cause、Evidence、Reflection 结论。
+- 前端展示的 report / candidates / trace / evidence / eval 均来自 API persisted artifact response。
+- API base URL 通过 `VITE_METRIC_RCA_API_BASE_URL` 配置，默认 `http://127.0.0.1:8000`。
+
+**React/Vite UI 面板**：
+
 - 问题输入框 + 跑 RCA 按钮
-- 最终 RCA 报告（含 verdict 标签）
-- 主因候选列表（贡献占比 / 工程置信度）
-- 证据列表（SQL / sql_hash / guard_status / result_summary）
-- SQL 列表（sql_audit）
-- ReAct 动作 / 观察 trace 时序
-- Reflection issues 与修复记录
-- memory 命中
-- eval 结果（指标表 + 每 case 明细）
+- 最终 RCA 报告（verified report projection）
+- 主因候选 Top-K（来自 persisted E4 result_summary.candidates 的安全投影）
+- Evidence table（evidence_id / sql_hash / guard_status / result_summary）
+- SQL audit table（sql_audit）
+- ReAct trace timeline（trace_step）
+- Reflection issues 与 repair trace
+- Memory hits / memory status
+- Eval summary（eval_run / eval_case_result）
+
+**安全要求**：
+
+- UI 只显示 API 返回的 persisted artifact projection。
+- UI 不得把 memory hit 渲染成 confirmed root cause。
+- UI 不得把 failed Reflection run 渲染成成功报告。
+- UI 不得在 eval 未实现或失败时展示 fake success。
+- UI import 时不得触发网络请求或 RCA run。
+- UI 测试必须使用 injectable fake API client。
 
 ---
 
@@ -1103,11 +1125,11 @@ P5 必须额外校验：
 metric_rca/
   pyproject.toml         # deps: fastapi, uvicorn, langgraph, langchain-core,
                          #       pydantic>=2, pydantic-settings, sqlalchemy>=2,
-                         #       pymysql, sqlglot, pandas, scikit-learn(可选),
-                         #       streamlit, pytest, httpx
-  docker-compose.yml     # services: mysql, api, ui
+                         #       pymysql, sqlglot, pandas, pytest, httpx
+  docker-compose.yml     # services: mysql
   Makefile               # up/seed/api/ui/eval/test
   metric_rca/...         # 见第 4 节
+  frontend/              # React/Vite debug UI
   tests/                 # test_guard.py, test_anomaly.py, test_attribution.py,
                          # test_graph.py, test_eval.py
 ```
@@ -1117,12 +1139,12 @@ metric_rca/
 up:   docker compose up -d mysql
 seed: python -m metric_rca.data.seed_data
 api:  uvicorn metric_rca.api.main:app --reload
-ui:   streamlit run metric_rca/ui/app.py
+ui:   npm run dev --prefix frontend
 eval: python -m metric_rca.evals.runner
 test: pytest -q
 ```
 
-**Docker Compose services**：mysql（8.x，初始化 schema.sql）、api（FastAPI）、ui（Streamlit）。
+**Docker Compose services**：mysql（8.x，初始化 schema.sql）。API 和 React/Vite UI 在本地分别通过 `make api` 与 `make ui` 启动；如后续要容器化 API/UI，必须保持 API 读 persisted artifacts、UI 只读 API 的边界。
 
 3 天实现顺序（每日 commit 粒度）：见第 21 节。
 
@@ -1148,8 +1170,8 @@ test: pytest -q
 - 当日不做：不做 Reflection 修复、不做向量记忆。
 
 **Day 3 — Reflection + Memory + UI + Eval**
-- 目标：Reflection 校验、三层 memory、Streamlit、5 case eval 全绿。
-- 任务：reflection.py、memory_repo.py、ui/app.py、evals/runner.py + scorer.py。
+- 目标：Reflection 校验、三层 memory、React/Vite debug UI、5 case eval 全绿。
+- 任务：reflection.py、memory_repo.py、frontend/、evals/runner.py + scorer.py。
 - 测试：test_eval.py（5 case）+ test_zero_fallback.py（LLM required 不可用、非法 action、memory required 失败、空结果、SQL retry exhausted、guard bypass 防护）。
 - 验收命令：`make up && make seed && make api && make ui && make eval && make test` 全部可用。
 - 验收标准：5 case 全绿（含 no_anomaly 不建任务）；UI 可见 trace / evidence / reflection / memory。

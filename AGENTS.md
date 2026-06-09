@@ -53,7 +53,7 @@ The following are explicitly unacceptable:
 - plain sequential function pretending to be LangGraph
 - empty placeholder node/tool modules
 - CLI print pretending to be FastAPI
-- print(json) pretending to be Streamlit
+- print(json) pretending to be a frontend debug UI
 - runtime service constants pretending to be DB-backed metric metadata or schema context
 - regex SQLGuard pretending to be sqlglot AST guard
 - hardcoded eval success
@@ -80,7 +80,7 @@ Future implementation work must preserve these architecture requirements:
 - `SQLGuard` implemented with sqlglot AST, not regex or prompt checks.
 - Reflection implemented as a rule verifier with the documented repair path.
 - Memory constrained to planning influence; it cannot become a final conclusion.
-- FastAPI and Streamlit implemented as real app surfaces, not CLI placeholders.
+- FastAPI and React/Vite implemented as real app surfaces, not CLI placeholders.
 - Eval reads `anomaly_ground_truth` and computes real `dangerous_sql_blocked`.
 
 ## Required Work Process

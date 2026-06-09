@@ -49,7 +49,7 @@ These shortcuts are P0 violations:
 - No plain sequential function pretending to be LangGraph.
 - No empty placeholder node/tool modules.
 - No CLI print pretending to be FastAPI.
-- No print(json) pretending to be Streamlit.
+- No print(json) pretending to be a frontend debug UI.
 - No runtime hardcoded metric metadata or schema context pretending to satisfy
   DB-backed metadata contracts.
 - No regex SQLGuard pretending to be sqlglot AST guard.
@@ -187,7 +187,7 @@ Memory must be constrained and auditable:
   - `POST /api/evals/run`
   - `GET /api/evals/{eval_id}`
   - `GET /health`
-- Streamlit must be a real debug UI, not `print(json)`.
+- React/Vite must be a real debug UI that reads FastAPI persisted artifacts, not `print(json)`.
 - Eval must read and validate against `anomaly_ground_truth`.
 - Eval must write `eval_run` and `eval_case_result`.
 - `dangerous_sql_blocked` must be a real boolean.

@@ -170,6 +170,21 @@ def test_reflection_repair_suggested_action_reenters_react_tool_guard_repo_and_g
     assert issue.suggested_action.args["evidence_ids"] == ["run-1:E1", "run-1:E2", "run-1:E3"]
 
 
+def test_reflection_trace_output_summary_contains_issue_details() -> None:
+    state = _state(candidates=[], evidences=[])
+    deps = _Dependencies()
+
+    reflection_verify(state, dependencies=deps)
+
+    output_summary = deps.trace_writer.steps[-1]["output_summary"]
+    assert output_summary["passed"] is False
+    assert output_summary["issue_count"] >= 1
+    assert output_summary["issues"][0]["check"] == "evidence_coverage"
+    assert output_summary["issues"][0]["message"]
+    assert "repair_pending" in output_summary
+    assert "repair_count" in output_summary
+
+
 def test_reflection_state_only_fabricated_evidence_fails() -> None:
     state = _state()
 
@@ -596,5 +611,9 @@ class _Repository:
 
 
 class _TraceWriter:
+    def __init__(self) -> None:
+        self.steps: list[dict[str, Any]] = []
+
     def write_step(self, **kwargs: Any) -> None:
+        self.steps.append(kwargs)
         return None

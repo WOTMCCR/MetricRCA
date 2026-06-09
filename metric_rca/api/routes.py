@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from metric_rca.api.dependencies import ApiDependencies, settings_with_overrides
@@ -20,7 +20,10 @@ from metric_rca.api.schemas import (
     TraceResponse,
 )
 from metric_rca.evals.models import EvalRuntimeError
-from metric_rca.reporting.projector import build_report_from_persisted_artifacts
+from metric_rca.reporting.projector import (
+    build_report_from_persisted_artifacts,
+    project_candidates_from_e4,
+)
 
 
 def build_router(dependencies: ApiDependencies) -> APIRouter:
@@ -59,7 +62,12 @@ def build_router(dependencies: ApiDependencies) -> APIRouter:
             evidences=evidences,
             tasks=tasks,
         )
-        candidates = _candidates_from_report(report)
+        candidates = _candidates_from_verified_report(
+            report=report,
+            status=str(result.get("status")),
+            run_id=run_id,
+            evidences=evidences,
+        )
         return RunResponse(
             run_id=run_id,
             status=str(result.get("status")),
@@ -71,12 +79,15 @@ def build_router(dependencies: ApiDependencies) -> APIRouter:
         )
 
     @router.get("/api/rca/runs/{run_id}", response_model=RunResponse)
-    def get_run(run_id: str) -> RunResponse:
+    def get_run(run_id: str) -> RunResponse | JSONResponse:
         repository = dependencies.get_repository()
         try:
             agent_run = repository.get_agent_run(run_id)
             if agent_run is None:
-                raise HTTPException(status_code=404, detail=_error_dict("RUN_NOT_FOUND", "run not found"))
+                return JSONResponse(
+                    status_code=404,
+                    content=_error_dict("RUN_NOT_FOUND", "run not found"),
+                )
             evidences = repository.get_evidences(run_id)
             tasks = repository.get_operation_tasks(run_id)
         except RuntimeError as exc:
@@ -94,7 +105,12 @@ def build_router(dependencies: ApiDependencies) -> APIRouter:
             status=str(agent_run.get("status")),
             error_code=error_code,
             report=report,
-            candidates=_candidates_from_report(report),
+            candidates=_candidates_from_verified_report(
+                report=report,
+                status=str(agent_run.get("status")),
+                run_id=run_id,
+                evidences=evidences,
+            ),
             tasks=tasks,
             links=_run_links(run_id),
         )
@@ -169,7 +185,10 @@ def build_router(dependencies: ApiDependencies) -> APIRouter:
         try:
             eval_run = repository.get_eval_run(eval_id)
             if eval_run is None:
-                raise HTTPException(status_code=404, detail=_error_dict("EVAL_NOT_FOUND", "eval not found"))
+                return JSONResponse(
+                    status_code=404,
+                    content=_error_dict("EVAL_NOT_FOUND", "eval not found"),
+                )
             cases = repository.get_eval_case_results(eval_id)
         except RuntimeError as exc:
             return _runtime_error_response(exc)
@@ -182,7 +201,10 @@ def _runtime_error_response(exc: RuntimeError) -> JSONResponse:
     code = str(exc).split(":", maxsplit=1)[0]
     if code not in _TYPED_RUNTIME_ERROR_CODES:
         code = "SYSTEM_TABLE_READ_FAILED"
-    return JSONResponse(status_code=500, content=_error_dict(code, _message_for_code(code)))
+    return JSONResponse(
+        status_code=_HTTP_STATUS_BY_CODE.get(code, 500),
+        content=_error_dict(code, _message_for_code(code)),
+    )
 
 
 def _error_dict(error_code: str, message: str) -> dict[str, Any]:
@@ -200,13 +222,27 @@ def _run_links(run_id: str) -> dict[str, str]:
     }
 
 
-def _candidates_from_report(report: dict[str, Any] | None) -> list[dict[str, Any]]:
-    if not report:
+def _candidates_from_evidences(*, run_id: str, evidences: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    e4_id = f"{run_id}:E4"
+    for evidence in evidences:
+        if evidence.get("evidence_id") == e4_id:
+            summary = evidence.get("result_summary") or {}
+            if isinstance(summary, dict):
+                return project_candidates_from_e4(summary)
+            return []
+    return []
+
+
+def _candidates_from_verified_report(
+    *,
+    report: dict[str, Any] | None,
+    status: str,
+    run_id: str,
+    evidences: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if status != "succeeded" or report is None:
         return []
-    top = report.get("top_candidate")
-    if not isinstance(top, dict):
-        return []
-    return [top]
+    return _candidates_from_evidences(run_id=run_id, evidences=evidences)
 
 
 _TYPED_RUNTIME_ERROR_CODES = {
@@ -219,6 +255,22 @@ _TYPED_RUNTIME_ERROR_CODES = {
     "LLM_REQUIRED_UNAVAILABLE",
     "MEMORY_READ_FAILED",
     "MEMORY_WRITE_FAILED",
+}
+
+
+_HTTP_STATUS_BY_CODE = {
+    "RUN_NOT_FOUND": 404,
+    "EVAL_NOT_FOUND": 404,
+    "REPORT_ARTIFACT_MISSING": 409,
+    "LLM_REQUIRED_UNAVAILABLE": 503,
+    "MEMORY_READ_FAILED": 409,
+    "MEMORY_WRITE_FAILED": 409,
+    "SQL_GUARD_REJECTED": 400,
+    "QUERY_BUDGET_EXCEEDED": 409,
+    "SYSTEM_TABLE_READ_FAILED": 500,
+    "SYSTEM_TABLE_WRITE_FAILED": 500,
+    "SQL_EXECUTION_FAILED": 500,
+    "SQL_PLAN_INVALID": 500,
 }
 
 

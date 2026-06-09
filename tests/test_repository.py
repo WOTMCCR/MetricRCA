@@ -312,6 +312,16 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
         conn.execute(
             text(
                 """
+                CREATE TABLE anomaly_ground_truth (
+                  case_id TEXT PRIMARY KEY, business_date TEXT, metric_id TEXT, expected_anomaly INTEGER,
+                  root_cause_type TEXT, dimension TEXT, element TEXT
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
                 INSERT INTO agent_run
                 VALUES ('run-1', 'why', 'gmv', '2026-06-05', 'succeeded', NULL, :now, :now)
                 """
@@ -376,6 +386,14 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
                 """
             )
         )
+        conn.execute(
+            text(
+                """
+                INSERT INTO anomaly_ground_truth
+                VALUES ('gmv_paid_ads_drop', '2026-06-05', 'gmv', 1, 'campaign_traffic_drop', 'channel', 'paid_ads')
+                """
+            )
+        )
 
     assert repo.get_agent_run("run-1")["status"] == "succeeded"
     assert [row["seq"] for row in repo.get_trace_steps("run-1")] == [1, 2]
@@ -385,5 +403,16 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
     assert repo.get_operation_tasks("run-1")[0]["payload"] == {"owner": "ops"}
     assert repo.get_eval_run("eval-1")["summary"] == {"case_total": 1}
     assert repo.get_eval_case_results("eval-1")[0]["detail"] == {"ok": True}
+    assert repo.get_ground_truth_cases(["gmv_paid_ads_drop", "missing"]) == {
+        "gmv_paid_ads_drop": {
+            "case_id": "gmv_paid_ads_drop",
+            "business_date": "2026-06-05",
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+        }
+    }
 
     repo.close()

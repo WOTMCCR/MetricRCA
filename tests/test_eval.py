@@ -205,7 +205,11 @@ def test_runtime_code_outside_seed_eval_tests_does_not_read_anomaly_ground_truth
     offenders = []
     for path in (root / "metric_rca").rglob("*.py"):
         relative = str(path.relative_to(root))
-        if relative.startswith("metric_rca/evals/") or relative == "metric_rca/data/seed_data.py":
+        if (
+            relative.startswith("metric_rca/evals/")
+            or relative == "metric_rca/data/seed_data.py"
+            or relative == "metric_rca/repositories/metric_repository.py"
+        ):
             continue
         if "anomaly_ground_truth" in path.read_text():
             offenders.append(relative)
@@ -217,6 +221,34 @@ def test_make_eval_no_longer_not_implemented() -> None:
     source = Path("metric_rca/evals/runner.py").read_text()
 
     assert "NOT IMPLEMENTED" not in source
+
+
+def test_eval_runner_uses_public_repository_ground_truth_reader() -> None:
+    source = Path("metric_rca/evals/runner.py").read_text()
+
+    assert "metric_rca.evals.repository" not in source
+    assert "read_ground_truth_cases" not in source
+
+
+def test_deprecated_eval_repository_helper_fails_fast_without_private_audit_access() -> None:
+    source = Path("metric_rca/evals/repository.py").read_text()
+
+    assert "_audit_engine" not in source
+    assert "SQLAlchemyError" not in source
+    assert "EVAL_GROUND_TRUTH_MISSING" in source
+
+
+def test_only_eval_runner_uses_ground_truth_repository_reader() -> None:
+    root = Path(__file__).resolve().parents[1]
+    offenders = []
+    for path in (root / "metric_rca").rglob("*.py"):
+        relative = str(path.relative_to(root))
+        if relative in {"metric_rca/evals/runner.py", "metric_rca/repositories/metric_repository.py"}:
+            continue
+        if ".get_ground_truth_cases(" in path.read_text():
+            offenders.append(relative)
+
+    assert offenders == []
 
 
 def _cases_file(tmp_path: Path) -> Path:

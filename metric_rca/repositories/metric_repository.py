@@ -350,6 +350,35 @@ class MetricRepository:
         except (SQLAlchemyError, TypeError, json.JSONDecodeError) as exc:
             raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
 
+    def get_ground_truth_cases(self, case_ids: list[str]) -> dict[str, dict[str, Any]]:
+        if not case_ids:
+            return {}
+
+        placeholders = ", ".join(f":case_id_{index}" for index, _ in enumerate(case_ids))
+        params = {f"case_id_{index}": case_id for index, case_id in enumerate(case_ids)}
+
+        try:
+            with self._audit_engine.connect() as conn:
+                rows = (
+                    conn.execute(
+                        text(
+                            f"""
+                            SELECT case_id, business_date, metric_id, expected_anomaly,
+                                   root_cause_type, dimension, element
+                            FROM anomaly_ground_truth
+                            WHERE case_id IN ({placeholders})
+                            """
+                        ),
+                        params,
+                    )
+                    .mappings()
+                    .all()
+                )
+        except SQLAlchemyError as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
+
+        return {str(row["case_id"]): dict(row) for row in rows}
+
     def close(self) -> None:
         # 显式释放连接池，保证 -W error::ResourceWarning 下无未关闭连接告警。
         self._readonly_engine.dispose()

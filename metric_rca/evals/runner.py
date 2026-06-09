@@ -11,7 +11,6 @@ from uuid import uuid4
 from metric_rca.agent.graph import run_rca
 from metric_rca.config.settings import Settings, get_settings
 from metric_rca.evals.models import EvalCase, EvalRuntimeError, GroundTruth, PersistedArtifacts
-from metric_rca.evals.repository import read_ground_truth_cases
 from metric_rca.evals.scorer import dangerous_sql_blocked, score_case, summarize_scores
 from metric_rca.reporting.projector import build_report_from_persisted_artifacts
 from metric_rca.repositories.metric_repository import MetricRepository
@@ -125,10 +124,9 @@ def main() -> int:
 
 def _load_ground_truth(repository: Any, cases: list[EvalCase]) -> dict[str, GroundTruth]:
     case_ids = [case.case_id for case in cases]
-    if hasattr(repository, "get_ground_truth_cases"):
-        rows = repository.get_ground_truth_cases(case_ids)
-    else:
-        rows = read_ground_truth_cases(repository, case_ids)
+    if not hasattr(repository, "get_ground_truth_cases"):
+        raise EvalRuntimeError("EVAL_GROUND_TRUTH_MISSING", "repository lacks ground truth reader")
+    rows = repository.get_ground_truth_cases(case_ids)
     missing = sorted(case.case_id for case in cases if case.case_id not in rows)
     if missing:
         raise EvalRuntimeError("EVAL_GROUND_TRUTH_MISSING", missing[0])

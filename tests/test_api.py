@@ -100,6 +100,43 @@ def test_get_run_reconstructs_verified_report_from_persisted_e4() -> None:
     ]
 
 
+def test_api_returns_top_k_candidates_from_persisted_e4_candidates() -> None:
+    repo = _Repository()
+    repo.agent_runs["run-1"] = _agent_run("run-1", status="succeeded")
+    repo.evidences["run-1"] = _evidences("run-1", candidate=_candidate())
+    first = repo.evidences["run-1"][-1]["result_summary"]["selected_candidate"]
+    repo.evidences["run-1"][-1]["result_summary"]["candidates"] = [
+        first,
+        {
+            **first,
+            "element": "organic",
+            "verdict": "likely",
+            "contribution_pct": 0.1,
+            "eng_confidence": 0.25,
+        },
+    ]
+
+    response = TestClient(create_app(ApiDependencies(repository=repo, rca_runner=_run_rca))).get(
+        "/api/rca/runs/run-1"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["candidates"] == [
+        {
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "verdict": "confirmed",
+        },
+        {
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "organic",
+            "verdict": "likely",
+        },
+    ]
+
+
 def test_get_run_failed_state_returns_error_and_no_report() -> None:
     repo = _Repository()
     repo.agent_runs["failed-run"] = _agent_run(
@@ -107,6 +144,7 @@ def test_get_run_failed_state_returns_error_and_no_report() -> None:
         status="failed",
         error_code="REFLECTION_REPAIR_FAILED",
     )
+    repo.evidences["failed-run"] = _evidences("failed-run", candidate=_candidate())
 
     response = TestClient(create_app(ApiDependencies(repository=repo, rca_runner=_run_rca))).get(
         "/api/rca/runs/failed-run"
@@ -117,6 +155,39 @@ def test_get_run_failed_state_returns_error_and_no_report() -> None:
     assert body["status"] == "failed"
     assert body["error_code"] == "REFLECTION_REPAIR_FAILED"
     assert body["report"] is None
+    assert body["candidates"] == []
+
+
+def test_get_missing_run_returns_unified_error_body() -> None:
+    response = TestClient(create_app(ApiDependencies(repository=_Repository(), rca_runner=_run_rca))).get(
+        "/api/rca/runs/missing"
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error_code": "RUN_NOT_FOUND",
+        "message": "run not found",
+        "recoverable": False,
+        "retryable": False,
+        "trace_step_id": None,
+        "suggested_next_action": None,
+    }
+
+
+def test_unmatched_route_returns_unified_error_body() -> None:
+    response = TestClient(create_app(ApiDependencies(repository=_Repository(), rca_runner=_run_rca))).get(
+        "/api/not-real"
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error_code": "ROUTE_NOT_FOUND",
+        "message": "route not found",
+        "recoverable": False,
+        "retryable": False,
+        "trace_step_id": None,
+        "suggested_next_action": None,
+    }
 
 
 def test_get_run_no_anomaly_has_e1_only_no_task_no_candidate() -> None:
@@ -234,6 +305,22 @@ def test_api_eval_endpoint_runs_real_eval() -> None:
     assert response.status_code == 200
     assert response.json()["summary"]["case_total"] == 5
     assert repo.eval_calls == 1
+
+
+def test_get_missing_eval_returns_unified_error_body() -> None:
+    response = TestClient(create_app(ApiDependencies(repository=_Repository(), rca_runner=_run_rca))).get(
+        "/api/evals/missing"
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error_code": "EVAL_NOT_FOUND",
+        "message": "eval not found",
+        "recoverable": False,
+        "retryable": False,
+        "trace_step_id": None,
+        "suggested_next_action": None,
+    }
 
 
 def _run_rca(question: str, **kwargs: Any) -> dict[str, Any]:

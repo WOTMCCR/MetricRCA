@@ -77,10 +77,14 @@ export class HttpMetricRcaApiClient implements MetricRcaApiClient {
   }
 
   runEval(): Promise<EvalResponse | ApiError> {
-    return this.request('/api/evals/run', { method: 'POST' });
+    return this.request('/api/evals/run', { method: 'POST' }, { allowApiError: true });
   }
 
-  private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  private async request<T>(
+    path: string,
+    init: RequestInit = {},
+    options: { allowApiError?: boolean } = {},
+  ): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...init,
       headers: {
@@ -89,7 +93,13 @@ export class HttpMetricRcaApiClient implements MetricRcaApiClient {
       },
     });
     const body = await response.json();
-    if (!response.ok && !isApiError(body)) {
+    if (!response.ok) {
+      if (isApiError(body)) {
+        if (options.allowApiError === true) {
+          return body as T;
+        }
+        throw new Error(`${body.error_code}:${body.message}`);
+      }
       throw new Error(`API_REQUEST_FAILED:${response.status}`);
     }
     return body as T;

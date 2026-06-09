@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   HttpMetricRcaApiClient,
@@ -81,8 +81,6 @@ export function App({ apiClient = defaultClient, initialData }: AppProps) {
     }
   }
 
-  const topCandidate = useMemo(() => loaded?.run.candidates[0] ?? null, [loaded]);
-
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -121,7 +119,10 @@ export function App({ apiClient = defaultClient, initialData }: AppProps) {
         </Panel>
 
         <Panel title="Root Cause Top-K">
-          <KeyValueRows rows={(topCandidate ?? {}) as Record<string, unknown>} />
+          <DataTable
+            rows={loaded?.run.candidates ?? []}
+            columns={['root_cause_type', 'dimension', 'element', 'verdict']}
+          />
         </Panel>
 
         <Panel title="Evidence Table">
@@ -209,7 +210,7 @@ function KeyValueRows({ rows }: { rows: Record<string, unknown> }) {
 
 function ReflectionIssues({ trace }: { trace: Array<Record<string, unknown>> }) {
   const rows = trace.filter((row) => row.node === 'reflection_verify');
-  return <DataTable rows={rows} columns={['seq', 'node', 'error_code']} />;
+  return <DataTable rows={rows} columns={['seq', 'error_code', 'output_summary']} />;
 }
 
 function EvalStatus({ value }: { value: Record<string, unknown> | null }) {
