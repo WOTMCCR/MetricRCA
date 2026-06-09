@@ -1,3 +1,46 @@
+## ADL-0006: Final Report Is A Verified Artifact Projection Until P4 Persistence
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-09 |
+| 状态 | accepted |
+| 关联迭代 | p3b-reflection-memory |
+| 影响范围 | generate_report, reflection, P4 API persistence |
+
+### 背景与场景
+
+P3B Reflection 已经能校验 current-run guard-passed Evidence、persisted
+Evidence、repair path 和 memory pollution。P4 API/UI 将暴露 RCA run outputs，
+因此 P3 的 final report 不能在 Reflection 之后新增未经验证的数字或因果结论。
+
+### 决策
+
+在 P3B 中，`generate_report` 只做已验证 artifact 的机械投影：
+
+- 不暴露完整 `RootCauseCandidate` 数值字段。
+- 只输出非数值候选身份字段：`root_cause_type`、`dimension`、`element`、`verdict`。
+- 所有数值只允许出现在 `numeric_claims`。
+- 每个 `numeric_claim` 必须绑定 persisted Evidence，当前为 E4。
+- persisted E4 的 `result_summary.selected_candidate` 必须与 state top candidate 完全一致。
+- failed 或 missing Reflection 不得生成 report。
+
+### 理由
+
+这能避免 P3 在 Reflection 之后生成未经验证的新数字，保护 P4 API/UI 和 P5
+eval 的可观察边界。P4 仍需实现 report artifact persistence，不允许 GET route
+返回内存态或硬编码 report。
+
+### P4 前置要求
+
+P4 必须选择并实现一种 report persistence 策略：
+
+1. 在 `agent_run` 增加 `report_json` / `final_state_summary`；
+2. 或新增 `report_artifact` 表；
+3. 或从 persisted evidence/candidates/trace 做确定性重构。
+
+无论选择哪种，API `GET /api/rca/runs/{run_id}` 都不能返回 route-level
+hardcoded data，也不能依赖未持久化的 graph return state。
+
 ## ADL-0005: P3B Reflection Repair And Memory Stay Evidence-Bound
 
 | 字段 | 值 |

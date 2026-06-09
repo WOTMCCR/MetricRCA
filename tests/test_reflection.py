@@ -198,6 +198,42 @@ def test_reflection_persisted_evidence_sql_hash_mismatch_fails() -> None:
     assert "persisted_evidence" in _checks(verified["reflection"])
 
 
+def test_reflection_top_candidate_must_match_persisted_e4_selected_candidate() -> None:
+    state_candidate = _candidate(contribution_pct=0.90)
+    persisted_candidate = _candidate(contribution_pct=0.10)
+
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2"),
+        _evidence("run-1:E3"),
+        _evidence("run-1:E4", summary={"selected_candidate": state_candidate.model_dump(mode="json")}),
+    ]
+    state = _state(candidates=[state_candidate], evidences=evidences)
+    persisted = _persisted_rows(evidences)
+    persisted["run-1:E4"]["result_summary"] = {
+        "selected_candidate": persisted_candidate.model_dump(mode="json")
+    }
+
+    verified = reflection_verify(state, dependencies=_Dependencies(persisted_evidence=persisted))
+
+    assert verified["reflection"].passed is False
+    assert verified["error_code"] == "REFLECTION_REPAIR_FAILED"
+    assert "candidate_traceability" in _checks(verified["reflection"])
+
+
+def test_reflection_without_persisted_evidence_map_fails_in_p3b_mode() -> None:
+    state = _state()
+
+    result = verify_reflection(
+        state,
+        max_repair=1,
+        persisted_evidence_by_id=None,
+    )
+
+    assert result.passed is False
+    assert "persisted_evidence" in _checks(result)
+
+
 def test_reflection_persisted_evidence_run_id_or_guard_mismatch_fails() -> None:
     state = _state()
     for mutated_row in [
@@ -340,13 +376,16 @@ def test_reflection_repair_failed_routes_error_return_no_report() -> None:
 
 
 def test_generate_report_has_no_unverified_numeric_claims() -> None:
+    candidate = _candidate()
+    e4_summary = {"selected_candidate": candidate.model_dump(mode="json")}
     evidences = [
         _evidence("run-1:E1"),
         _evidence("run-1:E2"),
         _evidence("run-1:E3"),
-        _evidence("run-1:E4", summary={"selected_candidate": _candidate().model_dump(mode="json")}),
+        _evidence("run-1:E4", summary=e4_summary),
     ]
     state = _state(
+        candidates=[candidate],
         evidences=evidences,
         report={"status": "succeeded", "numeric_claims": [{"name": "ignored_prior_report", "value": 999.0}]},
         reflection=ReflectionResult(passed=True, issues=[], repaired=False, repair_count=0),
@@ -355,9 +394,50 @@ def test_generate_report_has_no_unverified_numeric_claims() -> None:
     result = generate_report(state, dependencies=_Dependencies(persisted_evidence=_persisted_rows(evidences)))
 
     assert result["status"] == "succeeded"
-    assert result["report"]["numeric_claims"] == [
+    report = result["report"]
+
+    assert report["top_candidate"] == {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "verdict": "confirmed",
+    }
+    assert "contribution_pct" not in report["top_candidate"]
+    assert "signal_severity" not in report["top_candidate"]
+    assert "evidence_support" not in report["top_candidate"]
+    assert "eng_confidence" not in report["top_candidate"]
+
+    assert report["numeric_claims"] == [
         {"name": "contribution_pct", "value": 0.90, "evidence_id": "run-1:E4"}
     ]
+
+
+def test_generate_report_rejects_unverified_top_candidate_numeric_fields() -> None:
+    state_candidate = _candidate(contribution_pct=0.90)
+    persisted_candidate = _candidate(contribution_pct=0.10)
+
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2"),
+        _evidence("run-1:E3"),
+        _evidence("run-1:E4", summary={"selected_candidate": state_candidate.model_dump(mode="json")}),
+    ]
+    persisted = _persisted_rows(evidences)
+    persisted["run-1:E4"]["result_summary"] = {
+        "selected_candidate": persisted_candidate.model_dump(mode="json")
+    }
+
+    state = _state(
+        candidates=[state_candidate],
+        evidences=evidences,
+        reflection=ReflectionResult(passed=True, issues=[], repaired=False, repair_count=0),
+    )
+
+    result = generate_report(state, dependencies=_Dependencies(persisted_evidence=persisted))
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "REFLECTION_REPAIR_FAILED"
+    assert "report" not in result
 
 
 def test_generate_report_after_failed_or_missing_reflection_fails() -> None:
@@ -372,15 +452,21 @@ def test_generate_report_after_failed_or_missing_reflection_fails() -> None:
 
 
 def test_final_report_numbers_are_traceable_to_persisted_evidence() -> None:
+    candidate = _candidate(contribution_pct=0.90)
+    persisted_candidate = _candidate(contribution_pct=0.10)
+
     evidences = [
         _evidence("run-1:E1"),
         _evidence("run-1:E2"),
         _evidence("run-1:E3"),
-        _evidence("run-1:E4", summary={"selected_candidate": _candidate().model_dump(mode="json")}),
+        _evidence("run-1:E4", summary={"selected_candidate": candidate.model_dump(mode="json")}),
     ]
     persisted = _persisted_rows(evidences)
-    persisted["run-1:E4"]["result_summary"] = {"selected_candidate": {"contribution_pct": 0.10}}
+    persisted["run-1:E4"]["result_summary"] = {
+        "selected_candidate": persisted_candidate.model_dump(mode="json")
+    }
     state = _state(
+        candidates=[candidate],
         evidences=evidences,
         reflection=ReflectionResult(passed=True, issues=[], repaired=False, repair_count=0),
     )

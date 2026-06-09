@@ -1,8 +1,13 @@
-"""generate_report node."""
+"""generate_report node.
+
+P3B boundary:
+- Report generation is a mechanical projection of reflection-verified artifacts.
+- It must not introduce new numeric claims or causal claims after reflection.
+- Numeric claims must be traceable to persisted Evidence, not only in-memory state.
+"""
 
 from __future__ import annotations
 
-import math
 from typing import Any
 
 from metric_rca.agent.nodes._common import dump_model, fail, start_timer, trace
@@ -10,12 +15,13 @@ from metric_rca.agent.nodes._common import dump_model, fail, start_timer, trace
 
 def generate_report(state: dict[str, Any], *, dependencies: Any) -> dict[str, Any]:
     started = start_timer()
+
     if state.get("status") == "no_anomaly":
         report = {
             "status": "no_anomaly",
             "metric_id": state.get("metric_id"),
             "target_date": str(state.get("target_date")),
-            "evidence_ids": [getattr(item, "evidence_id", None) for item in state.get("evidences", [])],
+            "evidence_ids": _state_evidence_ids(state),
         }
         final_status = "no_anomaly"
     else:
@@ -33,17 +39,29 @@ def generate_report(state: dict[str, Any], *, dependencies: Any) -> dict[str, An
                 error_code=str(error_code),
                 started_at=started,
             ) or update
+
         candidates = state.get("candidates", [])
-        top = dump_model(candidates[0]) if candidates else None
-        report = {
-            "status": "succeeded",
-            "metric_id": state.get("metric_id"),
-            "target_date": str(state.get("target_date")),
-            "top_candidate": top,
-            "evidence_ids": top.get("evidence_ids", []) if top else [],
-            "numeric_claims": _candidate_numeric_claims(top),
-        }
-        if not _final_report_numbers_are_traceable(report, state=state, dependencies=dependencies):
+        if not candidates:
+            error_code = "ATTRIBUTION_COVERAGE_LOW"
+            update = fail(error_code)
+            return trace(
+                dependencies=dependencies,
+                state=state,
+                node="generate_report",
+                action="generate_report",
+                input_summary={"status": state.get("status")},
+                output_summary={"error_code": error_code},
+                error_code=error_code,
+                started_at=started,
+            ) or update
+
+        candidate = dump_model(candidates[0])
+        verified = _verified_candidate_report(
+            candidate=candidate,
+            state=state,
+            dependencies=dependencies,
+        )
+        if verified is None:
             error_code = "REFLECTION_REPAIR_FAILED"
             update = fail(error_code)
             return trace(
@@ -56,7 +74,17 @@ def generate_report(state: dict[str, Any], *, dependencies: Any) -> dict[str, An
                 error_code=error_code,
                 started_at=started,
             ) or update
+
+        report = {
+            "status": "succeeded",
+            "metric_id": state.get("metric_id"),
+            "target_date": str(state.get("target_date")),
+            "top_candidate": verified["top_candidate"],
+            "evidence_ids": verified["evidence_ids"],
+            "numeric_claims": verified["numeric_claims"],
+        }
         final_status = "succeeded"
+
     trace_error = trace(
         dependencies=dependencies,
         state=state,
@@ -69,36 +97,88 @@ def generate_report(state: dict[str, Any], *, dependencies: Any) -> dict[str, An
     return trace_error or {"report": report, "status": final_status}
 
 
-def _candidate_numeric_claims(candidate: dict[str, Any] | None) -> list[dict[str, Any]]:
-    if candidate is None:
-        return []
-    value = candidate.get("contribution_pct")
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return []
-    evidence_id = _evidence_id_for_alias(candidate.get("evidence_ids", []), "E4")
-    if evidence_id is None:
-        return []
-    return [{"name": "contribution_pct", "value": float(value), "evidence_id": evidence_id}]
+def _verified_candidate_report(
+    *,
+    candidate: dict[str, Any],
+    state: dict[str, Any],
+    dependencies: Any,
+) -> dict[str, Any] | None:
+    evidence_ids = [str(value) for value in candidate.get("evidence_ids", [])]
+    e4_id = _evidence_id_for_alias(evidence_ids, "E4")
+    if e4_id is None:
+        return None
 
-
-def _final_report_numbers_are_traceable(report: dict[str, Any], *, state: dict[str, Any], dependencies: Any) -> bool:
     repository = getattr(dependencies, "repository", None)
     if repository is None or not hasattr(repository, "get_evidence"):
-        return False
+        return None
+
     try:
-        for claim in report.get("numeric_claims", []):
-            evidence_id = claim.get("evidence_id")
-            if not evidence_id:
-                return False
-            row = repository.get_evidence(run_id=state["run_id"], evidence_id=str(evidence_id))
-            if row is None:
-                return False
-            rounded = {_round_number(value) for value in _numbers(row.get("result_summary") or {})}
-            if _round_number(claim["value"]) not in rounded:
-                return False
+        persisted_e4 = repository.get_evidence(run_id=state["run_id"], evidence_id=e4_id)
     except RuntimeError:
+        return None
+
+    if persisted_e4 is None:
+        return None
+    if persisted_e4.get("run_id") != state.get("run_id"):
+        return None
+    if persisted_e4.get("guard_status") != "passed":
+        return None
+
+    summary = persisted_e4.get("result_summary") or {}
+    if not isinstance(summary, dict):
+        return None
+
+    selected_candidate = summary.get("selected_candidate")
+    if not isinstance(selected_candidate, dict):
+        return None
+
+    if not _candidate_projection_matches(candidate, selected_candidate):
+        return None
+
+    contribution_pct = selected_candidate.get("contribution_pct")
+    if isinstance(contribution_pct, bool) or not isinstance(contribution_pct, int | float):
+        return None
+
+    return {
+        "top_candidate": _safe_candidate_projection(selected_candidate),
+        "evidence_ids": [str(value) for value in selected_candidate.get("evidence_ids", [])],
+        "numeric_claims": [
+            {
+                "name": "contribution_pct",
+                "value": float(contribution_pct),
+                "evidence_id": e4_id,
+            }
+        ],
+    }
+
+
+def _candidate_projection_matches(candidate: dict[str, Any], selected: dict[str, Any]) -> bool:
+    return (
+        _safe_candidate_projection(candidate) == _safe_candidate_projection(selected)
+        and _numeric_equal(candidate.get("contribution_pct"), selected.get("contribution_pct"))
+        and _numeric_equal(candidate.get("signal_severity"), selected.get("signal_severity"))
+        and _numeric_equal(candidate.get("evidence_support"), selected.get("evidence_support"))
+        and _numeric_equal(candidate.get("reflection_factor", 1.0), selected.get("reflection_factor", 1.0))
+        and _numeric_equal(candidate.get("eng_confidence"), selected.get("eng_confidence"))
+    )
+
+
+def _safe_candidate_projection(candidate: dict[str, Any]) -> dict[str, Any]:
+    """Return only non-numeric user-facing candidate identity fields."""
+    return {
+        "root_cause_type": candidate.get("root_cause_type"),
+        "dimension": candidate.get("dimension"),
+        "element": candidate.get("element"),
+        "verdict": candidate.get("verdict"),
+    }
+
+
+def _numeric_equal(left: Any, right: Any) -> bool:
+    if isinstance(left, bool) or isinstance(right, bool):
         return False
-    return True
+    if not isinstance(left, int | float) or not isinstance(right, int | float):
+        return False
+    return round(float(left), 6) == round(float(right), 6)
 
 
 def _evidence_id_for_alias(evidence_ids: list[str], alias: str) -> str | None:
@@ -109,23 +189,12 @@ def _evidence_id_for_alias(evidence_ids: list[str], alias: str) -> str | None:
     return None
 
 
-def _numbers(value: Any) -> list[float]:
-    if isinstance(value, bool):
-        return []
-    if isinstance(value, int | float) and math.isfinite(float(value)):
-        return [float(value)]
-    if isinstance(value, dict):
-        nums: list[float] = []
-        for item in value.values():
-            nums.extend(_numbers(item))
-        return nums
-    if isinstance(value, list):
-        nums: list[float] = []
-        for item in value:
-            nums.extend(_numbers(item))
-        return nums
-    return []
-
-
-def _round_number(value: float) -> float:
-    return round(float(value), 6)
+def _state_evidence_ids(state: dict[str, Any]) -> list[str]:
+    ids: list[str] = []
+    for item in state.get("evidences", []) or []:
+        evidence_id = getattr(item, "evidence_id", None)
+        if evidence_id is None and isinstance(item, dict):
+            evidence_id = item.get("evidence_id")
+        if evidence_id is not None:
+            ids.append(str(evidence_id))
+    return ids

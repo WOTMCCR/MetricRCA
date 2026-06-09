@@ -101,6 +101,17 @@ def verify_reflection(
             evidence_by_id=evidence_by_id,
         ):
             issues.append(_issue("signal_consistency", "E3 signal does not match selected candidate"))
+        if candidate is candidates[0] and not _top_candidate_matches_persisted_e4(
+            state=state,
+            candidate=candidate,
+            persisted_evidence_by_id=persisted_evidence_by_id,
+        ):
+            issues.append(
+                _issue(
+                    "candidate_traceability",
+                    "top candidate does not match persisted E4 selected_candidate",
+                )
+            )
 
     for evidence in evidence_by_id.values():
         if not evidence.evidence_id.startswith(f"{state.get('run_id')}:"):
@@ -151,11 +162,14 @@ def _persisted_evidence_matches(
     evidence: Evidence,
     persisted_evidence_by_id: dict[str, dict[str, Any] | None] | None,
 ) -> bool:
+    # P3B verifier must not silently degrade to state-only evidence.
     if persisted_evidence_by_id is None:
-        return True
+        return False
+
     persisted = persisted_evidence_by_id.get(evidence.evidence_id)
     if persisted is None:
         return False
+
     return (
         persisted.get("run_id") == state.get("run_id")
         and persisted.get("guard_status") == "passed"
@@ -190,6 +204,36 @@ def _e3_signal_matches_candidate(
         and summary.get("dimension") == candidate.dimension
         and str(summary.get("element")) == str(candidate.element)
     )
+
+
+def _top_candidate_matches_persisted_e4(
+    *,
+    state: dict[str, Any],
+    candidate: RootCauseCandidate,
+    persisted_evidence_by_id: dict[str, dict[str, Any] | None] | None,
+) -> bool:
+    e4_id = f"{state.get('run_id')}:E4"
+
+    # Missing E4 is already handled by required_evidence_present.
+    if e4_id not in candidate.evidence_ids:
+        return True
+
+    if persisted_evidence_by_id is None:
+        return False
+
+    persisted_e4 = persisted_evidence_by_id.get(e4_id)
+    if persisted_e4 is None:
+        return False
+
+    summary = persisted_e4.get("result_summary") or {}
+    if not isinstance(summary, dict):
+        return False
+
+    selected = summary.get("selected_candidate")
+    if not isinstance(selected, dict):
+        return False
+
+    return _canonical(candidate) == _canonical(selected)
 
 
 def _missing_required_aliases(state: dict[str, Any], evidence_ids: list[str]) -> list[str]:
@@ -298,13 +342,19 @@ def _traceability_summaries(
     evidences: Any,
     persisted_evidence_by_id: dict[str, dict[str, Any] | None] | None,
 ) -> list[dict[str, Any]]:
+    # Numeric traceability must be based on persisted Evidence rows.
+    # State-only result_summary is not an acceptable source for P3B.
     if persisted_evidence_by_id is None:
-        return [evidence.result_summary for evidence in evidences]
-    return [
-        dict(row.get("result_summary") or {})
-        for row in persisted_evidence_by_id.values()
-        if row is not None
-    ]
+        return []
+
+    summaries: list[dict[str, Any]] = []
+    for evidence in evidences:
+        row = persisted_evidence_by_id.get(evidence.evidence_id)
+        if row is not None:
+            summary = row.get("result_summary") or {}
+            if isinstance(summary, dict):
+                summaries.append(summary)
+    return summaries
 
 
 def _numeric_claims(report: Any) -> list[float]:
