@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import date
 from functools import lru_cache
+import os
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -44,18 +45,47 @@ class Settings(BaseSettings):
     # 单条 SQL 的执行超时（毫秒），repo 执行前 SET SESSION 生效，防慢查。
     statement_timeout_ms: int = 3000
 
-    # LLM / Memory 的启用与"是否必需"开关。MVP 默认确定性主策略（llm 不启用）。
-    llm_enabled: bool = False
+    # LLM / Memory 的启用与"是否必需"开关。问题解析必须真实调用 OpenAI IntentPlanner；
+    # 缺少 provider / API key 时直接 fail-fast，不允许 mock 或 fallback parser。
+    llm_enabled: bool = True
     llm_required: bool = False
-    llm_provider: str | None = None
+    llm_provider: str | None = "openai"
+    llm_model: str = "gpt-5.4-nano"
+    llm_api_key: str | None = None
     memory_enabled: bool = True
     memory_required: bool = False
+    signal_metric_by_type: dict[str, str] = Field(
+        default_factory=lambda: {
+            "campaign": "gmv",
+            "inventory": "stockout_rate",
+            "conversion": "pay_cvr",
+            "refund_quality": "complaint_rate",
+        }
+    )
+    root_cause_type_by_metric: dict[str, str] = Field(
+        default_factory=lambda: {
+            "refund_rate": "complaint_or_quality_issue",
+            "pay_cvr": "conversion_drop",
+        }
+    )
+    root_cause_type_by_dimension: dict[str, str] = Field(
+        default_factory=lambda: {
+            "channel": "campaign_traffic_drop",
+            "category": "stockout",
+            "device": "conversion_drop",
+        }
+    )
+    root_cause_type_by_dimension_element: dict[str, str] = Field(
+        default_factory=dict
+    )
 
     @model_validator(mode="after")
     def _required_provider_available(self) -> Settings:
+        if self.llm_api_key is None:
+            self.llm_api_key = os.getenv("OPENAI_API_KEY")
         # Zero-Fallback 前移：如果该运行"要求 LLM"但没有配置 provider，
         # 在配置构造期就抛 typed error，而不是等运行到一半才发现再静默兜底。
-        if self.llm_required and not self.llm_provider:
+        if self.llm_required and (not self.llm_provider or not self.llm_api_key):
             raise ValueError("LLM_REQUIRED_UNAVAILABLE")
         return self
 

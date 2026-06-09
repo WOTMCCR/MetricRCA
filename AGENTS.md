@@ -28,13 +28,13 @@ encode the docs, then make the implementation pass those tests.
 
 ## Environment
 
-- Last preflight: 2026-06-08T11:32:02+08:00; see `docs/env-setup.md`.
+- Last preflight refresh: 2026-06-09T08:43:00+08:00; see `docs/env-setup.md`.
 - Runtime available: Python 3.12.3, Node v20.19.6.
 - Network: GitHub, npm registry, and PyPI reachable through current environment.
 - Proxy: `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and lowercase variants are set to localhost proxy ports; `NO_PROXY` includes localhost loopback addresses.
 - Local service traffic must avoid proxy leakage; for Python `httpx` local calls use `trust_env=False`.
 - Project is in WSL on a native Linux path.
-- No package dependencies are installed yet because no app stack marker exists.
+- Python dependencies are installed in project-local `.venv`; use `PATH=.venv/bin:$PATH make seed` and `PATH=.venv/bin:$PATH make test` so Makefile `python` resolves correctly.
 
 ## Strict Implementation Contract
 
@@ -54,6 +54,7 @@ The following are explicitly unacceptable:
 - empty placeholder node/tool modules
 - CLI print pretending to be FastAPI
 - print(json) pretending to be Streamlit
+- runtime service constants pretending to be DB-backed metric metadata or schema context
 - regex SQLGuard pretending to be sqlglot AST guard
 - hardcoded eval success
 - dangerous_sql_blocked = null
@@ -72,6 +73,10 @@ Future implementation work must preserve these architecture requirements:
 - Real ReAct `AgentAction -> Observation -> Evidence` loop.
 - Real deterministic tool layer in the documented tool modules.
 - `QuerySpec -> SQLRenderer -> SQLGuard -> Repository` as the only data access path.
+- Metric metadata and schema context must be DB-backed or schema-backed through
+  repository/metadata contracts. Do not duplicate `metric_definition`, schema
+  context, seeded dimension values, channel/category lists, or product IDs as
+  runtime service constants.
 - `SQLGuard` implemented with sqlglot AST, not regex or prompt checks.
 - Reflection implemented as a rule verifier with the documented repair path.
 - Memory constrained to planning influence; it cannot become a final conclusion.
@@ -98,5 +103,16 @@ During implementation:
 - Do not weaken tests to fit shortcuts.
 - Do not implement source files as empty placeholders or re-export-only modules
   when docs assign responsibilities.
+- Do not satisfy `get_metric_definition` or `get_schema_context` with hardcoded
+  dictionaries. Tests must fail if persisted metadata changes but runtime
+  returns stale constants.
 - Every final response must include commands run, test output summary, and
   remaining deviations.
+
+Before every future iteration final response:
+
+- Run a subagent code review after local verification.
+- Run Claude CLI review with `--model opus --effort high` when local CLI
+  authentication is available; if authentication, model access, or CLI
+  availability blocks it, report the exact failure and do not silently
+  substitute another reviewer.

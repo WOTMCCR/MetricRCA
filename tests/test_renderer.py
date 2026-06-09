@@ -43,6 +43,39 @@ def test_gmv_current_render_contract() -> None:
     assert plan.params["start_date"] == date(2026, 6, 5)
 
 
+def test_baseline_uses_exact_previous_four_same_weekdays_not_broad_between() -> None:
+    plan = SQLRenderer().render(_spec("gmv", purpose="baseline"))
+    guarded = guard_sql(plan)
+
+    assert guarded.guard_status == "passed", guarded.guard_errors
+    assert "business_date IN (:baseline_d0, :baseline_d1, :baseline_d2, :baseline_d3)" in plan.sql
+    assert " BETWEEN " not in plan.sql
+    assert plan.params["baseline_d0"] == date(2026, 5, 29)
+    assert plan.params["baseline_d1"] == date(2026, 5, 22)
+    assert plan.params["baseline_d2"] == date(2026, 5, 15)
+    assert plan.params["baseline_d3"] == date(2026, 5, 8)
+    assert "fact_order.business_date AS business_date" in plan.sql
+    assert "GROUP BY fact_order.business_date" in plan.sql
+
+
+def test_campaign_signal_baseline_uses_fact_campaign_same_weekday_in_query() -> None:
+    spec = build_query_spec(
+        metric_id="gmv",
+        start_date=date(2026, 6, 5),
+        end_date=date(2026, 6, 5),
+        filters={"channel": "paid_ads"},
+        purpose="baseline",
+        signal_type="campaign",
+    )
+    plan = SQLRenderer().render(spec)
+    guarded = guard_sql(plan)
+
+    assert guarded.guard_status == "passed", guarded.guard_errors
+    assert "FROM fact_campaign" in plan.sql
+    assert "fact_campaign.business_date IN (:baseline_d0, :baseline_d1, :baseline_d2, :baseline_d3)" in plan.sql
+    assert "fact_order" not in plan.sql
+
+
 def test_category_uses_exact_renderer_join_and_channel_has_no_join() -> None:
     category = SQLRenderer().render(_spec("gmv", ["category"]))
     assert (

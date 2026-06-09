@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_pyproject_declares_matrix_row1_dependencies() -> None:
+def test_pyproject_declares_current_phase_dependencies() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
     assert pyproject["project"]["name"] == "metric_rca"
     assert pyproject["project"]["requires-python"] == ">=3.12,<3.13"
@@ -26,6 +26,8 @@ def test_pyproject_declares_matrix_row1_dependencies() -> None:
         "pymysql",
         "sqlglot",
         "pandas",
+        "langchain-openai",
+        "httpx[socks]",
         "pytest",
     }
     forbidden_phase_gt1 = {
@@ -34,7 +36,6 @@ def test_pyproject_declares_matrix_row1_dependencies() -> None:
         "langgraph",
         "langchain-core",
         "streamlit",
-        "httpx",
         "scikit-learn",
     }
     assert set(declared) == required

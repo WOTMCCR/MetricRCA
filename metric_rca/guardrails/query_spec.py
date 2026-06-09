@@ -34,6 +34,7 @@ def build_query_spec(
     filters: dict[str, str] | None = None,
     limit: int = 1000,
     purpose: Literal["current", "baseline", "drilldown", "signal"] = "current",
+    signal_type: Literal["metric", "campaign"] = "metric",
 ) -> QuerySpec:
     """校验并构造 QuerySpec；失败统一抛 QuerySpecError(code, message)。"""
     groups = group_by or []
@@ -64,6 +65,7 @@ def build_query_spec(
             filters=filter_values,
             limit=limit,
             purpose=purpose,
+            signal_type=signal_type,
         )
     except ValidationError as exc:
         raise QuerySpecError("QUERY_SPEC_INVALID", str(exc)) from exc

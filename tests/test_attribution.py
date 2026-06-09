@@ -1,0 +1,157 @@
+from __future__ import annotations
+
+from datetime import date
+
+from metric_rca.domain.models import MetricDefinition
+from metric_rca.services.attribution_service import (
+    compute_dimension_contribution,
+    compute_gmv_decomposition,
+    compute_net_gmv_components,
+)
+
+
+def _metric(metric_id: str = "gmv", *, higher_is_better: bool = True) -> MetricDefinition:
+    return MetricDefinition(
+        metric_id=metric_id,
+        display_name=metric_id,
+        formula="test",
+        higher_is_better=higher_is_better,
+        allowed_dimensions=["channel", "category", "device", "product"],
+        source_table="fact_order",
+    )
+
+
+def _baseline(dimension: str, values: dict[str, float]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for element, value in values.items():
+        for index, day in enumerate([29, 22, 15, 8]):
+            jitter = value * 0.01 if value < 1 else float(index % 2)
+            rows.append(
+                {
+                    "business_date": date(2026, 5, day),
+                    dimension: element,
+                    "metric_value": value + jitter,
+                }
+            )
+    return rows
+
+
+def test_attribution_paid_ads_contribution_top1_campaign_traffic_drop() -> None:
+    result = compute_dimension_contribution(
+        metric_definition=_metric("gmv"),
+        dimension="channel",
+        current_rows=[
+            {"channel": "paid_ads", "metric_value": 20.0},
+            {"channel": "organic", "metric_value": 95.0},
+        ],
+        baseline_rows=_baseline("channel", {"paid_ads": 100.0, "organic": 100.0}),
+        evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        top_threshold=0.60,
+    )
+
+    assert result.ok is True
+    assert result.candidates[0].root_cause_type == "campaign_traffic_drop"
+    assert result.candidates[0].element == "paid_ads"
+    assert result.candidates[0].contribution_pct >= 0.80
+    assert result.candidates[0].evidence_ids == ["run-1:E1", "run-1:E2", "run-1:E3"]
+
+
+def test_attribution_stockout_electronics_top1_stockout() -> None:
+    result = compute_dimension_contribution(
+        metric_definition=_metric("gmv"),
+        dimension="category",
+        current_rows=[
+            {"category": "electronics", "metric_value": 25.0},
+            {"category": "fashion", "metric_value": 92.0},
+        ],
+        baseline_rows=_baseline("category", {"electronics": 100.0, "fashion": 100.0}),
+        evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        top_threshold=0.60,
+    )
+
+    assert result.ok is True
+    assert result.candidates[0].root_cause_type == "stockout"
+    assert result.candidates[0].element == "electronics"
+
+
+def test_attribution_mobile_cvr_top1_conversion_drop() -> None:
+    result = compute_dimension_contribution(
+        metric_definition=_metric("pay_cvr"),
+        dimension="device",
+        current_rows=[
+            {"device": "mobile", "metric_value": 0.03},
+            {"device": "desktop", "metric_value": 0.08},
+        ],
+        baseline_rows=_baseline("device", {"mobile": 0.08, "desktop": 0.08}),
+        evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        top_threshold=0.60,
+    )
+
+    assert result.ok is True
+    assert result.candidates[0].root_cause_type == "conversion_drop"
+    assert result.candidates[0].element == "mobile"
+
+
+def test_attribution_refund_rate_uses_increase_direction() -> None:
+    result = compute_dimension_contribution(
+        metric_definition=_metric("refund_rate", higher_is_better=False),
+        dimension="product",
+        current_rows=[
+            {"product": "1", "metric_value": 0.35},
+            {"product": "2", "metric_value": 0.10},
+        ],
+        baseline_rows=_baseline("product", {"1": 0.10, "2": 0.10}),
+        evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        top_threshold=0.60,
+    )
+
+    assert result.ok is True
+    assert result.candidates[0].root_cause_type == "complaint_or_quality_issue"
+    assert result.candidates[0].element == "1"
+
+
+def test_gmv_decomposition_uses_uv_pay_cvr_aov_not_order_count() -> None:
+    result = compute_gmv_decomposition(
+        current={"gmv": 510.0, "uv": 100.0, "pay_user_cnt": 10.0},
+        baseline={"gmv": 1000.0, "uv": 200.0, "pay_user_cnt": 20.0},
+    )
+
+    assert result["current"]["pay_cvr"] == 0.10
+    assert result["current"]["aov"] == 51.0
+    assert result["current"]["reconstructed_gmv"] == 510.0
+    assert result["largest_drop_factor"] == "uv"
+
+
+def test_net_gmv_components_are_gmv_minus_refund() -> None:
+    components = compute_net_gmv_components(gmv=1000.0, refund=125.0)
+    assert components == {"gmv": 1000.0, "refund": 125.0, "net_gmv": 875.0}
+
+
+def test_empty_rows_do_not_create_candidate() -> None:
+    result = compute_dimension_contribution(
+        metric_definition=_metric("gmv"),
+        dimension="channel",
+        current_rows=[],
+        baseline_rows=_baseline("channel", {"paid_ads": 100.0}),
+        evidence_ids=["run-1:E1"],
+    )
+
+    assert result.ok is False
+    assert result.error_code == "ATTRIBUTION_COVERAGE_LOW"
+    assert result.candidates == []
+
+
+def test_missing_evidence_ids_do_not_create_candidate() -> None:
+    result = compute_dimension_contribution(
+        metric_definition=_metric("gmv"),
+        dimension="channel",
+        current_rows=[
+            {"channel": "paid_ads", "metric_value": 20.0},
+        ],
+        baseline_rows=_baseline("channel", {"paid_ads": 100.0}),
+        evidence_ids=[],
+    )
+
+    assert result.ok is False
+    assert result.error_code == "EVIDENCE_MISSING"
+    assert result.candidates == []

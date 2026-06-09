@@ -1,0 +1,204 @@
+"""Metric intent and metadata contracts backed by MetadataRepository."""
+
+from __future__ import annotations
+
+from datetime import date, timedelta
+import re
+from typing import TYPE_CHECKING
+
+from metric_rca.config.settings import Settings, get_settings
+from metric_rca.domain.models import MetricDefinition
+from metric_rca.services.intent_planner import LLMIntentPlanner
+from metric_rca.services.metric_contracts import MetricServiceError, ParsedIntent, metric_id_from_question_family
+
+if TYPE_CHECKING:
+    from metric_rca.repositories.metadata_repository import MetadataRepository
+
+
+SUPPORTED_QUESTION_FAMILIES: tuple[str, ...] = (
+    "gmv_drop",
+    "net_gmv_drop",
+    "pay_cvr_drop",
+    "refund_rate_increase",
+    "channel_gmv_anomaly",
+    "category_gmv_anomaly",
+)
+
+
+class MetricService:
+    """Metadata-backed service with configured live LLM intent planner."""
+
+    def __init__(
+        self,
+        metadata_repo: "MetadataRepository",
+        settings: Settings | None = None,
+    ) -> None:
+        self._metadata_repo = metadata_repo
+        self._settings = settings or get_settings()
+        self._metric_definitions = {
+            definition.metric_id: definition for definition in metadata_repo.list_metrics()
+        }
+        self._supported_metrics = sorted(self._metric_definitions)
+        self._supported_dimensions = sorted(
+            {
+                dimension
+                for definition in self._metric_definitions.values()
+                for dimension in definition.allowed_dimensions
+            }
+        )
+        self._dimension_values = {
+            dimension: metadata_repo.list_dimension_values(dimension)
+            for dimension in self._supported_dimensions
+        }
+        if self._settings.llm_enabled and self._settings.llm_provider:
+            self._intent_planner = LLMIntentPlanner(
+                provider=self._settings.llm_provider,
+                model=self._settings.llm_model,
+                api_key=self._settings.llm_api_key,
+            )
+        else:
+            raise MetricServiceError("LLM_REQUIRED_UNAVAILABLE", "intent planner is required")
+
+    @property
+    def supported_metrics(self) -> list[str]:
+        return [*self._supported_metrics]
+
+    @property
+    def supported_dimensions(self) -> list[str]:
+        return [*self._supported_dimensions]
+
+    @property
+    def dimension_values(self) -> dict[str, list[str]]:
+        return {dimension: [*values] for dimension, values in self._dimension_values.items()}
+
+    def get_metric_definition(self, metric_id: str) -> MetricDefinition:
+        return self._metadata_repo.get_metric_definition(metric_id)
+
+    def get_schema_context(self, metric_id: str) -> dict[str, object]:
+        return self._metadata_repo.get_schema_context(metric_id)
+
+    def parse_question(self, question: str, *, business_today: date) -> ParsedIntent:
+        return parse_question(
+            question,
+            business_today=business_today,
+            intent_planner=self._intent_planner,
+            supported_metrics=self._supported_metrics,
+            supported_dimensions=self._supported_dimensions,
+            supported_dimension_values=self._dimension_values,
+            supported_families=[*SUPPORTED_QUESTION_FAMILIES],
+        )
+
+
+def parse_question(
+    question: str,
+    *,
+    business_today: date,
+    intent_planner: LLMIntentPlanner,
+    supported_metrics: list[str],
+    supported_dimensions: list[str],
+    supported_dimension_values: dict[str, list[str]],
+    supported_families: list[str],
+) -> ParsedIntent:
+    """Parse a question using a supplied planner and metadata context."""
+
+    if not question.strip():
+        raise MetricServiceError("PARSE_FAILED", "question is empty")
+    parsed = intent_planner.parse(
+        question,
+        business_today=business_today,
+        supported_metrics=supported_metrics,
+        supported_dimensions=supported_dimensions,
+        supported_dimension_values=supported_dimension_values,
+        supported_families=supported_families,
+    )
+    _validate_explicit_dimension_filters(
+        question=question,
+        parsed=parsed,
+        supported_dimensions=supported_dimensions,
+        supported_dimension_values=supported_dimension_values,
+    )
+    return _validate_parsed_intent(
+        parsed,
+        business_today=business_today,
+        supported_metrics=supported_metrics,
+        supported_dimensions=supported_dimensions,
+        supported_dimension_values=supported_dimension_values,
+        supported_families=supported_families,
+    )
+
+
+def _validate_parsed_intent(
+    parsed: ParsedIntent,
+    *,
+    business_today: date,
+    supported_metrics: list[str],
+    supported_dimensions: list[str],
+    supported_dimension_values: dict[str, list[str]],
+    supported_families: list[str],
+) -> ParsedIntent:
+    if parsed.metric_id not in supported_metrics:
+        raise MetricServiceError("METRIC_NOT_FOUND", f"metric not found: {parsed.metric_id}")
+    if parsed.question_family not in supported_families:
+        raise MetricServiceError("PARSE_FAILED", f"question family not supported: {parsed.question_family}")
+    expected_metric = metric_id_from_question_family(parsed.question_family)
+    if expected_metric != parsed.metric_id:
+        if expected_metric not in supported_metrics:
+            raise MetricServiceError("METRIC_NOT_FOUND", f"metric not found: {expected_metric}")
+        raise MetricServiceError("PARSE_FAILED", "question family does not match metric")
+    if parsed.target_date != business_today - timedelta(days=1):
+        raise MetricServiceError("DATE_RANGE_INVALID", "only yesterday is supported")
+    if parsed.dimension is not None and parsed.dimension not in supported_dimensions:
+        raise MetricServiceError("DIMENSION_NOT_ALLOWED", f"dimension not allowed: {parsed.dimension}")
+    if parsed.dimension is not None and parsed.element is not None:
+        _validate_dimension_value(
+            dimension=parsed.dimension,
+            value=parsed.element,
+            supported_dimension_values=supported_dimension_values,
+        )
+    disallowed_filters = [dimension for dimension in parsed.filters if dimension not in supported_dimensions]
+    if disallowed_filters:
+        raise MetricServiceError(
+            "DIMENSION_NOT_ALLOWED", f"dimension not allowed: {disallowed_filters[0]}"
+        )
+    for dimension, value in parsed.filters.items():
+        _validate_dimension_value(
+            dimension=dimension,
+            value=value,
+            supported_dimension_values=supported_dimension_values,
+        )
+    if parsed.element is not None and parsed.dimension is None:
+        raise MetricServiceError("PARSE_FAILED", "element requires a dimension")
+    return parsed
+
+
+def _validate_dimension_value(
+    *,
+    dimension: str,
+    value: str,
+    supported_dimension_values: dict[str, list[str]],
+) -> None:
+    values = supported_dimension_values.get(dimension, [])
+    if values and value not in values:
+        raise MetricServiceError("DIMENSION_NOT_ALLOWED", f"dimension value not allowed: {dimension}")
+
+
+def _validate_explicit_dimension_filters(
+    *,
+    question: str,
+    parsed: ParsedIntent,
+    supported_dimensions: list[str],
+    supported_dimension_values: dict[str, list[str]],
+) -> None:
+    for dimension in supported_dimensions:
+        match = re.search(rf"(?<!\w){re.escape(dimension)}\s*=\s*([A-Za-z0-9_.:-]+)", question)
+        if match is not None:
+            value = match.group(1)
+            _validate_dimension_value(
+                dimension=dimension,
+                value=value,
+                supported_dimension_values=supported_dimension_values,
+            )
+            if parsed.filters.get(dimension) != value and not (
+                parsed.dimension == dimension and parsed.element == value
+            ):
+                raise MetricServiceError("PARSE_FAILED", "LLM omitted explicit dimension filter")
