@@ -1,3 +1,45 @@
+## ADL-0007: 最终版编排层迁移到 deepagents，守卫语义移交 middleware + orchestrator
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-12 |
+| 状态 | accepted |
+| 关联迭代 | final-design（P6–P9，1 个月最终版） |
+| 影响范围 | metric_rca/agent/ 全部；docs/MetricRCA.md §5/§6；COMPLIANCE_MATRIX 图结构行；约 1/3 测试 |
+
+### 背景与场景
+
+MVP（P1–P5）以手写 LangGraph StateGraph + 确定性主策略完成。1 个月最终版要求
+验证 LLM-first 规划能力，用户在评审中明确选择破坏性重构到 deepagents，并纳入
+开关式 Multi-Agent（分诊+专家），否决 MCP、向量库、pay_orders 列。
+
+### 决策
+
+只重构 `agent/` 编排层：deepagents（LLM 自由选动作）+ GuardMiddleware
+（wrap_tool_call：args 校验、预算硬中断、trace/evidence 持久化兜底）+
+RunOrchestrator（生命周期、后置 Reflection、repair 重入、终态化）。
+确定性核心（guardrails/services/repositories/memory/evals）契约不变；
+LLM 成为必需组件（不可用 → LLM_REQUIRED_UNAVAILABLE）。
+完整设计见 docs/final-design/。
+
+### 理由
+
+LLM-first 更纯粹（彻底消除确定性主策略与 LLM 策略双轨）；deepagents middleware
+可短路拒绝工具调用，零静默兜底语义可完整迁移；Multi-Agent 直接复用 subagent
+机制。代价（eval 路径不确定性上升、图结构保证降级为 middleware 保证）已识别，
+缓解为结果级判分 + 确定性预算 + Reflection 闸门。
+
+### 被否决的方案
+
+- 保持 LangGraph StateGraph（评审推荐项）：守卫最强，但与最终版 LLM-first
+  目标不符，用户否决。
+- 全盘 deepagents（含内置 filesystem 工具自由使用）：污染受控动作空间，禁用。
+
+### 后续跟进
+
+- P6 落地时钉死 deepagents/langchain 精确版本并回填本条目。
+- v1 图设计在 docs/MetricRCA.md 中保留为附录（演变脉络）。
+
 ## ADL-0006: Final Report Is A Verified Artifact Projection Until P4 Persistence
 
 | 字段 | 值 |
