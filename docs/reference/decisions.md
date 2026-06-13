@@ -43,15 +43,25 @@ LLM-first 更纯粹（彻底消除确定性主策略与 LLM 策略双轨）；de
   `langgraph-prebuilt==1.0.5`。Context7 官方 deepagents 文档核验了
   `create_deep_agent(model, tools, system_prompt, middleware, subagents,
   response_format, ...)` 与 `AgentMiddleware.wrap_tool_call(request, handler)`
-  API；本地 sandbox 无法连接 PyPI proxy，因此安装级校验需在 supervisor
-  可联网环境执行。
-- P6 filesystem 工具治理：Context7 对 `deepagents==0.3.5` 的源码摘录显示
-  `create_deep_agent` 会组装 `FilesystemMiddleware`，且公开签名只提供
-  `permissions`（deny/allow/interrupt）而非移除工具的开关；`permissions=[]`
-  不是“工具不暴露”。当前 factory 要求 `create_deep_agent` 支持
-  `builtin_tools=[]` 才会构造 agent，否则 typed fail-fast
-  `DEEPAGENTS_FILESYSTEM_TOOLS_UNDISABLEABLE`，避免在真实运行中暴露
-  `ls/read_file/write_file/edit_file/glob/grep`。
+  API；fix-002 已用 `uv pip install -e .` 在本地安装并校验这些 pins。
+- P6 filesystem 工具治理已按本地安装的 pinned `deepagents==0.3.5` 源码解析：
+  `create_deep_agent` 公开签名无 `permissions`/`builtin_tools` 参数，且会无条件组装
+  `FilesystemMiddleware`，暴露 `ls/read_file/write_file/edit_file/glob/grep`
+  （以及具备 sandbox backend 时的 `execute`）。MetricRCA 不调用该 helper；
+  factory 改为复用 deepagents/LangChain 的核心 middleware 组合
+  （`TodoListMiddleware`、summarization、prompt-caching、patch-tool-calls），明确省略
+  `FilesystemMiddleware` 和 P9 前禁用的 subagent `task` 工具。生产构造后必须从真实
+  compiled graph 的 ToolNode 读取工具集合并校验恰好为 MetricRCA 白名单 +
+  `write_todos`；若无法内省或发现 filesystem 工具，typed fail-fast
+  `DEEPAGENTS_FILESYSTEM_TOOLS_UNDISABLEABLE`。
+- fix-002 收敛了 LLM 自由规划下的显式用户范围和 evidence id 语义：orchestrator
+  从问题中抽取 `channel/category/device/product=value` 写入 GuardMiddleware；
+  middleware 要求 `detect_anomaly` 与后续工具保持同一范围，并要求下游
+  `evidence_ids` 使用当前 run 的完整 `{run_id}:E*` 前缀。证据槽重复调用只在同一
+  run、同一 alias、`guard_status=passed` 且请求上下文匹配已持久化摘要时幂等返回；
+  不匹配或真实写库失败仍 typed fail-fast。E_rank 不再允许用占位 SQL 补齐缺失
+  E4 provenance；持久化 E4 缺 `sql_text` 时 typed fail-fast。compiled graph
+  filesystem proof 将 deepagents 作为硬依赖，缺失安装不能 skip 后通过。
 - v1 图设计在 docs/MetricRCA.md 中保留为附录（演变脉络）。
 
 ## ADL-0006: Final Report Is A Verified Artifact Projection Until P4 Persistence

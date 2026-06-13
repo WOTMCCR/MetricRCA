@@ -42,6 +42,12 @@ metric_rca/agent/
   subagents.py       # expert 子代理配置（P9；response_format=RunOutcome）
 ```
 
+Orchestrator 调用 agent 时会把 run context 附加到用户消息：当前
+`target_date`、允许的 `metric_id` 白名单、“yesterday 解释为 target_date”
+的业务日期规则，以及从用户问题中抽取的显式 `dimension=value` 过滤范围。
+LLM 仍自由选择工具，但不得自行改写配置日期、发明 metric_id，或把用户指定的
+过滤范围切换到其他维度/元素。
+
 删除：`graph.py`、`state.py`、`react.py`、`nodes/`（及其测试，见 04 迁移清单）。
 
 ## 3. GuardMiddleware（守卫语义的唯一落点）
@@ -52,26 +58,54 @@ metric_rca/agent/
    `ACTION_SCHEMA_INVALID`（理论上 deepagents 只暴露注册工具，此为纵深防御）。
 2. **args schema 校验**：按工具的 Pydantic In 模型校验（extra="forbid"）；
    失败 → 短路 `ACTION_SCHEMA_INVALID`，记 error observation，不执行工具。
+   单次非法调用可恢复，LLM 可用合法 args 重试；同名工具连续第 2 次非法
+   才将 run 标记 failed。
+   如果用户问题包含显式过滤条件（如 `category=electronics`），middleware
+   会要求 `detect_anomaly` 先带同一过滤条件产生 E1；后续
+   drill/fetch/calculate 必须保持同一维度和值；违反时返回 typed
+   `ACTION_SCHEMA_INVALID`，不静默改写参数。显式范围错误属于可恢复 planning
+   precondition，不参与 Pydantic schema 非法调用的连续失败计数。
+   下游工具的 `evidence_ids` 必须精确使用当前 run 前缀（如
+   `{run_id}:E1`），错误前缀/拼写返回 recoverable `EVIDENCE_MISSING`，不执行
+   handler、不消耗预算。
 3. **预算硬中断**（确定性计数器，存 run 级上下文对象，LLM 不可见不可改）：
    `step_count>=max_steps`、`query_count>=max_query`、
    `drilldown_depth>max_drilldown_depth` → 短路 `BUDGET_EXCEEDED`（新错误码），
    并向 LLM 返回「预算耗尽，必须调用 rank_root_causes 或结束」的 typed 提示；
+   step 预算不拦截 `rank_root_causes` 与 `write_todos`，确保 agent 可收束；
    若 LLM 再次尝试越权工具 → orchestrator 终止 run（failed）。
 4. **执行 + 持久化**：调用 handler；无论成败写 trace_step（含 latency_ms、
    token_usage 由模型回调补充）；取数类工具同时落 evidence + sql_audit
    （此逻辑在工具实现内部，middleware 负责兜底校验「取数工具必须产出
    evidence_id，否则视为工具实现缺陷 → typed error」）。
-5. **失败语义**：工具返回 ok=False observation；retryable（仅
+   对同一 run 的同一证据槽重复调用，工具只在已持久化 Evidence 为
+   `guard_status=passed` 且请求上下文（metric/dimension/element/input
+   evidence_ids）与已存摘要一致时幂等返回既有结果；不匹配或真实写库失败仍
+   fail-fast。
+   `fetch_related_signal` 还会按 deterministic signal policy 校验
+   metric/dimension → signal_type（如 `refund_rate` + `product` 必须为
+   `refund_quality`）；错选返回 recoverable typed error，不执行查询。
+   `rank_root_causes` 只能从持久化 E4 派生 E_rank；E4 缺失 candidates 或
+   `sql_text` 时返回 typed error，不合成占位 SQL。
+5. **失败语义**：工具返回 ok=False observation；可由 LLM 修正的 typed
+   precondition/planning 错误（如 EVIDENCE_MISSING、DIMENSION_NOT_ALLOWED、
+   QUERY_SPEC_INVALID）原样透传且不立刻终止，也不消耗 run 预算；retryable（仅
    SQL_EXECUTION_FAILED）由工具内部重试 1 次；不可恢复错误（如
    INSUFFICIENT_BASELINE_DATA）原样透传给 LLM，LLM 只能换合法动作或结束，
    **不存在任何静默兜底路径**。
 
 ## 4. 内置工具治理
 
-- **禁用 deepagents 内置 filesystem 工具集**（ls/read_file/write_file/edit_file）：
-  非审计副作用，污染动作空间。P6 落地时按钉死版本的官方 API 确认禁用参数
-  （`builtin_tools=[]` 或等价配置），并写差分测试证明 agent 暴露的工具集合
-  恰好等于我们注册的白名单 + planning todo 工具。
+- **禁用 deepagents 内置 filesystem 工具集**
+  （ls/read_file/write_file/edit_file/glob/grep/execute）：非审计副作用，
+  污染动作空间。P6 pinned `deepagents==0.3.5` 的 `create_deep_agent`
+  无条件组装 `FilesystemMiddleware` 且没有 `permissions`/`builtin_tools`
+  移除开关；MetricRCA 因此按该版本源码组合 deepagents 核心 middleware，
+  明确省略 `FilesystemMiddleware` 与 subagent `task` 工具（P9 前禁用），并用
+  真实 compiled graph 的 ToolNode 工具集合测试证明暴露工具恰好等于
+  MetricRCA 白名单 + planning todo 工具。若 pinned API 形态变化导致无法证明
+  文件系统工具未暴露，factory typed fail-fast。该 proof test 将 deepagents 作为
+  硬依赖，缺失安装不能 skip 后通过。
 - **保留 planning（write_todos）工具**：仅记录规划，不产生事实、不访问 DB；
   其调用同样落 trace_step。
 
