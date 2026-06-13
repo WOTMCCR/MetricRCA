@@ -263,6 +263,16 @@ def _rank_from_persisted_e4(*, repository: Any, run_id: str, metric_id: str, tar
                 message="persisted E4 has no candidates",
             )
         )
+    sql_text = e4.get("sql_text")
+    if not sql_text:
+        return ToolObservationOut(
+            observation=Observation(
+                action_name=RANK_TOOL_NAME,
+                ok=False,
+                error_code="EVIDENCE_MISSING",
+                message="persisted E4 sql_text is required before ranking",
+            )
+        )
     evidence = Evidence(
         evidence_id=f"{run_id}:E_rank",
         query_spec=QuerySpec(
@@ -270,7 +280,7 @@ def _rank_from_persisted_e4(*, repository: Any, run_id: str, metric_id: str, tar
             time_range=TimeRange(start_date=target_date, end_date=target_date),
             purpose="current",
         ),
-        sql=e4["sql_text"],
+        sql=sql_text,
         sql_hash=e4["sql_hash"],
         guard_status=e4["guard_status"],
         result_summary={"metric_id": metric_id, "candidates": [c.model_dump(mode="json") for c in candidates]},

@@ -17,6 +17,7 @@ from metric_rca.agent.tools.runtime import (
     tool_error,
 )
 from metric_rca.agent.tools.schemas import FetchRelatedSignalArgs, ToolResult
+from metric_rca.agent.tools.signal_policy import select_signal_type_for_metric_dimension
 from metric_rca.config.settings import Settings, get_settings
 from metric_rca.domain.models import Evidence, Observation
 from metric_rca.guardrails.query_spec import QuerySpecError, build_query_spec
@@ -39,7 +40,31 @@ def fetch_related_signal(
     if run_error:
         return tool_error(action, run_error, "run_id is not an active matching run")
     if not current_run_guarded_evidence(repository, args.run_id, args.evidence_ids, {"E1", "E2"}):
-        return tool_error(action, "EVIDENCE_MISSING", "guard-passed current-run evidence is required")
+        return tool_error(
+            action,
+            "EVIDENCE_MISSING",
+            (
+                f"guard-passed current-run E1 and E2 are required; "
+                f"call drilldown_dimension first to create {args.run_id}:E2, then retry with "
+                f"evidence_ids ['{args.run_id}:E1', '{args.run_id}:E2']"
+            ),
+        )
+    try:
+        expected_signal_type = select_signal_type_for_metric_dimension(
+            metric_id=args.metric_id,
+            dimension=args.dimension,
+        )
+    except ValueError as exc:
+        return tool_error(action, str(exc), "signal policy missing for metric/dimension")
+    if args.signal_type != expected_signal_type:
+        return tool_error(
+            action,
+            "QUERY_SPEC_INVALID",
+            f"signal_type must be {expected_signal_type} for metric_id={args.metric_id} dimension={args.dimension}",
+        )
+    existing = _existing_signal_result(args, repository=repository)
+    if existing is not None:
+        return existing
     renderer = renderer or SQLRenderer()
     settings = settings or get_settings()
     signal_metric_id = settings.signal_metric_by_type.get(args.signal_type)
@@ -120,4 +145,32 @@ def fetch_related_signal(
         evidences=[evidence],
         evidence_alias="E3",
         sql_count=2,
+    )
+
+
+def _existing_signal_result(args: FetchRelatedSignalArgs, *, repository: Any) -> ToolResult | None:
+    evidence_id = f"{args.run_id}:E3"
+    row = repository.get_evidence(run_id=args.run_id, evidence_id=evidence_id)
+    if row is None or row.get("guard_status") != "passed":
+        return None
+    summary = row.get("result_summary")
+    if not isinstance(summary, dict):
+        return None
+    if (
+        summary.get("signal_type") != args.signal_type
+        or summary.get("dimension") != args.dimension
+        or str(summary.get("element")) != str(args.element)
+    ):
+        return None
+    if [str(item) for item in summary.get("input_evidence_ids", [])] != [str(item) for item in args.evidence_ids]:
+        return None
+    return ToolResult(
+        observation=Observation(
+            action_name="fetch_related_signal",
+            ok=True,
+            payload=summary,
+            evidence_ids=[evidence_id],
+            error_code=summary.get("error_code"),
+        ),
+        evidence_alias="E3",
     )

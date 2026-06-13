@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from inspect import Parameter, signature
 from typing import Any
 
 from metric_rca.agent.deep_tools import (
     CalculateContributionIn,
     DetectAnomalyIn,
     DrilldownDimensionIn,
+    EXPOSED_TOOL_NAMES,
     FetchRelatedSignalIn,
     RankRootCausesIn,
     build_metric_rca_tools,
@@ -20,6 +20,9 @@ from openai import OpenAIError
 from metric_rca.agent.middleware import GuardMiddleware, MetricRCATokenUsageCallback, RunGuardContext
 from metric_rca.agent.prompts import EXPERT_SYSTEM_PROMPT
 from metric_rca.agent.subagents import build_subagents
+
+
+FILESYSTEM_TOOL_NAMES = frozenset({"ls", "read_file", "write_file", "edit_file", "glob", "grep", "execute"})
 
 
 class AgentFactoryError(RuntimeError):
@@ -51,16 +54,7 @@ def create_metric_rca_agent(
         raise AgentFactoryError("LLM_REQUIRED_UNAVAILABLE", "deepagents requires configured LLM provider, model, and API key")
 
     if agent_factory is None:
-        try:
-            from deepagents import create_deep_agent as agent_factory
-        except ModuleNotFoundError as exc:
-            raise AgentFactoryError("LLM_REQUIRED_UNAVAILABLE", "deepagents dependency is unavailable") from exc
-
-    if not _supports_kwarg(agent_factory, "builtin_tools"):
-        raise AgentFactoryError(
-            "DEEPAGENTS_FILESYSTEM_TOOLS_UNDISABLEABLE",
-            "pinned deepagents API does not support disabling built-in filesystem tools",
-        )
+        agent_factory = _create_filesystem_free_deep_agent
 
     tools = build_metric_rca_tools(dependencies=dependencies, run_id=run_id)
     tool_arg_schemas = {
@@ -87,12 +81,13 @@ def create_metric_rca_agent(
             system_prompt=EXPERT_SYSTEM_PROMPT,
             middleware=[middleware],
             subagents=subagents,
-            permissions=[],
-            builtin_tools=[],
         )
+        exposed = _compiled_tool_names(agent)
+        _validate_compiled_tool_names(exposed)
     except (OpenAIError, LangChainException, RuntimeError, ValueError, TypeError) as exc:
+        if isinstance(exc, AgentFactoryError):
+            raise
         raise AgentFactoryError("LLM_REQUIRED_UNAVAILABLE", "deepagents agent construction failed") from exc
-    exposed = frozenset(tool.name for tool in tools) | {"write_todos"}
     return MetricRCAAgentBundle(
         agent=agent,
         tools=tools,
@@ -103,9 +98,68 @@ def create_metric_rca_agent(
     )
 
 
-def _supports_kwarg(callable_obj: Any, name: str) -> bool:
+def _create_filesystem_free_deep_agent(
+    *,
+    model: str,
+    tools: list[Any],
+    system_prompt: str,
+    middleware: list[Any],
+    subagents: list[dict[str, Any]],
+) -> Any:
+    if subagents:
+        raise AgentFactoryError("MULTI_AGENT_P9_SCOPE", "subagents are disabled until P9")
     try:
-        params = signature(callable_obj).parameters.values()
-    except (TypeError, ValueError):
-        return False
-    return any(param.kind == Parameter.VAR_KEYWORD or param.name == name for param in params)
+        from deepagents.graph import (
+            BASE_AGENT_PROMPT,
+            AnthropicPromptCachingMiddleware,
+            PatchToolCallsMiddleware,
+            SummarizationMiddleware,
+            TodoListMiddleware,
+        )
+        from langchain.agents import create_agent
+    except ModuleNotFoundError as exc:
+        raise AgentFactoryError("LLM_REQUIRED_UNAVAILABLE", "deepagents dependency is unavailable") from exc
+
+    deepagent_middleware = [
+        TodoListMiddleware(),
+        SummarizationMiddleware(
+            model=model,
+            trigger=("tokens", 170000),
+            keep=("messages", 6),
+            trim_tokens_to_summarize=None,
+        ),
+        AnthropicPromptCachingMiddleware(unsupported_model_behavior="ignore"),
+        PatchToolCallsMiddleware(),
+        *middleware,
+    ]
+    return create_agent(
+        model,
+        tools=tools,
+        system_prompt=f"{system_prompt}\n\n{BASE_AGENT_PROMPT}",
+        middleware=deepagent_middleware,
+    ).with_config({"recursion_limit": 1000})
+
+
+def _compiled_tool_names(agent: Any) -> frozenset[str]:
+    try:
+        tools_by_name = agent.nodes["tools"].bound._tools_by_name
+    except (AttributeError, KeyError, TypeError) as exc:
+        raise AgentFactoryError(
+            "DEEPAGENTS_TOOL_INTROSPECTION_FAILED",
+            "compiled deepagents graph does not expose an introspectable ToolNode",
+        ) from exc
+    return frozenset(str(name) for name in tools_by_name)
+
+
+def _validate_compiled_tool_names(exposed: frozenset[str]) -> None:
+    leaked = FILESYSTEM_TOOL_NAMES & exposed
+    if leaked:
+        raise AgentFactoryError(
+            "DEEPAGENTS_FILESYSTEM_TOOLS_UNDISABLEABLE",
+            f"filesystem tools leaked into compiled graph: {sorted(leaked)}",
+        )
+    if exposed != EXPOSED_TOOL_NAMES:
+        raise AgentFactoryError(
+            "DEEPAGENTS_ACTION_SPACE_INVALID",
+            f"compiled graph exposed {sorted(exposed)}, expected {sorted(EXPOSED_TOOL_NAMES)}",
+        )

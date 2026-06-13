@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -13,7 +14,7 @@ from openai import OpenAIError
 from metric_rca.agent.factory import AgentFactoryError, create_metric_rca_agent
 from metric_rca.agent.reflection import verify_reflection
 from metric_rca.config.settings import Settings, get_settings
-from metric_rca.domain.models import Evidence, QuerySpec, RootCauseCandidate
+from metric_rca.domain.models import Evidence, PHASE1_METRICS, QuerySpec, RootCauseCandidate
 from metric_rca.guardrails.renderer import SQLRenderer
 from metric_rca.memory.memory_repo import MemoryRepository
 from metric_rca.observability.trace import TraceWriteError, TraceWriter
@@ -86,20 +87,21 @@ class RunOrchestrator:
                 run_id=resolved_run_id,
                 agent_factory=self.agent_factory,
             )
+            bundle.guard_context.explicit_filters = _explicit_scope_from_question(question)
         except (AgentFactoryError, RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
             code = getattr(exc, "code", None) or _code_from_message(str(exc), "LLM_REQUIRED_UNAVAILABLE")
             return self._fail(resolved_run_id, question, code)
 
         try:
             bundle.agent.invoke(
-                {"messages": [{"role": "user", "content": question}]},
+                {"messages": [{"role": "user", "content": _agent_user_message(question, self.dependencies.settings)}]},
                 config={
                     "configurable": {"thread_id": resolved_run_id},
                     "callbacks": [bundle.token_usage_callback],
                 },
             )
         except (RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
-            code = _code_from_message(str(exc), "LLM_REQUIRED_UNAVAILABLE")
+            code = getattr(exc, "code", None) or _code_from_message(str(exc), "AGENT_INVOKE_FAILED")
             return self._fail(resolved_run_id, question, code)
         try:
             self._flush_pending_token_usage(bundle.guard_context)
@@ -132,7 +134,8 @@ class RunOrchestrator:
                         },
                     )
                 except (RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
-                    return self._fail(resolved_run_id, question, _code_from_message(str(exc), "REFLECTION_REPAIR_FAILED"))
+                    code = getattr(exc, "code", None) or _code_from_message(str(exc), "REFLECTION_REPAIR_FAILED")
+                    return self._fail(resolved_run_id, question, code)
                 try:
                     self._flush_pending_token_usage(bundle.guard_context)
                 except TraceWriteError as exc:
@@ -359,3 +362,26 @@ def _has_repair_action(reflection: Any) -> bool:
 def _code_from_message(message: str, default: str) -> str:
     code = message.split(":", maxsplit=1)[0]
     return code if code and code.isupper() else default
+
+
+def _agent_user_message(question: str, settings: Any) -> str:
+    target_date = getattr(settings, "target_date", None)
+    target_date_text = target_date.isoformat() if hasattr(target_date, "isoformat") else str(target_date)
+    allowed_metrics = ", ".join(sorted(PHASE1_METRICS))
+    explicit_scope = _explicit_scope_from_question(question)
+    explicit_scope_text = ", ".join(f"{key}={value}" for key, value in sorted(explicit_scope.items()))
+    return (
+        f"{question}\n\n"
+        "Run context:\n"
+        f"- target_date: {target_date_text}\n"
+        "- Interpret relative dates such as yesterday as target_date unless the user gives an explicit date.\n"
+        f"- allowed metric_id values: {allowed_metrics}\n"
+        "- Use metric_id exactly as listed above; do not uppercase, translate, or invent aliases.\n"
+        f"- explicit question filters: {explicit_scope_text or 'none'}\n"
+    )
+
+
+def _explicit_scope_from_question(question: str) -> dict[str, str]:
+    allowed = {"channel", "category", "device", "product"}
+    matches = re.findall(r"\b(channel|category|device|product)\s*=\s*([A-Za-z0-9_-]+)", question)
+    return {key: value for key, value in matches if key in allowed}

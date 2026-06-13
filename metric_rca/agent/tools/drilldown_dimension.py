@@ -17,7 +17,7 @@ from metric_rca.agent.tools.runtime import (
     tool_error,
 )
 from metric_rca.agent.tools.schemas import DrilldownDimensionArgs, ToolResult
-from metric_rca.domain.models import Evidence, Observation
+from metric_rca.domain.models import Evidence, Observation, RootCauseCandidate
 from metric_rca.guardrails.query_spec import QuerySpecError, build_query_spec
 from metric_rca.guardrails.renderer import SQLRenderer
 from metric_rca.guardrails.sql_guard import guard_sql
@@ -37,7 +37,14 @@ def drilldown_dimension(
     if run_error:
         return tool_error(action, run_error, "run_id is not an active matching run")
     if not current_run_guarded_evidence(repository, args.run_id, args.evidence_ids, {"E1"}):
-        return tool_error(action, "EVIDENCE_MISSING", "guard-passed current-run evidence is required")
+        return tool_error(
+            action,
+            "EVIDENCE_MISSING",
+            f"guard-passed current-run E1 is required; copy {args.run_id}:E1 from detect_anomaly output",
+        )
+    existing = _existing_drilldown_result(args, repository=repository)
+    if existing is not None:
+        return existing
     renderer = renderer or SQLRenderer()
     try:
         metric_definition = metric_service.get_metric_definition(args.metric_id)
@@ -112,4 +119,29 @@ def drilldown_dimension(
         evidence_alias="E2",
         candidates=attribution.candidates,
         sql_count=2,
+    )
+
+
+def _existing_drilldown_result(args: DrilldownDimensionArgs, *, repository: Any) -> ToolResult | None:
+    evidence_id = f"{args.run_id}:E2"
+    row = repository.get_evidence(run_id=args.run_id, evidence_id=evidence_id)
+    if row is None or row.get("guard_status") != "passed":
+        return None
+    summary = row.get("result_summary")
+    if not isinstance(summary, dict):
+        return None
+    if summary.get("metric_id") != args.metric_id or summary.get("dimension") != args.dimension:
+        return None
+    if [str(item) for item in summary.get("input_evidence_ids", [])] != [str(item) for item in args.evidence_ids]:
+        return None
+    candidates = [RootCauseCandidate.model_validate(candidate) for candidate in summary.get("candidates", [])]
+    return ToolResult(
+        observation=Observation(
+            action_name="drilldown_dimension",
+            ok=True,
+            payload=summary,
+            evidence_ids=[evidence_id],
+        ),
+        evidence_alias="E2",
+        candidates=candidates,
     )

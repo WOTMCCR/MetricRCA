@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
+from metric_rca.agent.deep_tools import build_metric_rca_tools
 from metric_rca.agent.tools.calculate_contribution import calculate_contribution
 from metric_rca.agent.tools.detect_anomaly import detect_anomaly
 from metric_rca.agent.tools.drilldown_dimension import drilldown_dimension
@@ -169,11 +171,7 @@ class SpyRepository:
 
     def create_evidence(self, row: dict[str, Any]) -> None:
         self.evidence_rows.append(row)
-        self.persisted_evidence[row["evidence_id"]] = {
-            "evidence_id": row["evidence_id"],
-            "run_id": row["run_id"],
-            "guard_status": row["guard_status"],
-        }
+        self.persisted_evidence[row["evidence_id"]] = dict(row)
 
 
 class RejectingRenderer:
@@ -397,6 +395,55 @@ def test_drilldown_tool_rejects_missing_or_unpersisted_current_run_evidence() ->
     assert result.observation.error_code == "EVIDENCE_MISSING"
 
 
+def test_drilldown_repeated_same_evidence_slot_returns_persisted_result_without_requery() -> None:
+    repo = SpyRepository()
+    persisted_summary = {
+        "metric_id": "gmv",
+        "dimension": "channel",
+        "input_evidence_ids": ["run-1:E1"],
+        "coverage": 1.0,
+        "candidates": [
+            {
+                "root_cause_type": "campaign_traffic_drop",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "contribution_pct": 1.0,
+                "signal_severity": 1.0,
+                "evidence_support": 1.0,
+                "reflection_factor": 1.0,
+                "eng_confidence": 1.0,
+                "verdict": "confirmed",
+                "evidence_ids": ["run-1:E1"],
+            }
+        ],
+    }
+    repo.persisted_evidence["run-1:E2"] = {
+        "evidence_id": "run-1:E2",
+        "run_id": "run-1",
+        "guard_status": "passed",
+        "result_summary": persisted_summary,
+    }
+
+    result = drilldown_dimension(
+        DrilldownDimensionArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            dimension="channel",
+            evidence_ids=["run-1:E1"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is True
+    assert result.observation.evidence_ids == ["run-1:E2"]
+    assert result.observation.payload == persisted_summary
+    assert result.candidates[0].element == "paid_ads"
+    assert repo.executed == []
+    assert repo.evidence_rows == []
+
+
 def test_tool_bad_dimension_returns_dimension_not_allowed() -> None:
     result = drilldown_dimension(
         DrilldownDimensionArgs(
@@ -613,6 +660,31 @@ def test_fetch_related_signal_covers_campaign_inventory_conversion_refund_qualit
         assert result.evidences[0].evidence_id == "run-1:E3"
 
 
+def test_fetch_related_signal_rejects_signal_type_that_conflicts_with_metric_dimension_policy() -> None:
+    repo = SpyRepository()
+    repo.runs["run-1"]["metric_id"] = "refund_rate"
+
+    result = fetch_related_signal(
+        FetchRelatedSignalArgs(
+            run_id="run-1",
+            metric_id="refund_rate",
+            target_date=date(2026, 6, 5),
+            signal_type="inventory",
+            dimension="product",
+            element="1",
+            evidence_ids=["run-1:E1", "run-1:E2"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == "QUERY_SPEC_INVALID"
+    assert "signal_type must be refund_quality" in result.observation.message
+    assert repo.executed == []
+    assert repo.evidence_rows == []
+
+
 def test_fetch_campaign_signal_uses_fact_campaign_for_current_and_baseline() -> None:
     repo = SpyRepository()
     result = fetch_related_signal(
@@ -646,7 +718,7 @@ def test_fetch_related_signal_uses_configured_signal_metric_override() -> None:
         llm_api_key="key",
         llm_required=False,
         signal_metric_by_type={
-            "campaign": "gmv",
+            "campaign": "uv",
             "inventory": "stockout_rate",
             "conversion": "uv",
             "refund_quality": "complaint_rate",
@@ -658,7 +730,7 @@ def test_fetch_related_signal_uses_configured_signal_metric_override() -> None:
             run_id="run-1",
             metric_id="gmv",
             target_date=date(2026, 6, 5),
-            signal_type="conversion",
+            signal_type="campaign",
             dimension="channel",
             element="paid_ads",
             evidence_ids=["run-1:E1", "run-1:E2"],
@@ -897,3 +969,43 @@ def test_calculate_contribution_requires_e1_e2_and_e3_before_e4() -> None:
 
     assert result.observation.ok is False
     assert result.observation.error_code == "EVIDENCE_MISSING"
+
+
+def test_rank_root_causes_requires_persisted_e4_sql_text() -> None:
+    repo = SpyRepository()
+    repo.persisted_evidence["run-1:E4"] = {
+        "evidence_id": "run-1:E4",
+        "run_id": "run-1",
+        "sql_hash": "e4" * 32,
+        "guard_status": "passed",
+        "data_source": "fact_order",
+        "result_summary": {
+            "selected_candidate": {
+                "root_cause_type": "campaign_traffic_drop",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "contribution_pct": 0.8,
+                "signal_severity": 0.8,
+                "evidence_support": 1.0,
+                "reflection_factor": 1.0,
+                "eng_confidence": 1.0,
+                "verdict": "confirmed",
+                "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"],
+            }
+        },
+    }
+    deps = SimpleNamespace(
+        repository=repo,
+        metric_service=StaticMetricService(),
+        renderer=None,
+        settings=Settings(db_dsn="sqlite://", readonly_db_dsn="sqlite://"),
+        trace_writer=None,
+    )
+    rank_tool = next(tool for tool in build_metric_rca_tools(dependencies=deps, run_id="run-1") if tool.name == "rank_root_causes")
+
+    result = rank_tool.invoke({"metric_id": "gmv", "target_date": date(2026, 6, 5)})
+
+    assert result["observation"]["ok"] is False
+    assert result["observation"]["error_code"] == "EVIDENCE_MISSING"
+    assert result["evidence_ids"] == []
+    assert repo.evidence_rows == []
