@@ -14,11 +14,17 @@
 | drilldown_dimension | metric_id, dimension | contrib_by_element, evidence_id | P6（迁移） |
 | fetch_related_signal | signal, filters | signal_summary, evidence_id | P6（迁移） |
 | calculate_contribution | decompose_spec | factor_deltas, evidence_id | P6（迁移） |
-| rank_root_causes | （无 args，读 run 内 persisted evidence） | candidates, evidence_id(E_rank) | P6（迁移；排序仍确定性） |
-| adtributor_attribute | metric_id, dimensions(≤3) | ranked_dim_elements(EP, surprise), evidence_id | P7（新） |
+| rank_root_causes | （无 args，读 run 内 persisted evidence） | candidates, evidence_id(E_rank) | P6（迁移）；P7 内部确定性调用 Adtributor |
 | write_todos（deepagents 内置） | — | — | 保留，仅记录 |
 
 LLM 只能看到 Out 的结构化摘要，永远看不到原始行集。
+
+> **ADL-0009 决策（2026-06-13）**：Adtributor **不是** LLM 动作空间里的独立工具。
+> 设计原意是「Adtributor 仅用于候选排序而非直接结论」，而排序是确定性的——因此
+> Adtributor 落在 `rank_root_causes` 的确定性实现内部，适用时自动对已持久化的
+> drilldown Evidence 运行 EP/Surprise，产出排序证据。**不引入 `adtributor_attribute`
+> 工具**，从而消除「LLM 调完 Adtributor 就以为归因结束、停在 E_adt 不再走
+> signal→contribution→rank」这一整类失败。LLM 的动作空间在 P7 保持与 P6 同构。
 
 ## 2. RootCauseCandidate v2
 
@@ -48,6 +54,13 @@ adtributor 不适用指标（比率类指标的分子分母分别跑 EP，见 §
 ## 3. Adtributor 算法规格（services/adtributor_service.py，确定性）
 
 来源：Bhagwan et al., NSDI '14。本系统改造：forecast F = 前 4 同星期几基线均值。
+
+> **归位（ADL-0009）**：`adtributor_service` 是纯函数服务（无 DB / 无 repository
+> import，须过 services-purity 测试）。它只吃 `rank_root_causes` 传入的、已由
+> `drilldown_dimension` 持久化的 per-element actual/forecast（来自 Evidence
+> result_summary），**绝不自取数、不读 fact 表、不读 anomaly_ground_truth、不接受
+> 字面量喂值**。`rank_root_causes` 在适用指标/维度上确定性调用它，把 EP/surprise
+> 写入候选并落入 E_rank；不适用时返回 `ADTRIBUTOR_NOT_APPLICABLE` 并退回单维路径。
 
 - 可加指标（gmv / net_gmv / uv）：`EP_ij = (A_ij − F_ij) / (A − F)`。
 - 比率指标（pay_cvr / refund_rate / stockout_rate / complaint_rate）：
@@ -90,11 +103,18 @@ seed 幂等重建即可，无迁移脚本需求。
 
 ```python
 multi_agent_enabled: bool = False
+llm_provider: str | None = None   # 必填
 llm_model: str            # 必填，无默认——LLM 不可用必须显式失败
 llm_temperature: float = 0.0
 adtributor_t_ep: float = 0.67
 adtributor_t_eep: float = 0.10
 ```
+
+> **模型下限（ADL-0009）**：eval 必须用具备稳健指令遵循能力的模型（下限
+> `gpt-4.1` 同级或更强；**不接受 `gpt-4.1-mini` 作为验收模型**——P7 早期 eval 的
+> 指标漂移多源于弱模型）。Makefile `eval` 目标须显式传 `METRIC_RCA_LLM_PROVIDER`
+> / `METRIC_RCA_LLM_MODEL` / `METRIC_RCA_LLM_API_KEY`。验收用的 provider/model 记入
+> eval_run.summary 以便审计。守卫是纵深防御，不得用来补偿弱模型的解析能力。
 
 ## 8. 错误码增量
 
@@ -136,3 +156,31 @@ no-anomaly 类用 `2026-06-04`，固定 SEED 幂等。
 
 要求：C19/C20 是**误报陷阱**，判有异常即 fail；C06/C07 验证 Adtributor 多元素/
 多维能力；每 case 在 `anomaly_ground_truth` 落 dimension/element 字段。
+
+### 9.1 eval 题面完整性铁律（ADL-0009，不可违反）
+
+eval 的价值在于测「自然业务问句 → RCA」。**问题文本不得编码答案**：
+
+- **禁止** `metric_id=<x>` 字面语法写进 question；目标 KPI 用自然语言表达
+  （如「昨天 GMV 为什么下降？」「退款率为什么上升？」）。`intent-parse accuracy`
+  必须是真实可测的 LLM 解析指标，不能因题面给出 metric 而恒为 1.0。
+- **禁止** 把根因机制写进 question（如 `from stockout` / `because refunds increased`
+  / `from UV` / `after a price change`）。机制（root_cause_type）是系统须**从证据
+  推断**的目标，不能在题面预答。
+- 维度/元素：**仅当**该 case 的真实场景就是「用户指定切片」时，问题才可自然点名
+  维度值（如「为什么 paid_ads 渠道 GMV 下降？」），此时被评分的是 root_cause_type
+  机制而非维度本身；**发现型 case（C06/C07/C08/C09 等）不得在题面给出待发现的
+  维度/元素**，否则下钻被预答、归因被架空。
+
+**target metric vs cause mechanism**：intent / expert system prompt 必须显式区分
+——target metric 是「被解释的 KPI（题面问的那个指标）」，stockout/refund/UV/AOV 等
+是**待验证的假设机制**，永不改写 target metric。这是修复指标漂移的正确手段，替代
+把答案写进题面。
+
+### 9.2 C07 多维必须被证明（ADL-0009）
+
+C07 注入须产生**占主导的 electronics×paid_ads 交叉信号**；最终 selected_candidate
+的 `dimension_elements` 必须同时包含 `(channel, paid_ads)` 与 `(category, electronics)`，
+eval 断言多维组合成立。**不得**为求绿把 C07 真值塌缩为单维 `channel=paid_ads`——
+那是掩盖 P7 多维归因能力缺口。若注入无法稳定产生主导交叉，是 seed/算法问题，修
+系统，不改真值。

@@ -94,6 +94,19 @@ LLM 仍自由选择工具，但不得自行改写配置日期、发明 metric_id
    INSUFFICIENT_BASELINE_DATA）原样透传给 LLM，LLM 只能换合法动作或结束，
    **不存在任何静默兜底路径**。
 
+### 3.1 P7 守卫增量（ADL-0009）
+
+- **run 级 target-metric 不变量**：run 的 metric 锚定到 **parsed intent**
+  （`MetricService.parse_question` 的 LLM 解析结果，经白名单校验），而非「首个工具
+  调用里的 metric」。此后任何工具若传入不同 metric_id → recoverable typed error
+  （`METRIC_SCOPE_VIOLATION`），不执行、不消耗预算，防止跨指标 evidence 污染
+  （E1/E2 是 uv 而 E4 是 gmv 这类）。锚到 intent 而非首调用，避免一次漂移把整个
+  run 锁死在错误指标。
+- **工具↔schema 单一真相源**：GuardMiddleware 的 `tool_arg_schemas` 必须从工具注册
+  表派生（注册即带 In-schema），不得维护第二份手写清单。加测试断言「每个白名单
+  data 工具都有已注册 In-schema」，杜绝「工具暴露但 schema 漏注册 →
+  ACTION_SCHEMA_INVALID」这类接线缺陷。
+
 ## 4. 内置工具治理
 
 - **禁用 deepagents 内置 filesystem 工具集**

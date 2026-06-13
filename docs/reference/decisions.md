@@ -1,3 +1,55 @@
+## ADL-0009: P7 修正——eval 题面零答案泄漏、Adtributor 归位确定性 ranker、多维须证明
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-13 |
+| 状态 | accepted |
+| 关联迭代 | final-design P7（Adtributor + 20 case） |
+| 影响范围 | evals/cases、intent/expert prompts、rank_root_causes、adtributor_service、GuardMiddleware、seed、Settings/Makefile |
+
+### 背景与场景
+
+P7 首次用真实 LLM 跑 20-case eval，暴露：LLM 被业务词（stockout/UV/refund/AOV）
+带偏 target metric；adtributor_attribute 作为独立 LLM 工具导致「调完就停在 E_adt」；
+C06/C07 多维 case 难稳定。Codex 的应急修法部分越界：把 `metric_id=`、维度值、根因
+机制写进 eval question（架空 intent_accuracy 与归因），并拟把 C07 真值塌缩成单维。
+用户叫停，要求从架构师视角取「做对」的路径。
+
+### 决策
+
+1. **eval 题面完整性铁律**：问题是自然业务问句，**不得编码答案**——禁 `metric_id=`
+   字面、禁根因机制词（from stockout / because refunds…）、发现型 case 禁止题面给出
+   待发现维度/元素。intent-parse accuracy 保持真实可测。详见 final-design 02 §9.1。
+2. **指标漂移正确修法**：intent/expert prompt 显式区分 target metric（被解释的 KPI）
+   vs cause mechanism（待验证假设），替代把答案写进题面；并设 eval 模型下限
+   （≥ gpt-4.1 同级，不接受 gpt-4.1-mini）。
+3. **Adtributor 归位**：不引入 adtributor_attribute 工具；Adtributor 落在确定性
+   `rank_root_causes` 内部按需调用（设计原意「仅用于排序」）。消除 E_adt 停滞失败类。
+4. **run 级 target-metric 不变量守卫**：锚定 parsed intent，后续工具换 metric →
+   recoverable METRIC_SCOPE_VIOLATION，防跨指标 evidence 污染。
+5. **工具↔schema 单一真相源**：schema map 从工具注册表派生 + 覆盖测试。
+6. **C07 多维必须被证明**：注入主导交叉，断言 dimension_elements 双维；不得塌缩单维。
+7. seed 数据修复（保留少量订单避免 NULL、complaint baseline 拉低）属合法数据生成
+   修复，非 runtime 特判 eval。
+
+### 理由
+
+eval 一旦把答案写进输入，20/20 测的就不再是「NL→RCA」能力，是隐蔽的 special-case。
+Adtributor 是确定性排序，本就不该进 LLM 动作空间。守卫补丁不应沦为弱模型的拐杖。
+
+### 被否决的方案
+
+- 题面 `metric_id=` + 强制（架空 intent_accuracy）。
+- C07 真值塌缩单维（掩盖多维能力缺口）。
+- 仅靠 prompt 强化让 LLM「记得」E_adt 后继续（最脆弱）。
+
+### 后续跟进
+
+- 改写 prompt 08 / 新增 fix-003 承接以上；P7 应从已合并 P6 head 切独立分支
+  `codex/p7-adtributor-20cases`，不叠在 P6 未提交工作树上。
+- 保留 Codex 已做的合法成果：AdtributorService 纯服务、RootCauseCandidate v2 字段、
+  seed 数据修复、v2 canonical 比较归一化、schema 漏注册修复。
+
 ## ADL-0008: 最终版编排层迁移到 deepagents，守卫语义移交 middleware + orchestrator
 
 | 字段 | 值 |
