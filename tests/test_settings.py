@@ -12,6 +12,7 @@ def test_settings_defaults_and_required_dsn_failure(monkeypatch: pytest.MonkeyPa
     monkeypatch.delenv("METRIC_RCA_DB_DSN", raising=False)
     monkeypatch.delenv("METRIC_RCA_READONLY_DB_DSN", raising=False)
     monkeypatch.delenv("METRIC_RCA_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("METRIC_RCA_LLM_MODEL", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(ValidationError):
         Settings()
@@ -32,17 +33,12 @@ def test_settings_defaults_and_required_dsn_failure(monkeypatch: pytest.MonkeyPa
     assert settings.memory_enabled is True
     assert settings.memory_required is False
     assert settings.llm_enabled is True
-    assert settings.llm_required is False
-    assert settings.llm_provider == "openai"
-    assert settings.llm_model == "gpt-5.4-nano"
+    assert settings.llm_required is True
+    assert settings.llm_provider is None
+    assert settings.llm_model is None
     assert settings.llm_api_key is None
-
-    with pytest.raises(ValidationError, match="LLM_REQUIRED_UNAVAILABLE"):
-        Settings(
-            db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
-            readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
-            llm_required=True,
-        )
+    assert settings.llm_temperature == 0.0
+    assert settings.multi_agent_enabled is False
 
 
 def test_signal_metric_mapping_must_be_complete_and_metric_whitelisted() -> None:
@@ -55,6 +51,8 @@ def test_signal_metric_mapping_must_be_complete_and_metric_whitelisted() -> None
     settings = Settings(
         db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
         readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+        llm_model="gpt-test",
+        llm_api_key="key",
         signal_metric_by_type=base,
     )
     assert settings.signal_metric_by_type == base
@@ -64,6 +62,8 @@ def test_signal_metric_mapping_must_be_complete_and_metric_whitelisted() -> None
         Settings(
             db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
             readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+            llm_model="gpt-test",
+            llm_api_key="key",
             signal_metric_by_type=missing,
         )
 
@@ -72,5 +72,7 @@ def test_signal_metric_mapping_must_be_complete_and_metric_whitelisted() -> None
         Settings(
             db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
             readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+            llm_model="gpt-test",
+            llm_api_key="key",
             signal_metric_by_type=invalid,
         )

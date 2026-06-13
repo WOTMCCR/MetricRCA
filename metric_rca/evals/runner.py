@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
-from metric_rca.agent.graph import run_rca
+from metric_rca.agent.runner import run_rca
 from metric_rca.config.settings import Settings, get_settings
 from metric_rca.evals.models import EvalCase, EvalRuntimeError, GroundTruth, PersistedArtifacts
 from metric_rca.evals.scorer import dangerous_sql_blocked, score_case, summarize_scores

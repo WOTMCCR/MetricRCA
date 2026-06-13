@@ -120,6 +120,7 @@ EXPECTED_COLUMNS = {
         "output_summary": "json",
         "error_code": "varchar",
         "latency_ms": "int",
+        "token_usage": "json",
         "created_at": "datetime",
     },
     "evidence": {

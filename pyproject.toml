@@ -8,18 +8,23 @@ version = "0.1.0"
 description = "MetricRCA docs-compliant deterministic RCA system"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "pydantic>=2,<3",
-  "pydantic-settings>=2,<3",
-  "sqlalchemy>=2,<3",
-  "pymysql>=1.1,<2",
-  "sqlglot>=25,<26",
-  "pandas>=2.2,<3",
-  "langchain-openai>=1,<2",
-  "langgraph>=0.6,<0.7",
-  "fastapi>=0.115,<1",
-  "uvicorn>=0.30,<1",
-  "httpx[socks]>=0.28,<1",
-  "pytest>=8,<9",
+  "pydantic==2.13.4",
+  "pydantic-settings==2.14.1",
+  "sqlalchemy==2.0.45",
+  "pymysql==1.1.2",
+  "sqlglot==25.34.1",
+  "pandas==2.3.3",
+  "deepagents==0.3.5",
+  "langchain==1.2.3",
+  "langchain-core==1.4.2",
+  "langchain-openai==1.2.2",
+  "langgraph==1.0.6",
+  "langgraph-checkpoint==3.0.1",
+  "langgraph-prebuilt==1.0.5",
+  "fastapi==0.124.2",
+  "uvicorn==0.38.0",
+  "httpx[socks]==0.28.1",
+  "pytest==8.4.2",
 ]
 
 [tool.setuptools.packages.find]

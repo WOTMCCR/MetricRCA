@@ -138,6 +138,7 @@ CREATE TABLE trace_step (
   output_summary JSON,
   error_code VARCHAR(48),
   latency_ms INT NOT NULL DEFAULT 0,
+  token_usage JSON NULL,
   created_at DATETIME NOT NULL,
   KEY idx_run (run_id, seq)
 ) ENGINE=InnoDB;

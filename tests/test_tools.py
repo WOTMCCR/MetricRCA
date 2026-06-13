@@ -642,6 +642,9 @@ def test_fetch_related_signal_uses_configured_signal_metric_override() -> None:
     settings = Settings(
         db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
         readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+        llm_model="gpt-test",
+        llm_api_key="key",
+        llm_required=False,
         signal_metric_by_type={
             "campaign": "gmv",
             "inventory": "stockout_rate",

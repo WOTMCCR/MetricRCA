@@ -58,13 +58,17 @@ class FakeMetadataRepository:
 
 
 def _live_settings() -> Settings:
+    api_key = os.getenv("METRIC_RCA_LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if not api_key or api_key == "test-key":
+        pytest.skip("real OpenAI credentials are not configured for live intent parsing")
     return Settings(
         db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
         readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
         llm_enabled=True,
+        llm_required=False,
         llm_provider="openai",
         llm_model="gpt-5.4-nano",
-        llm_api_key=os.getenv("METRIC_RCA_LLM_API_KEY") or os.getenv("OPENAI_API_KEY"),
+        llm_api_key=api_key,
     )
 
 
@@ -73,6 +77,7 @@ def _settings_without_llm_key() -> Settings:
         db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
         readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
         llm_enabled=True,
+        llm_required=False,
         llm_provider="openai",
         llm_model="gpt-5.4-nano",
         llm_api_key=None,

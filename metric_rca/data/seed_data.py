@@ -83,6 +83,7 @@ def main() -> None:
     rng = random.Random(SEED)  # 局部 RNG，确定性来源
     try:
         with engine.begin() as conn:  # 单事务：要么全部重建成功，要么回滚
+            _ensure_p6_schema(conn)
             for table in TABLES_TO_CLEAR:
                 conn.execute(text(f"DELETE FROM {table}"))
             _insert_dimensions(conn)
@@ -106,6 +107,23 @@ def _wait_for_mysql(engine) -> None:
             time.sleep(1)
     if last_error is not None:
         raise last_error
+
+
+def _ensure_p6_schema(conn) -> None:
+    """Apply the P6 trace token usage column to existing local databases."""
+    has_token_usage = conn.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'trace_step'
+              AND COLUMN_NAME = 'token_usage'
+            """
+        )
+    ).scalar_one()
+    if int(has_token_usage) == 0:
+        conn.execute(text("ALTER TABLE trace_step ADD COLUMN token_usage JSON NULL AFTER latency_ms"))
 
 
 def _insert_dimensions(conn) -> None:

@@ -79,7 +79,7 @@ class MetricService:
     def _get_intent_planner(self) -> LLMIntentPlanner:
         if self._intent_planner is not None:
             return self._intent_planner
-        if not self._settings.llm_enabled or not self._settings.llm_provider:
+        if not self._settings.llm_enabled or not self._settings.llm_provider or not self._settings.llm_model:
             raise MetricServiceError("LLM_REQUIRED_UNAVAILABLE", "intent planner is required")
         self._intent_planner = LLMIntentPlanner(
             provider=self._settings.llm_provider,

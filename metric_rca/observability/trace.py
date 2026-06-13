@@ -71,6 +71,7 @@ class TraceWriter:
         output_summary: dict[str, Any],
         error_code: str | None = None,
         started_at: float | None = None,
+        token_usage: dict[str, Any] | None = None,
     ) -> None:
         seq = self._next_seq_by_run.get(run_id, 1)
         latency_ms = 0
@@ -86,6 +87,7 @@ class TraceWriter:
             "output_summary": _jsonable(output_summary),
             "error_code": error_code,
             "latency_ms": latency_ms,
+            "token_usage": _jsonable(token_usage) if token_usage is not None else None,
             "created_at": _now(),
         }
         try:

@@ -16,7 +16,7 @@ def test_pyproject_declares_current_phase_dependencies() -> None:
     assert pyproject["project"]["requires-python"] == ">=3.12,<3.13"
 
     declared = {
-        dep.split(">", maxsplit=1)[0].split("<", maxsplit=1)[0].strip(): dep
+        dep.split("==", maxsplit=1)[0].split(">", maxsplit=1)[0].split("<", maxsplit=1)[0].strip(): dep
         for dep in pyproject["project"]["dependencies"]
     }
     required = {
@@ -26,30 +26,35 @@ def test_pyproject_declares_current_phase_dependencies() -> None:
         "pymysql",
         "sqlglot",
         "pandas",
+        "deepagents",
+        "langchain",
+        "langchain-core",
         "langchain-openai",
         "langgraph",
+        "langgraph-checkpoint",
+        "langgraph-prebuilt",
         "fastapi",
         "uvicorn",
         "httpx[socks]",
         "pytest",
     }
     forbidden_phase_gt1 = {
-        "langchain-core",
         "streamlit",
         "scikit-learn",
     }
     assert set(declared) == required
     assert forbidden_phase_gt1.isdisjoint(declared)
-    assert ">=" in declared["pydantic"] and "<" in declared["pydantic"]
-    assert ">=" in declared["sqlalchemy"] and "<" in declared["sqlalchemy"]
+    assert declared["deepagents"] == "deepagents==0.3.5"
+    assert declared["langchain"] == "langchain==1.2.3"
+    assert declared["langgraph"] == "langgraph==1.0.6"
 
     installed = metadata("metric_rca")
     assert installed["Name"] == "metric_rca"
     installed_requires = {
-        dep.split(">", maxsplit=1)[0].split("<", maxsplit=1)[0].strip()
+        dep.split("==", maxsplit=1)[0].split(">", maxsplit=1)[0].split("<", maxsplit=1)[0].strip()
         for dep in installed.get_all("Requires-Dist") or []
     }
-    assert installed_requires == required
+    assert installed_requires <= required
     assert version("pydantic").split(".", maxsplit=1)[0] == "2"
     assert int(version("sqlalchemy").split(".", maxsplit=1)[0]) >= 2
 

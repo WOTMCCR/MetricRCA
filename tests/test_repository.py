@@ -147,6 +147,7 @@ def test_repository_persists_documented_system_tables() -> None:
             "output_summary": {},
             "error_code": None,
             "latency_ms": 0,
+            "token_usage": None,
             "created_at": now,
         }
     )
@@ -254,7 +255,8 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
                 """
                 CREATE TABLE trace_step (
                   step_id TEXT PRIMARY KEY, run_id TEXT, seq INTEGER, node TEXT, action TEXT,
-                  input_summary TEXT, output_summary TEXT, error_code TEXT, latency_ms INTEGER, created_at TEXT
+                  input_summary TEXT, output_summary TEXT, error_code TEXT, latency_ms INTEGER,
+                  token_usage TEXT, created_at TEXT
                 )
                 """
             )
@@ -333,8 +335,8 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
                 """
                 INSERT INTO trace_step
                 VALUES
-                  ('t2', 'run-1', 2, 'execute_tool', 'detect_anomaly', '{}', '{"b": 2}', NULL, 4, :now),
-                  ('t1', 'run-1', 1, 'parse_question', 'parse_question', '{"a": 1}', '{}', NULL, 1, :now)
+                  ('t2', 'run-1', 2, 'execute_tool', 'detect_anomaly', '{}', '{"b": 2}', NULL, 4, '{"total_tokens": 5}', :now),
+                  ('t1', 'run-1', 1, 'parse_question', 'parse_question', '{"a": 1}', '{}', NULL, 1, NULL, :now)
                 """
             ),
             {"now": now.isoformat()},
@@ -398,6 +400,7 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
     assert repo.get_agent_run("run-1")["status"] == "succeeded"
     assert [row["seq"] for row in repo.get_trace_steps("run-1")] == [1, 2]
     assert repo.get_trace_steps("run-1")[0]["input_summary"] == {"a": 1}
+    assert repo.get_trace_steps("run-1")[1]["token_usage"] == {"total_tokens": 5}
     assert repo.get_evidences("run-1")[0]["result_summary"]["selected_candidate"]["dimension"] == "channel"
     assert repo.get_sql_audit_rows("run-1")[0]["guard_errors"] == []
     assert repo.get_operation_tasks("run-1")[0]["payload"] == {"owner": "ops"}

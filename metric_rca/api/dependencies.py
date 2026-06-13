@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from metric_rca.agent.graph import run_rca
+from metric_rca.agent.runner import run_rca
 from metric_rca.config.settings import Settings, get_settings
 from metric_rca.evals.runner import run_eval
 from metric_rca.repositories.metric_repository import MetricRepository

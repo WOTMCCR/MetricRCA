@@ -100,6 +100,9 @@ def test_root_cause_mapping_uses_config_override(monkeypatch: pytest.MonkeyPatch
     settings = Settings(
         db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
         readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+        llm_model="gpt-test",
+        llm_api_key="key",
+        llm_required=False,
         root_cause_type_by_metric={},
         root_cause_type_by_dimension={"channel": "custom_channel_rule"},
         root_cause_type_by_dimension_element={},

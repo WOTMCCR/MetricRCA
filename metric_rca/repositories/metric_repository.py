@@ -196,7 +196,7 @@ class MetricRepository:
                         text(
                             """
                             SELECT step_id, run_id, seq, node, action, input_summary,
-                                   output_summary, error_code, latency_ms, created_at
+                                   output_summary, error_code, latency_ms, token_usage, created_at
                             FROM trace_step
                             WHERE run_id = :run_id
                             ORDER BY seq ASC
@@ -212,6 +212,7 @@ class MetricRepository:
                     **dict(row),
                     "input_summary": _decode_json_column(row["input_summary"]),
                     "output_summary": _decode_json_column(row["output_summary"]),
+                    "token_usage": _decode_json_column(row["token_usage"]) if row["token_usage"] is not None else None,
                 }
                 for row in rows
             ]
@@ -436,16 +437,17 @@ class MetricRepository:
             **row,
             "input_summary": json.dumps(row["input_summary"]),
             "output_summary": json.dumps(row["output_summary"]),
+            "token_usage": json.dumps(row.get("token_usage")) if row.get("token_usage") is not None else None,
         }
         self._insert(
             """
             INSERT INTO trace_step (
               step_id, run_id, seq, node, action, input_summary, output_summary,
-              error_code, latency_ms, created_at
+              error_code, latency_ms, token_usage, created_at
             )
             VALUES (
               :step_id, :run_id, :seq, :node, :action, :input_summary, :output_summary,
-              :error_code, :latency_ms, :created_at
+              :error_code, :latency_ms, :token_usage, :created_at
             )
             """,
             payload,

@@ -63,20 +63,18 @@ def test_readme_error_codes_match_domain_or_api_error_models() -> None:
 def test_architecture_md_has_mermaid_and_matches_required_nodes() -> None:
     architecture = (ROOT / "docs" / "architecture.md").read_text()
     assert architecture.count("```mermaid") >= 7
-    for node in [
-        "parse_question",
-        "read_memory",
-        "plan_init",
-        "react_step",
-        "execute_tool",
-        "attribute_rank",
-        "reflection_verify",
-        "generate_report",
-        "create_tasks",
-        "write_memory",
-        "error_return",
+    for component in [
+        "RunOrchestrator",
+        "deepagents expert",
+        "GuardMiddleware",
+        "registered MetricRCA tools",
+        "Persisted Reflection",
+        "report_projection",
+        "memory_write",
+        "finish_run",
+        "run_rca",
     ]:
-        assert node in architecture
+        assert component in architecture
 
 
 def test_architecture_md_mentions_persisted_report_projection() -> None:

@@ -203,8 +203,18 @@ def _no_anomaly_task_ok(
         for row in artifacts.evidences
         if ":" in str(row.get("evidence_id"))
     }
-    has_attribute_rank = any(row.get("node") == "attribute_rank" for row in artifacts.trace_steps)
-    return evidence_aliases == {"E1"} and not artifacts.tasks and not has_attribute_rank
+    prohibited_actions = {
+        "attribute_rank",
+        "drilldown_dimension",
+        "fetch_related_signal",
+        "rank_root_causes",
+        "calculate_contribution",
+    }
+    has_downstream_rca = any(
+        (row.get("node") in prohibited_actions) or (row.get("action") in prohibited_actions)
+        for row in artifacts.trace_steps
+    )
+    return evidence_aliases == {"E1"} and not artifacts.tasks and not has_downstream_rca
 
 
 def _evidence_summary(evidences: list[dict[str, Any]], alias: str) -> dict[str, Any]:

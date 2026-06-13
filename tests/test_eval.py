@@ -187,10 +187,16 @@ def test_no_anomaly_correct_requires_no_task_no_attribute_rank_no_candidate() ->
         ground_truth=_gt("gmv_no_anomaly", expected_anomaly=False, root_cause_type=None, dimension=None, element=None),
         artifacts=_no_anomaly_artifacts("run-1", trace_node="attribute_rank"),
     )
+    p6_polluted = score_case(
+        case_id="gmv_no_anomaly",
+        ground_truth=_gt("gmv_no_anomaly", expected_anomaly=False, root_cause_type=None, dimension=None, element=None),
+        artifacts=_no_anomaly_artifacts("run-1", trace_action="rank_root_causes"),
+    )
 
     assert clean["no_anomaly_task_ok"] == 1
     assert clean["anomaly_ok"] == 1
     assert polluted["no_anomaly_task_ok"] == 0
+    assert p6_polluted["no_anomaly_task_ok"] == 0
 
 
 def test_eval_json_and_markdown_outputs_exist(tmp_path: Path) -> None:
@@ -346,11 +352,16 @@ def _artifacts(run_id: str, *, selected: dict[str, Any]) -> PersistedArtifacts:
     )
 
 
-def _no_anomaly_artifacts(run_id: str, *, trace_node: str = "parse_question") -> PersistedArtifacts:
+def _no_anomaly_artifacts(
+    run_id: str,
+    *,
+    trace_node: str = "parse_question",
+    trace_action: str | None = None,
+) -> PersistedArtifacts:
     return PersistedArtifacts(
         agent_run={"run_id": run_id, "status": "no_anomaly", "metric_id": "gmv"},
         evidences=[_evidence(f"{run_id}:E1", {"is_anomaly": False})],
-        trace_steps=[{"seq": 1, "node": trace_node}],
+        trace_steps=[{"seq": 1, "node": trace_node, "action": trace_action}],
         sql_audit=[{"guard_status": "passed"}],
         tasks=[],
         report={"status": "no_anomaly", "evidence_ids": [f"{run_id}:E1"]},

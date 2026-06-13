@@ -47,7 +47,14 @@ def verify_reflection(
         if _has_confirmed_root_cause_report(state.get("report")):
             issues.append(_issue("no_anomaly_report_behavior", "no_anomaly report cannot contain confirmed root cause"))
         trace_nodes = set(state.get("trace_nodes") or [])
-        if {"attribute_rank", "create_tasks"} & trace_nodes:
+        if {
+            "attribute_rank",
+            "create_tasks",
+            "drilldown_dimension",
+            "fetch_related_signal",
+            "rank_root_causes",
+            "calculate_contribution",
+        } & trace_nodes:
             issues.append(_issue("no_anomaly_downstream_trace", "no_anomaly run cannot visit downstream RCA nodes"))
         return ReflectionResult(
             passed=not issues,
@@ -260,7 +267,6 @@ def _suggested_action_for_missing_aliases(
         return AgentAction(
             action="calculate_contribution",
             args={
-                "run_id": state["run_id"],
                 "metric_id": state["metric_id"],
                 "target_date": target_date,
                 "dimension": candidate.dimension,
@@ -284,7 +290,6 @@ def _suggested_action_for_missing_aliases(
         return AgentAction(
             action="fetch_related_signal",
             args={
-                "run_id": state["run_id"],
                 "metric_id": state["metric_id"],
                 "target_date": target_date,
                 "signal_type": signal_type,

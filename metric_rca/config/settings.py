@@ -52,13 +52,18 @@ class Settings(BaseSettings):
     # 单条 SQL 的执行超时（毫秒），repo 执行前 SET SESSION 生效，防慢查。
     statement_timeout_ms: int = 3000
 
-    # LLM / Memory 的启用与"是否必需"开关。问题解析必须真实调用 OpenAI IntentPlanner；
-    # 缺少 provider / API key 时直接 fail-fast，不允许 mock 或 fallback parser。
+    # LLM / Memory 的启用与"是否必需"开关。P6 deepagents 编排要求 agent 运行时显式
+    # 配置 LLM；缺少 provider / model / API key 由 agent factory typed fail-fast，
+    # 不能阻断 seed/test 等非 LLM 命令。
     llm_enabled: bool = True
-    llm_required: bool = False
-    llm_provider: str | None = "openai"
-    llm_model: str = "gpt-5.4-nano"
+    llm_required: bool = True
+    llm_provider: str | None = None
+    llm_model: str | None = Field(default=None, min_length=1)
     llm_api_key: str | None = None
+    llm_temperature: float = 0.0
+    multi_agent_enabled: bool = False
+    adtributor_t_ep: float = 0.67
+    adtributor_t_eep: float = 0.10
     memory_enabled: bool = True
     memory_required: bool = False
     memory_trusted_sources: set[str] = Field(
@@ -110,10 +115,6 @@ class Settings(BaseSettings):
             )
         if not self.memory_trusted_sources:
             raise ValueError("CONFIG_INVALID: memory_trusted_sources must not be empty")
-        # Zero-Fallback 前移：如果该运行"要求 LLM"但没有配置 provider，
-        # 在配置构造期就抛 typed error，而不是等运行到一半才发现再静默兜底。
-        if self.llm_required and (not self.llm_provider or not self.llm_api_key):
-            raise ValueError("LLM_REQUIRED_UNAVAILABLE")
         return self
 
 
