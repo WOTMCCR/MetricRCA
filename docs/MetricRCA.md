@@ -27,7 +27,7 @@ Metric-RCA Agent 是一个「Agentic Analytics」系统：当电商经营方观�
   6. 昨天某类目 GMV 为什么异常？
 - 固定业务日：`business_today=2026-06-06`，`target_date=2026-06-05`（昨天），时区 `Asia/Tokyo`（业务本地日），约 60 天数据。
 - 基线：前 4 个同星期几（t-7, t-14, t-21, t-28）。
-- 确定性主策略：MVP 的动作选择以确定性策略为主；若某运行配置要求 LLM 参与，则 LLM 不可用必须返回 typed error，不自动改走其他 provider、mock、默认配置或旁路。
+- P6 起动作选择由 deepagents LLM tool-calling 执行，LLM 是必需依赖；LLM 不可用必须返回 typed error，不自动改走确定性策略、其他 provider、mock、默认配置或旁路。
 
 ### 1.2 3 天 MVP — 不做什么
 - 不做客服机器人、不做通用 RAG 问答、不做通用 Text-to-SQL demo、不做「用户问→模型写 SQL→返回」的薄包装、不做 BI dashboard 包装。
@@ -65,7 +65,7 @@ Metric-RCA Agent 是一个「Agentic Analytics」系统：当电商经营方观�
 
 > **Pydantic v2 约定（已核验官方文档 docs.pydantic.dev）**：模型继承 `BaseModel`，字段为带注解的类属性；配置用 `model_config = ConfigDict(...)`（替代 v1 的内部 `class Config`）；单字段校验用 `@field_validator`，跨字段用 `@model_validator(mode="after")` 且必须 `return self`；序列化用 `model_dump()` / `model_dump_json()`。建议核心契约模型设 `model_config = ConfigDict(extra="forbid")` 以在入口拦截非法字段。Pydantic 官方发布说明指出 **Pydantic V2 比 V1 快 5–50 倍**（校验逻辑用 Rust 重写为独立包 `pydantic-core`），因此运行时校验开销对本系统可忽略。
 
-**实体关系（文字版）**：一次 `AgentRun` 拥有一个 `RCAState`（运行态），产生多个 `TraceStep`、多条 `Evidence`、多个 `RootCauseCandidate`、零或多个 `ReflectionIssue`；`QuerySpec` 渲染出 `SQLPlan`，执行后产生 `Observation` 与 `Evidence`；`MemoryRecord` 在开始时被读取、结束时被写入；`EvalCase` 通过 `anomaly_ground_truth` 校验一次 `AgentRun`。
+**实体关系（文字版）**：一次 `AgentRun` 拥有 run-scoped orchestrator context 与 persisted artifacts，产生多个 `TraceStep`、多条 `Evidence`、多个 `RootCauseCandidate`、零或多个 `ReflectionIssue`；`QuerySpec` 渲染出 `SQLPlan`，执行后产生 `Observation` 与 `Evidence`；`MemoryRecord` 在开始时被读取、结束时被写入；`EvalCase` 通过 `anomaly_ground_truth` 校验一次 `AgentRun`。
 
 ```python
 # domain/enums.py
@@ -267,7 +267,8 @@ class AgentRun(BaseModel):
     finished_at: Optional[datetime] = None
 ```
 
-`RCAState` 是 LangGraph 的图状态，见第 5 节。
+`RCAState` 是 v1 LangGraph 图状态，P6 起只保留为历史附录；当前运行态由
+`RunOrchestrator`、`GuardMiddleware` 与 persisted artifacts 共同表达，见第 5 节。
 
 **字段 MVP-必须 vs 1-month-增强标注**：`MetricDefinition.aliases / business_rules`、`MemoryRecord.layer ∈ {semantic, episodic, reflection}`、`RootCauseCandidate` 的多维组合字段均为 1-month；其余为 MVP-必须。
 
@@ -280,8 +281,8 @@ class AgentRun(BaseModel):
 ```mermaid
 flowchart TB
   UI[React/Vite 调试 UI] --> API[FastAPI]
-  API --> ORCH[LangGraph 编排器 / RCAState]
-  ORCH --> AGENT[ReAct 动作选择 - LLM]
+  API --> ORCH[RunOrchestrator]
+  ORCH --> AGENT[deepagents LLM tool-calling]
   ORCH --> TOOLS[确定性工具层]
   TOOLS --> GUARD[SQL Guardrail - sqlglot]
   TOOLS --> ALGO[确定性算法: 异常检测/贡献/分解/排序]
@@ -294,28 +295,25 @@ flowchart TB
   TRACE --> DB
 ```
 
-### 3.2 控制流（3 天 MVP）
+### 3.2 控制流（P6 active）
 
 ```mermaid
 flowchart LR
-  START((START)) --> parse[parse_question]
-  parse --> mem_r[read_memory]
-  mem_r --> plan[plan_init]
-  plan --> react{react_step}
-  react -->|act| tool[execute_tool 确定性]
-  tool --> react
-  react -->|enough_evidence| attez[attribute & rank]
-  react -->|NO_ANOMALY_DETECTED| noanom[generate_report status=no_anomaly]
-  attez --> refl[reflection_verify]
-  refl -->|issues & repair_left| react
-  refl -->|passed| report[generate_report]
-  refl -->|repair_failed| failret[explicit_error_return]
-  report -->|has candidate| task[create_tasks]
-  report -->|no_anomaly| mem_w[write_memory]
-  noanom --> mem_w
-  task --> mem_w[write_memory]
-  mem_w --> END((END))
-  failret --> mem_w
+  START((START)) --> start_run[start agent_run]
+  start_run --> memory[required memory read]
+  memory --> agent[deep agent invoke]
+  agent --> guard[GuardMiddleware tool boundary]
+  guard --> tools[deterministic MetricRCA tools]
+  tools --> evidence[persist Evidence and trace]
+  agent --> reflect[persisted-artifact Reflection]
+  reflect -->|repairable once| agent
+  reflect -->|passed| project[ADL-0006 report projection]
+  reflect -->|failed| fail[failed + error_code]
+  project --> tasks[operation task finalization]
+  tasks --> mem_w[required memory write]
+  mem_w --> finish[succeeded / no_anomaly terminal status]
+  finish --> END((END))
+  fail --> END
 ```
 
 ### 3.3 数据流（详见第 15 节）
@@ -331,12 +329,14 @@ flowchart LR
 metric_rca/
   api/                # FastAPI 路由、请求/响应模型、依赖注入
   agent/
-    graph.py          # LangGraph StateGraph 构建
-    state.py          # RCAState
-    nodes/            # 每个 node 一个文件
-    tools/            # 工具实现（确定性）
-    react.py          # 动作选择逻辑（确定性主策略 + 可选 LLM）
-    reflection.py     # Reflection 校验器
+    runner.py         # RunOrchestrator 生命周期、repair、终态化
+    factory.py        # deepagents 装配 + action-space gate
+    middleware.py     # GuardMiddleware + token usage callback
+    deep_tools.py     # LangChain StructuredTool wrappers
+    tools/            # 确定性工具核心（QuerySpec -> Guard -> Repo）
+    prompts.py        # expert system prompt
+    reflection.py     # persisted-artifact Reflection 校验器
+    subagents.py      # P9 multi-agent gate
   domain/             # enums, models（Pydantic）
   data/               # seed_data.py, schema.sql, anomaly_injection.py
   repositories/       # SQLAlchemy 访问层（只读取数 + 系统表写入）
@@ -358,7 +358,61 @@ metric_rca/
 
 ---
 
-## 5. Agent State Machine（LangGraph）
+## 5. Agent Orchestration（v2 deepagents active design）
+
+> **v2 source of truth**: `docs/final-design/01-architecture.md` supersedes the
+> v1 hand-written `StateGraph` design for the 1-month final version. The v1
+> LangGraph text is retained below as an appendix so historical MVP decisions
+> remain auditable, but new implementation work must target the v2
+> `RunOrchestrator + deepagents + GuardMiddleware` architecture.
+
+P6 replaces the hand-written graph under `metric_rca/agent/` with this package
+layout:
+
+```text
+metric_rca/agent/
+  runner.py          # RunOrchestrator lifecycle, repair re-entry, finalization
+  factory.py         # create_deep_agent assembly
+  middleware.py      # GuardMiddleware via wrap_tool_call
+  tools/             # LangChain @tool wrappers over deterministic tools
+  prompts.py         # controlled expert prompt
+  reflection.py      # persisted-artifact rule verifier
+  subagents.py       # P9-only subagent config gate
+```
+
+The active control flow is:
+
+1. `RunOrchestrator` creates `agent_run(status=running)`.
+2. `factory.create_metric_rca_agent` builds a deepagents agent with the required
+   LLM model, registered tool whitelist, `GuardMiddleware`, planning
+   `write_todos`, and filesystem tools disabled by policy.
+3. The LLM chooses among whitelisted tools only. It never writes SQL and never
+   sees raw result rows.
+4. `GuardMiddleware` validates each tool name and Pydantic argument schema,
+   enforces run-scoped budget counters, executes the tool, writes trace, and
+   fails if any data-fetching tool returns no current-run `evidence_id`.
+5. After the agent loop stops, `RunOrchestrator` runs deterministic Reflection
+   over persisted artifacts only. One repair re-entry is allowed through the
+   same thread/checkpointer. A second failure returns
+   `REFLECTION_REPAIR_FAILED` and no report.
+6. `RunOrchestrator` enforces the no-anomaly contract at finalization: an
+   `is_anomaly=false` evidence may only produce a `no_anomaly` run with no
+   drilldown/rank trace and no operation task. Violations fail with
+   `NO_ANOMALY_CONTRACT_VIOLATED`.
+
+Hard invariants remain unchanged:
+
+- `QuerySpec -> SQLRenderer -> SQLGuard -> Repository` is the only metric-fact
+  data path.
+- `MetadataRepository -> MetricService` is the only metric metadata path.
+- ADL-0006 report projection remains mechanical: numeric claims must be bound
+  to persisted current-run Evidence.
+- Memory may influence planning priority only; memory failures are typed run
+  failures when memory is required.
+- Missing or unreachable LLM is `LLM_REQUIRED_UNAVAILABLE`; no deterministic
+  production policy replaces the LLM.
+
+### 5.A v1 LangGraph State Machine（superseded; kept as appendix）
 
 > **LangGraph 核验要点（官方文档 docs.langchain.com / reference.langchain.com）**：用 `StateGraph(State)` 构建，`add_node`、`add_edge`、`add_conditional_edges(source, router, mapping)`，`START`/`END` 为特殊节点；state 可用 `TypedDict`（官方主推、零运行时开销、与 checkpoint 兼容性好）或 Pydantic `BaseModel`（带递归校验，但性能略低于 TypedDict / dataclass）；并发 / 累加字段用 `Annotated[type, reducer]`（如 `operator.add` / `add_messages`），不设 reducer 时默认「后写覆盖」；图编译 `builder.compile(checkpointer=...)`；**默认 `recursion_limit=25`**，超出抛 `GraphRecursionError`，可在 invoke 的 config 里调大 `recursion_limit`。本系统的「最大步数」由我们自身的 `max_steps` 字段控制（确定性），不依赖 recursion_limit 作为业务安全机制。
 >
@@ -438,7 +492,33 @@ stateDiagram-v2
 
 ---
 
-## 6. ReAct Design
+## 6. ReAct / Tool-Calling Design（v2 deepagents active design）
+
+> **v2 source of truth**: P6 uses deepagents free tool-calling inside a strict
+> registered action space. The v1 deterministic-primary ReAct policy is retained
+> below as a superseded appendix and must not be reintroduced as a production
+> fallback.
+
+The active v2 ReAct contract is:
+
+- The LLM is required and runs with `temperature=0`.
+- The exposed tools are exactly the MetricRCA whitelist plus deepagents
+  planning `write_todos`; filesystem tools (`ls`, `read_file`, `write_file`,
+  `edit_file`, and equivalents) are not part of the exposed action set.
+- Each MetricRCA tool has `extra="forbid"` Pydantic input/output models.
+- `GuardMiddleware.wrap_tool_call` short-circuits illegal tool names or invalid
+  arguments with an `ACTION_SCHEMA_INVALID` observation and does not execute the
+  tool.
+- Budget counters (`max_steps`, `max_query`, `max_drilldown_depth`) live in a
+  run-scoped context outside LLM-visible state. Budget exhaustion returns
+  `BUDGET_EXCEEDED`; repeated illegal data-tool attempts fail the run.
+- Tool implementations still produce `Observation + Evidence` by calling the
+  deterministic services. A data-fetching tool without a persisted current-run
+  evidence id is treated as a tool defect and returned as typed failure.
+- Reflection repair is not performed inside a tool. It is orchestrator-owned and
+  re-enters the same deepagents thread once through the normal tool path.
+
+### 6.A v1 ReAct Design（superseded; kept as appendix）
 
 > **核验（官方 `create_react_agent` 文档 + reference.langchain.com）**：LangGraph 的 ReAct 本质是「LLM 节点产生动作 → 工具节点执行（每个 tool_call 一个 ToolMessage）→ 结果回灌 → 循环直到响应中无 tool_calls」；`should_continue` 依据最后一条消息是否含 `tool_calls` 路由到 `tools` 或 `END`；prebuilt 版本还用 `remaining_steps`（≈ recursion_limit − 已走步数）做步数上限保护。本系统**不使用** LLM 自由 tool-calling，而是约束 LLM 只能输出 `AgentAction`（白名单 action + args），由确定性代码执行——这是「确定性分析 + LLM 规划」边界的关键。
 
@@ -503,7 +583,7 @@ step5 ACTION  finish
 ## 8. Memory Design
 
 **三层（MVP）**：
-- **working memory**：即 LangGraph `RCAState`（线程内）。
+- **working memory**：deepagents thread context + orchestrator run context（线程内），事实以 persisted artifacts 为准。
 - **session memory**：当前 run / 会话上下文（`agent_run` + `trace_step` 表）。
 - **case memory**：历史 RCA 案例 / Reflection 教训（`memory_record` 表，layer=case）。
 
@@ -1074,7 +1154,7 @@ P5 必须额外校验：
 | SQL_EXECUTION_FAILED | 是 | 是(1 次) | 重试或终止 |
 | INSUFFICIENT_BASELINE_DATA | 否 | 否 | 结构化「证据不足」 |
 | NO_ANOMALY_DETECTED | 否 | 否 | 结构化「无异常」，不建任务 |
-| ACTION_SCHEMA_INVALID | 是 | 否 | 记录 error observation；LLM required 时 error_return，否则确定性主策略可显式重选 |
+| ACTION_SCHEMA_INVALID | 是 | 否 | GuardMiddleware 记录 error observation 并短路；重复/不可恢复非法数据工具尝试使 run failed，不允许确定性动作选择兜底 |
 | LLM_REQUIRED_UNAVAILABLE | 否 | 否 | error_return |
 | REFLECTION_REPAIR_FAILED | 否 | 否 | error_return（不编造） |
 | MEMORY_READ / WRITE_FAILED | 否 | 否 | error_return（MVP memory 为 required；若配置 memory_enabled=false，则不调用 memory） |
@@ -1131,7 +1211,7 @@ metric_rca/
   metric_rca/...         # 见第 4 节
   frontend/              # React/Vite debug UI
   tests/                 # test_guard.py, test_anomaly.py, test_attribution.py,
-                         # test_graph.py, test_eval.py
+                         # test_orchestrator.py, test_middleware.py, test_eval.py
 ```
 
 **Makefile**：
@@ -1146,11 +1226,11 @@ test: pytest -q
 
 **Docker Compose services**：mysql（8.x，初始化 schema.sql）。API 和 React/Vite UI 在本地分别通过 `make api` 与 `make ui` 启动；如后续要容器化 API/UI，必须保持 API 读 persisted artifacts、UI 只读 API 的边界。
 
-3 天实现顺序（每日 commit 粒度）：见第 21 节。
+历史 3 天实现顺序（v1，已被 `docs/final-design/04-phase-plan.md` P6-P9 取代）：见第 21 节。
 
 ---
 
-## 21. 3-Day Implementation Plan
+## 21. 3-Day Implementation Plan（v1 historical; superseded by final-design）
 
 **Day 1 — 数据与守卫地基**
 - 目标：DB + 种子 + QuerySpec + SQL 守卫可用。

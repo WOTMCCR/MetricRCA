@@ -20,10 +20,10 @@ Status vocabulary: `satisfied`, `partial`, `intentionally deferred`, `missing`.
 | 14 | satisfied | `tests/test_tools.py` |
 | 15 | satisfied | `tests/test_tools.py` |
 | 16 | satisfied | `tests/test_reflection.py`, `tests/test_reporting.py` |
-| 17 | satisfied | `tests/test_trace.py`, `tests/test_graph.py` |
-| 18 | satisfied | `tests/test_graph.py`, `tests/test_react.py` |
-| 19 | satisfied | `tests/test_reflection.py`, `tests/test_graph.py` |
-| 20 | satisfied | `tests/test_memory.py`, `tests/test_graph.py` |
+| 17 | satisfied | `tests/test_trace.py`, `tests/test_middleware.py`, `tests/test_orchestrator.py` |
+| 18 | satisfied | `tests/test_middleware.py`, `tests/test_orchestrator.py`, `tests/test_zero_fallback.py` |
+| 19 | satisfied | `tests/test_reflection.py`, `tests/test_orchestrator.py` |
+| 20 | satisfied | `tests/test_memory.py`, `tests/test_orchestrator.py` |
 | 21 | satisfied | `tests/test_api.py` |
 | 22 | satisfied | `tests/test_ui_smoke.py`, `npm test --prefix frontend -- --run`, `npm run build --prefix frontend` |
 | 23 | satisfied | `tests/test_eval.py`, `PATH=.venv/bin:$PATH make eval` |

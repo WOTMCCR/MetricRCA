@@ -1,21 +1,22 @@
 # MetricRCA
 
-MetricRCA is a deterministic metric root-cause analysis system. It keeps LLM
-usage limited to structured intent parsing; SQL, evidence, attribution,
-reflection, report projection, API output, UI display, and eval scoring are all
-controlled by code and persisted artifacts.
+MetricRCA is a metric root-cause analysis system with a deepagents
+tool-calling core. The LLM is required for agent planning, but SQL, evidence,
+attribution, reflection, report projection, API output, UI display, and eval
+scoring are all controlled by code and persisted artifacts.
 
 ## Architecture
 
 - Metadata is read from `metric_definition` through `MetadataRepository`.
-- User questions are parsed by `MetricService.parse_question()` using the live
-  OpenAI structured-output planner when graph/eval runs are executed.
+- `RunOrchestrator` creates the run, invokes a deepagents expert, runs
+  persisted-artifact Reflection, projects the report, and finalizes status.
 - The only metric-fact data path is:
   `QuerySpec -> SQLRenderer -> SQLGuard -> MetricRepository.execute_plan`.
-- LangGraph `StateGraph(RCAState)` orchestrates real nodes and the deterministic
-  ReAct loop.
-- Reflection is a deterministic verifier with legal repair through
-  `react_step -> execute_tool -> QuerySpec -> Renderer -> Guard -> Repository`.
+- `GuardMiddleware` validates the registered tool whitelist and `extra=forbid`
+  args schemas, enforces budgets, writes trace, and requires data tools to
+  return current-run evidence ids.
+- Reflection is a deterministic verifier with one repair re-entry through the
+  same deepagents thread and normal middleware/tool path.
 - Memory can only reorder drilldown priority. It cannot become evidence or a
   final conclusion.
 - Final report output is a verified projection. Numeric claims must bind

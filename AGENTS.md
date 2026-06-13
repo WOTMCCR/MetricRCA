@@ -69,8 +69,10 @@ The following are explicitly unacceptable:
 
 Future implementation work must preserve these architecture requirements:
 
-- Real LangGraph `StateGraph`, with the documented nodes and conditional flow.
-- Real ReAct `AgentAction -> Observation -> Evidence` loop.
+- Real P6 `RunOrchestrator + deepagents + GuardMiddleware`, with LLM-required
+  tool calling constrained to the documented whitelist.
+- Real tool-call `Observation -> Evidence` loop through middleware-managed
+  LangChain tools; do not reintroduce a deterministic action-selection policy.
 - Real deterministic tool layer in the documented tool modules.
 - `QuerySpec -> SQLRenderer -> SQLGuard -> Repository` as the only data access path.
 - Metric metadata and schema context must be DB-backed or schema-backed through

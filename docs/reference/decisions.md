@@ -1,4 +1,4 @@
-## ADL-0007: 最终版编排层迁移到 deepagents，守卫语义移交 middleware + orchestrator
+## ADL-0008: 最终版编排层迁移到 deepagents，守卫语义移交 middleware + orchestrator
 
 | 字段 | 值 |
 |------|------|
@@ -37,7 +37,21 @@ LLM-first 更纯粹（彻底消除确定性主策略与 LLM 策略双轨）；de
 
 ### 后续跟进
 
-- P6 落地时钉死 deepagents/langchain 精确版本并回填本条目。
+- P6 钉死版本：`deepagents==0.3.5`、`langchain==1.2.3`、
+  `langchain-core==1.4.2`、`langchain-openai==1.2.2`、
+  `langgraph==1.0.6`、`langgraph-checkpoint==3.0.1`、
+  `langgraph-prebuilt==1.0.5`。Context7 官方 deepagents 文档核验了
+  `create_deep_agent(model, tools, system_prompt, middleware, subagents,
+  response_format, ...)` 与 `AgentMiddleware.wrap_tool_call(request, handler)`
+  API；本地 sandbox 无法连接 PyPI proxy，因此安装级校验需在 supervisor
+  可联网环境执行。
+- P6 filesystem 工具治理：Context7 对 `deepagents==0.3.5` 的源码摘录显示
+  `create_deep_agent` 会组装 `FilesystemMiddleware`，且公开签名只提供
+  `permissions`（deny/allow/interrupt）而非移除工具的开关；`permissions=[]`
+  不是“工具不暴露”。当前 factory 要求 `create_deep_agent` 支持
+  `builtin_tools=[]` 才会构造 agent，否则 typed fail-fast
+  `DEEPAGENTS_FILESYSTEM_TOOLS_UNDISABLEABLE`，避免在真实运行中暴露
+  `ls/read_file/write_file/edit_file/glob/grep`。
 - v1 图设计在 docs/MetricRCA.md 中保留为附录（演变脉络）。
 
 ## ADL-0006: Final Report Is A Verified Artifact Projection Until P4 Persistence

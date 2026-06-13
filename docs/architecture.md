@@ -5,58 +5,59 @@
 ```mermaid
 flowchart LR
   User[User question] --> API[FastAPI]
-  API --> Graph[LangGraph StateGraph]
-  Graph --> Intent[MetricService + OpenAI structured output]
-  Graph --> React[Deterministic ReAct policy]
-  React --> Tools[P2 tools]
+  API --> Orchestrator[RunOrchestrator]
+  Orchestrator --> DeepAgent[deepagents expert]
+  DeepAgent --> Middleware[GuardMiddleware]
+  Middleware --> Tools[registered MetricRCA tools]
   Tools --> QuerySpec[QuerySpec]
   QuerySpec --> Renderer[SQLRenderer]
   Renderer --> Guard[SQLGuard]
   Guard --> Repo[MetricRepository.execute_plan]
   Repo --> Evidence[(evidence/sql_audit)]
-  Graph --> Trace[(trace_step/agent_run)]
-  Graph --> Memory[(memory_record)]
+  Middleware --> Trace[(trace_step token_usage)]
+  Orchestrator --> Memory[(memory_record)]
+  Orchestrator --> Reflection[Persisted Reflection]
   API --> Projector[Persisted report projector]
   Projector --> UI[React UI]
 ```
 
-## Graph Control Flow
+## Orchestrator Control Flow
 
 ```mermaid
 flowchart TD
-  START --> parse_question
-  parse_question --> read_memory
-  read_memory --> plan_init
-  plan_init --> react_step
-  react_step --> execute_tool
-  execute_tool --> react_step
-  react_step --> attribute_rank
-  attribute_rank --> reflection_verify
-  reflection_verify --> generate_report
-  reflection_verify --> react_step
-  reflection_verify --> error_return
-  generate_report --> create_tasks
-  generate_report --> write_memory
-  create_tasks --> write_memory
-  error_return --> write_memory
-  write_memory --> END
+  START --> create_run
+  create_run --> build_agent
+  build_agent --> deepagents_loop
+  deepagents_loop --> guard_middleware
+  guard_middleware --> tools
+  tools --> persisted_evidence
+  persisted_evidence --> reflection
+  reflection --> repair_reentry
+  repair_reentry --> deepagents_loop
+  reflection --> report_projection
+  report_projection --> memory_write
+  memory_write --> finish_run
+  reflection --> failed_run
+  failed_run --> END
+  finish_run --> END
 ```
 
-## ReAct Repair Path
+## deepagents Repair Path
 
 ```mermaid
 sequenceDiagram
-  participant R as reflection_verify
-  participant A as react_step
-  participant T as execute_tool
+  participant O as RunOrchestrator
+  participant A as deepagents expert
+  participant M as GuardMiddleware
   participant Q as QuerySpec/Renderer/Guard
   participant DB as MetricRepository
-  R->>A: ReflectionIssue.suggested_action
-  A->>T: validated AgentAction
-  T->>Q: build controlled query
+  O->>A: repair message with ReflectionIssue
+  A->>M: tool call
+  M->>M: whitelist, schema, budget
+  M->>Q: build controlled query
   Q->>DB: execute guarded SQLPlan
-  DB-->>T: rows + sql_audit
-  T-->>R: new current-run Evidence
+  DB-->>M: rows + sql_audit
+  M-->>O: new current-run Evidence
 ```
 
 ## QuerySpec Data Path
@@ -90,10 +91,10 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  Memory[(memory_record)] --> ReadMemory[read_memory]
-  ReadMemory --> Priority[drilldown priority only]
-  Priority --> ReAct[ReAct planning]
-  ReAct --> CurrentEvidence[current-run E1-E4]
+  Memory[(memory_record)] --> Orchestrator[RunOrchestrator]
+  Orchestrator --> Priority[planning priority only]
+  Priority --> Agent[deepagents planning]
+  Agent --> CurrentEvidence[current-run E1-E4]
   CurrentEvidence --> Candidate[RootCauseCandidate]
   Memory -. forbidden .-> Candidate
   Memory -. forbidden .-> Evidence[evidence_id]
@@ -105,7 +106,7 @@ flowchart TD
 flowchart LR
   ReactUI[React/Vite UI] --> API[FastAPI]
   API --> POST[POST /api/rca/runs]
-  POST --> Graph[run_rca]
+  POST --> Runner[RunOrchestrator run_rca]
   API --> GET[GET persisted artifacts]
   GET --> Projector[reporting.projector]
   Projector --> ReactUI
@@ -117,7 +118,7 @@ flowchart LR
 flowchart TD
   Cases[cases.jsonl] --> Runner[eval runner]
   GT[(anomaly_ground_truth)] --> Runner
-  Runner --> Graph[run_rca once per case]
+  Runner --> RunnerCall[run_rca once per case]
   Graph --> Artifacts[(agent_run/evidence/trace/sql_audit/tasks)]
   Artifacts --> Scorer[scorer]
   Scorer --> Guard[real SQLGuard dangerous_sql_blocked]

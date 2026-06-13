@@ -73,44 +73,39 @@ Passing tests by bypassing core logic is failure, not success.
 
 Future application code must implement the documented architecture directly.
 
-### Agent Graph
+### Agent Orchestrator
 
-- `metric_rca/agent/graph.py` must build a real LangGraph `StateGraph(RCAState)`.
-- The graph must use `START`, `END`, `add_node`, `add_edge`, and
-  `add_conditional_edges`.
-- `run_rca()` may be a wrapper, but it must invoke the compiled graph.
+P6 supersedes the v1 hand-written LangGraph `StateGraph` requirement. New
+application code must implement the documented deepagents architecture directly:
+
+- `metric_rca/agent/runner.py` owns `RunOrchestrator`, run lifecycle,
+  persisted-artifact Reflection, one repair re-entry, report projection, memory
+  writes, and terminal status.
+- `metric_rca/agent/factory.py` builds the deepagents agent with the required
+  configured LLM, registered MetricRCA tools, `GuardMiddleware`, planning
+  `write_todos`, and disabled filesystem permissions.
+- `metric_rca/agent/middleware.py` implements `GuardMiddleware.wrap_tool_call`.
+- `metric_rca/agent/deep_tools.py` exposes LangChain structured tools over the
+  deterministic tool layer.
+- `metric_rca/agent/prompts.py` and `metric_rca/agent/subagents.py` hold the
+  controlled expert prompt and P9 multi-agent gate.
+- `metric_rca/agent/graph.py`, `state.py`, `react.py`, and `nodes/` must not be
+  kept as import shims.
+
+### Tool-Calling Loop
+
+- The LLM is required. Missing provider, model, API key, or deepagents runtime
+  returns `LLM_REQUIRED_UNAVAILABLE`.
+- Tool calls must be constrained to the registered whitelist plus planning
+  `write_todos`.
+- `GuardMiddleware` validates tool name, Pydantic args with `extra="forbid"`,
+  run-scoped budgets, trace persistence, and data-tool evidence ids.
+- Invalid tool or args must create `Observation(ok=False,
+  error_code="ACTION_SCHEMA_INVALID")` and must not execute the handler.
+- Budget exhaustion returns `BUDGET_EXCEEDED`; repeated data-tool attempts after
+  exhaustion fail the run.
 - Business termination must use settings such as `max_steps`, `max_query`,
-  `max_drilldown_depth`, and `max_repair`, not LangGraph `recursion_limit`.
-
-### Required Agent Nodes
-
-Each required node must be a real module with real behavior:
-
-- `metric_rca/agent/nodes/parse_question.py`
-- `metric_rca/agent/nodes/read_memory.py`
-- `metric_rca/agent/nodes/plan_init.py`
-- `metric_rca/agent/nodes/react_step.py`
-- `metric_rca/agent/nodes/execute_tool.py`
-- `metric_rca/agent/nodes/attribute_rank.py`
-- `metric_rca/agent/nodes/reflection_verify.py`
-- `metric_rca/agent/nodes/generate_report.py`
-- `metric_rca/agent/nodes/create_tasks.py`
-- `metric_rca/agent/nodes/write_memory.py`
-- `metric_rca/agent/nodes/error_return.py`
-
-### ReAct Loop
-
-- ReAct must be a real `AgentAction -> Observation -> Evidence` loop.
-- `react_step` produces an `AgentAction` from current `RCAState`.
-- `execute_tool` executes only whitelisted `AgentAction` values.
-- Each step appends `AgentAction` to `state.actions`.
-- Each tool result appends `Observation` to `state.observations`.
-- Each tool-created `Evidence` appends to `state.evidences`.
-- Every step writes `trace_step`.
-- Invalid action must create
-  `Observation(ok=False, error_code="ACTION_SCHEMA_INVALID")` and must not
-  execute any tool.
-- If LLM is required and unavailable, return `LLM_REQUIRED_UNAVAILABLE`.
+  `max_drilldown_depth`, and `max_repair`, not LangGraph recursion limits.
 
 ### Tool And Data Access Layer
 

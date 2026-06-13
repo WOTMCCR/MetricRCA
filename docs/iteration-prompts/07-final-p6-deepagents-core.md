@@ -10,7 +10,7 @@ Before applying this phase prompt, read and obey, in this order:
 1. docs/iteration-prompts/00-global-iteration-rules.md
 2. docs/iteration-prompts/06-review-checklist.md (mandatory post-phase review)
 3. docs/final-design/ (ALL five files) - this is the v2 design source of truth
-4. docs/reference/decisions.md ADL-0007 and ADL-0006
+4. docs/reference/decisions.md ADL-0008 (deepagents migration) and ADL-0006
 
 SOURCE OF TRUTH PRIORITY FOR THIS PHASE
 1. Current user instruction
@@ -37,7 +37,7 @@ IMPLEMENTATION REQUIREMENTS (see final-design 01/02/03 for full detail)
 - Pin exact versions of deepagents and its langchain/langgraph dependencies
   in pyproject.toml. Verify every deepagents API you use against the pinned
   version's official docs, not memory. Record pinned versions by updating the
-  "后续跟进" section of ADL-0007 in docs/reference/decisions.md.
+  "后续跟进" section of ADL-0008 in docs/reference/decisions.md.
 - New agent/ layout: runner.py (RunOrchestrator), factory.py, middleware.py
   (GuardMiddleware via wrap_tool_call), tools/ (langchain @tool wrappers with
   Pydantic extra="forbid" In/Out models), prompts.py, reflection.py,
