@@ -12,6 +12,27 @@ fresh branch codex/p7-adtributor-20cases from the MERGED P6 head (commits
 4c50c43 docs + 5a732d3 code). Do NOT stack P7 on top of uncommitted P6 work.
 You may cherry-pick / re-apply the salvageable in-progress P7 work (see KEEP list).
 
+RECOMMENDED CLEAN-REDO STRATEGY: the working tree may carry prior P7 in-progress
+changes that include ADL-0009-violating code (adtributor_attribute wiring, answer-
+leaking eval questions, single-dim C07). Rather than surgically reverting those
+while keeping the good parts in-place, the safer path is:
+  1. git checkout 597336c -- <REDO files>   # reset violating files to the clean
+     ADL-0009 base (e.g. metric_rca/agent/tools/registry.py, deep_tools.py,
+     evals/cases.jsonl, agent/prompts.py, etc.)
+  2. Keep the KEEP-list files as-is (adtributor_service.py, domain/models.py,
+     data/seed_data.py, etc.)
+  3. DELETE metric_rca/agent/tools/adtributor_attribute.py (must not exist).
+  4. Re-implement REDO items from scratch on the clean base.
+This avoids partial-revert bugs where old wiring survives in an import or test.
+Files likely needing reset (REDO): agent/tools/registry.py, agent/deep_tools.py,
+agent/prompts.py, agent/middleware.py, agent/runner.py, agent/factory.py,
+agent/tools/schemas.py, evals/cases.jsonl, services/attribution_service.py,
+tests/test_tools.py, tests/test_attribution.py.
+Files likely safe to keep: services/adtributor_service.py, domain/models.py,
+data/seed_data.py, data/anomaly_injection.py (review C07 injection strength),
+config/settings.py, agent/reflection.py, tests/test_adtributor.py,
+tests/test_domain_models.py, tests/test_seed.py.
+
 MANDATORY PRELUDE — read and obey before touching anything:
 1. docs/iteration-prompts/00-global-iteration-rules.md
 2. docs/iteration-prompts/06-review-checklist.md (mandatory post-phase review)
