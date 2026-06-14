@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     # 业务终止上限（业务安全机制，不依赖 LangGraph 的 recursion_limit）。
     max_steps: int = 8
     max_query: int = 12
-    max_drilldown_depth: int = 2
+    max_drilldown_depth: int = 3
     max_repair: int = 1
 
     # 单条 SQL 的执行超时（毫秒），repo 执行前 SET SESSION 生效，防慢查。
@@ -64,8 +64,9 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None
     llm_structured_output_method: Literal["json_schema", "json_mode", "function_calling"] = "json_schema"
     llm_temperature: float = 0.0
-    eval_llm_max_attempts: int = 3
+    eval_llm_max_attempts: int = Field(default=3, ge=1)
     eval_llm_retry_seconds: float = 20.0
+    eval_concurrency: int = Field(default=1, ge=1)
     multi_agent_enabled: bool = False
     adtributor_t_ep: float = 0.67
     adtributor_t_eep: float = 0.10

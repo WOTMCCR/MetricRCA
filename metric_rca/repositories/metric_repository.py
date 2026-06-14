@@ -22,12 +22,19 @@ from typing import Any
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, TimeoutError as SQLAlchemyTimeoutError
 
 from metric_rca.config.settings import Settings
 from metric_rca.domain.models import SQLPlan
 from metric_rca.guardrails.renderer import is_renderer_signed
 from metric_rca.guardrails.sql_guard import guard_sql, is_guard_signed
+
+REPOSITORY_POOL_SIZE = 1
+REPOSITORY_MAX_OVERFLOW = 1
+REPOSITORY_POOL_TIMEOUT_SECONDS = 30
+SYSTEM_WRITE_MAX_ATTEMPTS = 10
+SYSTEM_WRITE_RETRY_DELAY_SECONDS = 0.2
+TRANSIENT_SYSTEM_WRITE_ERRNOS = frozenset({1040, 1205, 1213, 2006, 2013})
 
 
 @dataclass(frozen=True)
@@ -55,8 +62,20 @@ class MetricRepository:
     def from_settings(cls, settings: Settings) -> MetricRepository:
         # 从配置构造：只读 DSN 跑业务查询，应用 DSN 写系统表；pool_pre_ping 防 MySQL 空闲断连。
         return cls(
-            readonly_engine=create_engine(str(settings.readonly_db_dsn), pool_pre_ping=True),
-            audit_engine=create_engine(str(settings.db_dsn), pool_pre_ping=True),
+            readonly_engine=create_engine(
+                str(settings.readonly_db_dsn),
+                pool_pre_ping=True,
+                pool_size=REPOSITORY_POOL_SIZE,
+                max_overflow=REPOSITORY_MAX_OVERFLOW,
+                pool_timeout=REPOSITORY_POOL_TIMEOUT_SECONDS,
+            ),
+            audit_engine=create_engine(
+                str(settings.db_dsn),
+                pool_pre_ping=True,
+                pool_size=REPOSITORY_POOL_SIZE,
+                max_overflow=REPOSITORY_MAX_OVERFLOW,
+                pool_timeout=REPOSITORY_POOL_TIMEOUT_SECONDS,
+            ),
             statement_timeout_ms=settings.statement_timeout_ms,
         )
 
@@ -573,11 +592,16 @@ class MetricRepository:
 
     def _write(self, sql: str, params: dict[str, Any]) -> None:
         # 系统表写入统一走应用账号事务（begin() 自动提交/回滚）。
-        try:
-            with self._audit_engine.begin() as conn:
-                conn.execute(text(sql), params)
-        except SQLAlchemyError as exc:
-            raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED") from exc
+        for attempt in range(1, SYSTEM_WRITE_MAX_ATTEMPTS + 1):
+            try:
+                with self._audit_engine.begin() as conn:
+                    conn.execute(text(sql), params)
+                return
+            except SQLAlchemyError as exc:
+                if attempt < SYSTEM_WRITE_MAX_ATTEMPTS and _is_transient_system_write_error(exc):
+                    time.sleep(SYSTEM_WRITE_RETRY_DELAY_SECONDS * attempt)
+                    continue
+                raise RuntimeError(f"SYSTEM_TABLE_WRITE_FAILED: {type(exc).__name__}: {exc}") from exc
 
     def _write_audit(
         self,
@@ -617,3 +641,17 @@ def _decode_json_column(value: Any) -> Any:
     if isinstance(value, str):
         return json.loads(value)
     return value
+
+
+def _is_transient_system_write_error(exc: SQLAlchemyError) -> bool:
+    if isinstance(exc, SQLAlchemyTimeoutError):
+        return True
+    orig = getattr(exc, "orig", None)
+    args = getattr(orig, "args", ())
+    if not args:
+        return False
+    try:
+        errno = int(args[0])
+    except (TypeError, ValueError):
+        return False
+    return errno in TRANSIENT_SYSTEM_WRITE_ERRNOS

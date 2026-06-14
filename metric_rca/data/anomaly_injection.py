@@ -40,14 +40,14 @@ def traffic_multiplier(
         uv_multiplier *= 0.42
         pay_user_multiplier *= 0.40
     if business_date == TARGET_DATE and channel == "organic":
-        uv_multiplier *= 0.46
+        uv_multiplier *= 0.22
     if business_date == TARGET_DATE and device == "mobile":
         pay_user_multiplier *= 0.55
     if business_date == TARGET_DATE and category == "electronics":
         pay_user_multiplier *= 0.62
     if business_date == TARGET_DATE and channel == "affiliate":
         pay_user_multiplier *= 0.45
-    if business_date == TARGET_DATE and product_id in {2, 3}:
+    if business_date == TARGET_DATE and product_id == 3:
         pay_user_multiplier *= 0.35
     return uv_multiplier, pay_user_multiplier
 
@@ -58,6 +58,8 @@ def campaign_multiplier(*, business_date: date, channel: str) -> tuple[float, fl
         return 0.30, 0.35
     if business_date == TARGET_DATE and channel == "social":
         return 0.35, 0.38
+    if business_date == TARGET_DATE and channel == "organic":
+        return 0.18, 0.12
     return 1.0, 1.0
 
 
@@ -102,7 +104,7 @@ def support_ticket_count(*, business_date: date, product_id: int, category: str 
 def order_amount_multiplier(*, business_date: date, category: str, product_id: int) -> float:
     """目标日价格/AOV 类异常：只改变事实订单金额，不改变 DDL 或指标口径。"""
     if business_date == TARGET_DATE and category == "fashion":
-        return 0.62
+        return 0.18
     if business_date == TARGET_DATE and product_id == 2:
-        return 0.58
+        return 0.18
     return 1.0
