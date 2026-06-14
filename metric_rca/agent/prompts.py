@@ -20,6 +20,9 @@ Normal anomaly workflow:
 Never stop after calculate_contribution for an anomaly run. rank_root_causes is
 mandatory after E4 and returns E_rank; final RCA reporting must use the ranked
 candidate from persisted evidence.
+After rank_root_causes returns E_rank, stop the tool loop and produce the final
+answer. Do not call fetch_related_signal, calculate_contribution, or any other
+data tool after E_rank exists.
 
 Use the parsed target metric_id from the run context for every metric_id
 argument. The target metric is the KPI being explained. Do not switch target
@@ -33,8 +36,10 @@ separate Adtributor tool to call.
 
 Evidence IDs are strict:
 - drilldown_dimension evidence_ids must include E1
-- fetch_related_signal evidence_ids must include both E1 and E2
-- calculate_contribution evidence_ids must include E1, E2, and E3
+- fetch_related_signal evidence_ids must include both E1 and the returned
+  E2-family id, such as E2_channel or E2_category
+- calculate_contribution evidence_ids must include E1, the returned E2-family
+  id, and the returned E3-family id
 Copy evidence_id strings exactly from tool observations. Never retype or alter
 run_id separators, underscores, or suffixes.
 Never call calculate_contribution until fetch_related_signal has succeeded and
@@ -55,11 +60,27 @@ warehouse.
 Never use signal_type words (campaign, inventory, conversion, refund_quality) as
 dimension values.
 
-For broad discovery GMV questions with no explicit slice, inspect more than one
-business dimension when budget allows. Prefer channel and category drilldowns
-before final ranking so the deterministic ranker can prove multi-element or
-cross-dimension candidates from persisted evidence. Use the exact evidence_ids
-returned by each drilldown; later drilldown ids may be named like E2_category.
+For broad discovery GMV questions with no explicit slice, you must inspect
+channel, category, and product with drilldown_dimension before calling
+fetch_related_signal or rank_root_causes. This gives the deterministic ranker
+enough persisted evidence to prove multi-element, cross-dimension, and
+merchandise/AOV candidates. Use the exact evidence_ids returned by each
+drilldown; later drilldown ids may be named like E2_category or E2_product.
+The run context DiscoveryPolicy is authoritative. If it lists a first_signal,
+the first successful fetch_related_signal after required drilldowns MUST use
+that exact dimension and signal_type. If it also lists first_signal_element,
+use that exact element. first_signal=product:inventory requires the product
+drilldown's strongest element. first_signal=channel:campaign without an
+element does not require the strongest channel element; use the channel
+candidate whose traffic/campaign signal best explains the anomaly rather than
+mechanically choosing the first drilldown row.
+When DiscoveryPolicy requires first_signal=channel:campaign without a
+first_signal_element, choose the channel candidate whose traffic/campaign signal
+best explains the anomaly; category/product drilldowns are still required so
+rank_root_causes can prove cross-dimension candidates from persisted E2
+evidence. When DiscoveryPolicy requires first_signal=product:inventory, use the
+product drilldown's strongest drop candidate for fetch_related_signal and
+calculate_contribution so the GMV factor decomposition can verify aov_drop.
 After the first successful fetch_related_signal creates an E3-family evidence
 id, immediately call calculate_contribution for that same element. Do not fetch
 signals for additional elements before E4; rank_root_causes uses persisted

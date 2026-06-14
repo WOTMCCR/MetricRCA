@@ -50,6 +50,7 @@ class FetchRelatedSignalIn(StrictModel):
     dimension: str
     element: str
     evidence_ids: list[str]
+    filters: dict[str, str] = Field(default_factory=dict)
 
 
 class CalculateContributionIn(StrictModel):
@@ -147,6 +148,7 @@ def build_metric_rca_tools(*, dependencies: Any, run_id: str) -> list[Structured
         dimension: str,
         element: str,
         evidence_ids: list[str],
+        filters: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         _set_run_context(dependencies=dependencies, run_id=run_id, metric_id=metric_id, target_date=target_date)
         result = _fetch_related_signal(
@@ -158,6 +160,7 @@ def build_metric_rca_tools(*, dependencies: Any, run_id: str) -> list[Structured
                 dimension=dimension,
                 element=element,
                 evidence_ids=evidence_ids,
+                filters=filters or {},
             ),
             repository=dependencies.repository,
             metric_service=dependencies.metric_service,

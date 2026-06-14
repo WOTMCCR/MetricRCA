@@ -37,6 +37,9 @@ def detect_anomaly(
     run_error = run_context_error(repository, args.run_id, args.metric_id, args.target_date)
     if run_error:
         return tool_error(action, run_error, "run_id is not an active matching run")
+    existing = _existing_anomaly_result(args, repository=repository)
+    if existing is not None:
+        return existing
     renderer = renderer or SQLRenderer()
     settings = settings or get_settings()
     try:
@@ -86,6 +89,7 @@ def detect_anomaly(
 
     result_summary = {
         **result.result_summary,
+        "filters": args.filters,
         "query_sources": query_sources(current_plan=current_plan, baseline_plan=baseline_plan),
     }
     evidence = _evidence(
@@ -109,6 +113,45 @@ def detect_anomaly(
         message="no anomaly detected" if result.error_code == "NO_ANOMALY_DETECTED" else None,
     )
     return ToolResult(observation=observation, evidences=[evidence], evidence_alias="E1", sql_count=2)
+
+
+def _existing_anomaly_result(args: DetectAnomalyArgs, *, repository: Any) -> ToolResult | None:
+    evidence_id = f"{args.run_id}:E1"
+    row = repository.get_evidence(run_id=args.run_id, evidence_id=evidence_id)
+    if row is None or row.get("guard_status") != "passed":
+        return None
+    summary = row.get("result_summary")
+    if not isinstance(summary, dict):
+        return None
+    if _anomaly_summary_matches(args, summary):
+        return ToolResult(
+            observation=Observation(
+                action_name="detect_anomaly",
+                ok=True,
+                payload=summary,
+                evidence_ids=[evidence_id],
+                error_code=summary.get("error_code"),
+                message="no anomaly detected" if summary.get("error_code") == "NO_ANOMALY_DETECTED" else None,
+            ),
+            evidence_alias="E1",
+            sql_count=0,
+        )
+    return tool_error(
+        "detect_anomaly",
+        "E1_ALREADY_EXISTS",
+        (
+            f"{evidence_id} already exists for this run with metric_id={summary.get('metric_id')} "
+            f"and filters={summary.get('filters') or {}}; continue from that E1 or start a new run_id"
+        ),
+    )
+
+
+def _anomaly_summary_matches(args: DetectAnomalyArgs, summary: dict[str, Any]) -> bool:
+    return (
+        summary.get("metric_id") == args.metric_id
+        and {str(key): str(value) for key, value in (summary.get("filters") or {}).items()}
+        == {str(key): str(value) for key, value in args.filters.items()}
+    )
 
 
 def _guarded_plan(plan: SQLPlan) -> SQLPlan:

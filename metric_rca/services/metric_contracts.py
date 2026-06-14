@@ -21,7 +21,10 @@ QuestionFamily = Literal[
     "category_gmv_anomaly",
 ]
 
+AnalysisStrategy = Literal["standard", "channel_first", "product_first", "organic_first"]
+
 SUPPORTED_QUESTION_FAMILIES: tuple[str, ...] = get_args(QuestionFamily)
+SUPPORTED_ANALYSIS_STRATEGIES: tuple[str, ...] = get_args(AnalysisStrategy)
 
 
 class MetricServiceError(ValueError):
@@ -34,6 +37,7 @@ class ParsedIntent(StrictModel):
     metric_id: str
     target_date: date
     question_family: QuestionFamily
+    analysis_strategy: AnalysisStrategy = "standard"
     dimension: str | None = None
     element: str | None = None
     filters: dict[str, str] = Field(default_factory=dict)

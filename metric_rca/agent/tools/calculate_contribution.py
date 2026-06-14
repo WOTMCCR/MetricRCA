@@ -9,6 +9,7 @@ from typing import Any
 from metric_rca.agent.tools.runtime import (
     ToolRuntimeError,
     current_run_guarded_evidence,
+    current_run_guarded_evidence_hint,
     evidence_row,
     execute_guarded_plan,
     persist_evidence,
@@ -43,13 +44,15 @@ def calculate_contribution(
     if run_error:
         return tool_error(action, run_error, "run_id is not an active matching run")
     if not current_run_guarded_evidence(repository, args.run_id, args.evidence_ids, {"E1", "E2", "E3"}):
+        evidence_hint = current_run_guarded_evidence_hint(repository, args.run_id, ["E1", "E2", "E3"])
+        retry_hint = evidence_hint or [f"{args.run_id}:E1", f"{args.run_id}:E2", f"{args.run_id}:E3"]
         return tool_error(
             action,
             "EVIDENCE_MISSING",
             (
                 f"guard-passed current-run E1, E2, and E3 are required; "
-                f"call fetch_related_signal first to create {args.run_id}:E3, then retry with "
-                f"evidence_ids ['{args.run_id}:E1', '{args.run_id}:E2', '{args.run_id}:E3']"
+                "copy the exact E1, E2-family, and E3-family evidence_ids from prior tool output, "
+                f"then retry with evidence_ids {retry_hint}"
             ),
         )
     existing = _existing_contribution_result(args, repository=repository)
@@ -105,7 +108,7 @@ def calculate_contribution(
     if not attribution.ok:
         return tool_error(action, attribution.error_code or "ATTRIBUTION_COVERAGE_LOW", "attribution coverage low")
 
-    selected_candidate = _top_candidate_for_selected_element(
+    selected_candidate = _candidate_for_selected_element(
         candidates=attribution.candidates,
         dimension=args.dimension,
         element=args.element,
@@ -114,8 +117,13 @@ def calculate_contribution(
         return tool_error(
             action,
             "ATTRIBUTION_COVERAGE_LOW",
-            "selected element is not the top attributed candidate",
+            "selected element is not an attributed candidate",
         )
+    selected_candidate = _with_selected_signal_severity(
+        selected_candidate,
+        args=args,
+        repository=repository,
+    )
     attribution_candidates = [
         selected_candidate if candidate.dimension == args.dimension and str(candidate.element) == str(args.element) else candidate
         for candidate in attribution.candidates
@@ -437,17 +445,70 @@ def _selected_element_filters(
     return {**base_filters, dimension: element}
 
 
-def _top_candidate_for_selected_element(
+def _candidate_for_selected_element(
     *,
     candidates: list[Any],
     dimension: str,
     element: str,
 ) -> Any | None:
-    if not candidates:
-        return None
-    top_candidate = candidates[0]
-    if top_candidate.dimension == dimension and str(top_candidate.element) == str(element):
-        return top_candidate
+    for candidate in candidates:
+        if candidate.dimension == dimension and str(candidate.element) == str(element):
+            return candidate
+    return None
+
+
+def _with_selected_signal_severity(candidate: Any, *, args: CalculateContributionArgs, repository: Any) -> Any:
+    signal_summary = _selected_signal_summary(args=args, repository=repository)
+    if signal_summary is None:
+        return candidate
+    updates: dict[str, Any] = {}
+    signal_root_cause_type = _root_cause_type_from_signal_summary(signal_summary)
+    if signal_root_cause_type is not None:
+        updates["root_cause_type"] = signal_root_cause_type
+    delta_pct = signal_summary.get("delta_pct")
+    try:
+        signal_severity = min(1.0, abs(float(delta_pct)))
+    except (TypeError, ValueError):
+        return candidate.model_copy(update=updates) if updates else candidate
+    signal_severity = max(float(candidate.signal_severity), signal_severity)
+    updates.update(
+        {
+            "signal_severity": signal_severity,
+            "eng_confidence": (
+                float(candidate.contribution_pct)
+                * signal_severity
+                * float(candidate.evidence_support)
+                * float(candidate.reflection_factor)
+            ),
+        }
+    )
+    return candidate.model_copy(update=updates)
+
+
+def _root_cause_type_from_signal_summary(signal_summary: dict[str, Any]) -> str | None:
+    signal_type = str(signal_summary.get("signal_type") or "")
+    signal_metric_id = str(signal_summary.get("signal_metric_id") or signal_summary.get("metric_id") or "")
+    if signal_type == "refund_quality" or signal_metric_id in {"refund_rate", "complaint_rate"}:
+        return RootCauseType.COMPLAINT_OR_QUALITY_ISSUE.value
+    if signal_type == "campaign":
+        return RootCauseType.CAMPAIGN_TRAFFIC_DROP.value
+    if signal_type == "conversion":
+        return RootCauseType.CONVERSION_DROP.value
+    if signal_type == "inventory":
+        return RootCauseType.STOCKOUT.value
+    return None
+
+
+def _selected_signal_summary(*, args: CalculateContributionArgs, repository: Any) -> dict[str, Any] | None:
+    for evidence_id in args.evidence_ids:
+        if not str(evidence_id).startswith(f"{args.run_id}:E3"):
+            continue
+        row = repository.get_evidence(run_id=args.run_id, evidence_id=str(evidence_id))
+        summary = row.get("result_summary") if isinstance(row, dict) else None
+        if not isinstance(summary, dict):
+            continue
+        if summary.get("dimension") == args.dimension and str(summary.get("element")) == str(args.element):
+            return summary
     return None
 
 

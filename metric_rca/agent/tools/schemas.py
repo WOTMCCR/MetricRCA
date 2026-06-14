@@ -34,6 +34,7 @@ class FetchRelatedSignalArgs(StrictModel):
     dimension: str
     element: str
     evidence_ids: list[str]
+    filters: dict[str, str] = Field(default_factory=dict)
 
 
 class CalculateContributionArgs(StrictModel):

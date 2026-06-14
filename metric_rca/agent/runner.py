@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import re
+import time
 from typing import Any
 from uuid import uuid4
 
 from langchain_core.exceptions import LangChainException
 from openai import OpenAIError
 
+from metric_rca.agent.discovery_policy import DiscoveryPolicy, discovery_policy_from_intent
 from metric_rca.agent.factory import AgentFactoryError, create_metric_rca_agent
 from metric_rca.agent.reflection import verify_reflection
 from metric_rca.config.settings import Settings, get_settings
@@ -23,6 +24,10 @@ from metric_rca.repositories.metadata_repository import MetadataRepository
 from metric_rca.repositories.metric_repository import MetricRepository
 from metric_rca.services.metric_contracts import ParsedIntent
 from metric_rca.services.metric_service import MetricService
+
+
+FINAL_TOKEN_TRACE_MAX_ATTEMPTS = 3
+FINAL_TOKEN_TRACE_RETRY_SECONDS = 0.2
 
 
 @dataclass
@@ -97,8 +102,10 @@ class RunOrchestrator:
                 run_id=resolved_run_id,
                 agent_factory=self.agent_factory,
             )
-            bundle.guard_context.explicit_filters = _question_scope(question, parsed_intent)
+            bundle.guard_context.explicit_filters = _parsed_intent_scope(parsed_intent)
             bundle.guard_context.target_metric_id = parsed_intent.metric_id
+            bundle.guard_context.target_date = parsed_intent.target_date
+            bundle.guard_context.discovery_policy = discovery_policy_from_intent(parsed_intent)
         except (AgentFactoryError, RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
             code = getattr(exc, "code", None) or _code_from_message(str(exc), "LLM_REQUIRED_UNAVAILABLE")
             return self._fail(resolved_run_id, question, code)
@@ -141,13 +148,15 @@ class RunOrchestrator:
         reflection = self._verify(resolved_run_id, repair_count=0)
         if not reflection.passed:
             if _has_repair_action(reflection) and int(getattr(self.dependencies.settings, "max_repair", 1)) > 0:
+                repair_action = _first_repair_action(reflection)
                 try:
+                    bundle.guard_context.required_repair_action = repair_action
                     bundle.agent.invoke(
                         {
                             "messages": [
                                 {
                                     "role": "user",
-                                    "content": f"Repair Reflection issue using persisted evidence only: {reflection.model_dump(mode='json')}",
+                                    "content": _repair_instruction(reflection, repair_action=repair_action),
                                 }
                             ]
                         },
@@ -159,6 +168,8 @@ class RunOrchestrator:
                 except (RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
                     code = getattr(exc, "code", None) or _code_from_message(str(exc), "REFLECTION_REPAIR_FAILED")
                     return self._fail(resolved_run_id, question, code)
+                finally:
+                    bundle.guard_context.required_repair_action = None
                 try:
                     self._flush_pending_token_usage(bundle.guard_context)
                 except TraceWriteError as exc:
@@ -296,15 +307,26 @@ class RunOrchestrator:
 
     def _flush_pending_token_usage(self, guard_context: Any) -> None:
         for usage in guard_context.drain_pending_token_usage():
-            self.dependencies.trace_writer.write_step(
-                run_id=guard_context.run_id,
-                node="llm_call",
-                action=None,
-                input_summary={},
-                output_summary={"token_usage": usage},
-                error_code=None,
-                token_usage=usage,
-            )
+            self._write_final_token_usage_trace(guard_context.run_id, usage)
+
+    def _write_final_token_usage_trace(self, run_id: str, usage: dict[str, Any]) -> None:
+        for attempt in range(1, FINAL_TOKEN_TRACE_MAX_ATTEMPTS + 1):
+            try:
+                self.dependencies.trace_writer.write_step(
+                    run_id=run_id,
+                    node="llm_call",
+                    action=None,
+                    input_summary={},
+                    output_summary={"token_usage": usage},
+                    error_code=None,
+                    token_usage=usage,
+                )
+                return
+            except TraceWriteError as exc:
+                if exc.code == "SYSTEM_TABLE_WRITE_FAILED" and attempt < FINAL_TOKEN_TRACE_MAX_ATTEMPTS:
+                    time.sleep(FINAL_TOKEN_TRACE_RETRY_SECONDS * attempt)
+                    continue
+                raise
 
     def _create_required_tasks(self, run_id: str, report: dict[str, Any] | None) -> None:
         if report is None or report.get("status") != "succeeded":
@@ -399,6 +421,39 @@ def _has_repair_action(reflection: Any) -> bool:
     return any(getattr(issue, "suggested_action", None) is not None for issue in getattr(reflection, "issues", []))
 
 
+def _first_repair_action(reflection: Any) -> str | None:
+    for issue in getattr(reflection, "issues", []):
+        action = getattr(getattr(issue, "suggested_action", None), "action", None)
+        if action:
+            return str(action)
+    return None
+
+
+def _repair_instruction(reflection: Any, *, repair_action: str | None) -> str:
+    repair_payload = reflection.model_dump(mode="json")
+    if repair_action is None:
+        return f"Repair Reflection issue using persisted evidence only: {repair_payload}"
+    repair_args = _first_repair_args(reflection)
+    return (
+        "Repair Reflection issue using persisted evidence only.\n"
+        f"Only call {repair_action} in this repair turn. Do not call detect_anomaly, "
+        "drilldown_dimension, fetch_related_signal, or calculate_contribution unless that exact tool is the required repair action.\n"
+        f"Required repair action: {repair_action}\n"
+        f"Call exactly this tool with exactly these JSON args: {repair_action}({repair_args})\n"
+        "Do not answer in text; the next assistant response must be the required tool call.\n"
+        f"Reflection result: {repair_payload}"
+    )
+
+
+def _first_repair_args(reflection: Any) -> dict[str, Any]:
+    for issue in getattr(reflection, "issues", []):
+        suggested_action = getattr(issue, "suggested_action", None)
+        args = getattr(suggested_action, "args", None)
+        if isinstance(args, dict):
+            return args
+    return {}
+
+
 def _code_from_message(message: str, default: str) -> str:
     code = message.split(":", maxsplit=1)[0]
     return code if code and code.isupper() else default
@@ -429,28 +484,49 @@ def _agent_user_message(question: str, settings: Any, *, parsed_intent: ParsedIn
     target_date = parsed_intent.target_date if parsed_intent is not None else getattr(settings, "target_date", None)
     target_date_text = target_date.isoformat() if hasattr(target_date, "isoformat") else str(target_date)
     allowed_metrics = ", ".join(sorted(PHASE1_METRICS))
-    explicit_scope = _question_scope(question, parsed_intent)
+    explicit_scope = _parsed_intent_scope(parsed_intent)
     explicit_scope_text = ", ".join(f"{key}={value}" for key, value in sorted(explicit_scope.items()))
     parsed_metric_text = parsed_intent.metric_id if parsed_intent is not None else "unparsed"
+    analysis_strategy_text = parsed_intent.analysis_strategy if parsed_intent is not None else "unparsed"
+    discovery_policy = discovery_policy_from_intent(parsed_intent) if parsed_intent is not None else DiscoveryPolicy()
+    discovery_policy_text = _discovery_policy_text(discovery_policy)
     return (
         f"{question}\n\n"
         "Run context:\n"
         f"- target_date: {target_date_text}\n"
         f"- parsed target metric_id: {parsed_metric_text}\n"
+        f"- parsed analysis_strategy: {analysis_strategy_text}\n"
+        f"- discovery policy: {discovery_policy_text}\n"
+        "- Discovery policy is mandatory: complete required_drilldowns first, then make the first related-signal call match first_signal exactly when listed.\n"
         "- Interpret relative dates such as yesterday as target_date unless the user gives an explicit date.\n"
+        "- Every target_date argument MUST exactly equal the run context target_date above.\n"
         f"- allowed metric_id values: {allowed_metrics}\n"
         "- Every metric_id argument MUST equal the parsed target metric_id. Do not switch target metrics when checking causes.\n"
         "- Target metric is the KPI being explained. Words such as stockout, refund, UV, AOV, logistics, or quality are cause mechanisms to verify, not permission to change target metric.\n"
         "- Use metric_id exactly as listed above; do not uppercase, translate, or invent aliases.\n"
         f"- explicit or parsed question filters: {explicit_scope_text or 'none'}\n"
         "- If filters are listed, detect_anomaly, drilldown_dimension, and calculate_contribution must carry the same filters.\n"
+        "- fetch_related_signal may omit filters, or pass filters only when they exactly match its selected dimension/element.\n"
     )
 
 
-def _question_scope(question: str, parsed_intent: ParsedIntent | None) -> dict[str, str]:
-    literal_scope = _explicit_scope_from_question(question)
-    if literal_scope:
-        return literal_scope
+def _discovery_policy_text(policy: DiscoveryPolicy) -> str:
+    parts: list[str] = []
+    if policy.required_drilldowns:
+        parts.append(f"required_drilldowns={','.join(policy.required_drilldowns)}")
+    if policy.first_signal_dimension is not None or policy.first_signal_type is not None:
+        parts.append(
+            "first_signal="
+            f"{policy.first_signal_dimension or 'any'}:{policy.first_signal_type or 'any'}"
+        )
+    if policy.first_signal_element is not None:
+        parts.append(f"first_signal_element={policy.first_signal_element}")
+    if policy.enforce_first_signal_top_candidate:
+        parts.append("first_signal_must_use_top_drilldown_candidate=true")
+    return "; ".join(parts) if parts else "none"
+
+
+def _parsed_intent_scope(parsed_intent: ParsedIntent | None) -> dict[str, str]:
     if parsed_intent is None:
         return {}
     if len(parsed_intent.filters) == 1:
@@ -459,9 +535,3 @@ def _question_scope(question: str, parsed_intent: ParsedIntent | None) -> dict[s
     if parsed_intent.dimension is not None and parsed_intent.element is not None:
         return {str(parsed_intent.dimension): str(parsed_intent.element)}
     return {}
-
-
-def _explicit_scope_from_question(question: str) -> dict[str, str]:
-    allowed = {"channel", "category", "device", "product", "warehouse"}
-    matches = re.findall(r"\b(channel|category|device|product|warehouse)\s*=\s*([A-Za-z0-9_-]+)", question)
-    return {key: value for key, value in matches if key in allowed}

@@ -44,8 +44,40 @@ def current_run_guarded_evidence(
     return True
 
 
+def current_run_guarded_evidence_hint(
+    repository: Any,
+    run_id: str,
+    required_aliases: list[str],
+) -> list[str]:
+    """Return exact current-run evidence ids that satisfy the required aliases."""
+    rows = repository.get_evidences(run_id)
+    hints: list[str] = []
+    for required_alias in required_aliases:
+        evidence_id = _first_guarded_alias_evidence_id(rows, run_id=run_id, required_alias=required_alias)
+        if evidence_id is not None:
+            hints.append(evidence_id)
+    return hints
+
+
 def _alias_matches(aliases: set[str], required_alias: str) -> bool:
     return any(alias == required_alias or alias.startswith(f"{required_alias}_") for alias in aliases)
+
+
+def _first_guarded_alias_evidence_id(rows: list[dict[str, Any]], *, run_id: str, required_alias: str) -> str | None:
+    prefix = f"{run_id}:"
+    exact: str | None = None
+    suffixed: str | None = None
+    for row in rows:
+        evidence_id = str(row.get("evidence_id") or "")
+        if row.get("guard_status") != "passed" or not evidence_id.startswith(prefix):
+            continue
+        alias = evidence_id.removeprefix(prefix)
+        if alias == required_alias:
+            exact = evidence_id
+            break
+        if suffixed is None and alias.startswith(f"{required_alias}_"):
+            suffixed = evidence_id
+    return exact or suffixed
 
 
 def execute_guarded_plan(*, repository: Any, plan: SQLPlan, run_id: str):

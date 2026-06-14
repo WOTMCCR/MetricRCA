@@ -6,9 +6,11 @@ from datetime import datetime, timezone
 import hashlib
 from typing import Any
 
+from metric_rca.agent.evidence_aliases import e3_alias_for_dimension
 from metric_rca.agent.tools.runtime import (
     ToolRuntimeError,
     current_run_guarded_evidence,
+    current_run_guarded_evidence_hint,
     evidence_row,
     execute_guarded_plan,
     persist_evidence,
@@ -27,13 +29,6 @@ from metric_rca.guardrails.sql_guard import guard_sql
 from metric_rca.services.anomaly_service import detect_anomaly_from_rows
 from metric_rca.services.metric_service import MetricServiceError
 
-DIMENSION_ALIAS = {
-    "category": "cat",
-    "channel": "ch",
-    "device": "dev",
-    "product": "prod",
-    "warehouse": "wh",
-}
 MAX_SIGNAL_ELEMENT_TOKEN_LENGTH = 12
 
 
@@ -50,13 +45,28 @@ def fetch_related_signal(
     if run_error:
         return tool_error(action, run_error, "run_id is not an active matching run")
     if not current_run_guarded_evidence(repository, args.run_id, args.evidence_ids, {"E1", "E2"}):
+        evidence_hint = current_run_guarded_evidence_hint(repository, args.run_id, ["E1", "E2"])
+        retry_hint = evidence_hint or [f"{args.run_id}:E1", f"{args.run_id}:E2"]
         return tool_error(
             action,
             "EVIDENCE_MISSING",
             (
                 f"guard-passed current-run E1 and E2 are required; "
-                f"call drilldown_dimension first to create {args.run_id}:E2, then retry with "
-                f"evidence_ids ['{args.run_id}:E1', '{args.run_id}:E2']"
+                "copy the exact E1 and E2-family evidence_ids from prior tool output, "
+                f"then retry with evidence_ids {retry_hint}"
+            ),
+        )
+    required_e2_alias = f"E2_{args.dimension}"
+    if not current_run_guarded_evidence(repository, args.run_id, args.evidence_ids, {"E1", required_e2_alias}):
+        evidence_hint = current_run_guarded_evidence_hint(repository, args.run_id, ["E1", required_e2_alias])
+        retry_hint = evidence_hint or [f"{args.run_id}:E1", f"{args.run_id}:{required_e2_alias}"]
+        return tool_error(
+            action,
+            "EVIDENCE_MISSING",
+            (
+                f"fetch_related_signal for dimension={args.dimension} requires guard-passed current-run "
+                f"{required_e2_alias}; copy the exact E1/{required_e2_alias} evidence_ids from prior "
+                f"tool output, then retry with evidence_ids {retry_hint}"
             ),
         )
     try:
@@ -71,6 +81,12 @@ def fetch_related_signal(
             action,
             "QUERY_SPEC_INVALID",
             f"signal_type must be {expected_signal_type} for metric_id={args.metric_id} dimension={args.dimension}",
+        )
+    if args.filters and {str(key): str(value) for key, value in args.filters.items()} != {args.dimension: args.element}:
+        return tool_error(
+            action,
+            "QUERY_SPEC_INVALID",
+            "filters must be empty or exactly match the selected signal dimension/element",
         )
     existing = _existing_signal_result(args, repository=repository)
     if existing is not None:
@@ -190,7 +206,12 @@ def _existing_signal_result(args: FetchRelatedSignalArgs, *, repository: Any) ->
 
 
 def _signal_evidence_alias(args: FetchRelatedSignalArgs) -> str:
-    dimension_token = DIMENSION_ALIAS.get(args.dimension, _alias_token(args.dimension))
+    dimension_prefix = e3_alias_for_dimension(args.dimension)
+    dimension_token = (
+        dimension_prefix.removeprefix("E3_")
+        if dimension_prefix is not None
+        else _alias_token(args.dimension)
+    )
     return f"E3_{dimension_token}_{_alias_token(args.element)}"
 
 

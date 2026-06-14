@@ -8,7 +8,9 @@ from json import JSONDecodeError
 import math
 from typing import Any
 
+from metric_rca.agent.evidence_aliases import E2_ALIAS_BY_DIMENSION, e2_alias_for_e3_id
 from metric_rca.agent.tools.registry import select_signal_type
+from metric_rca.domain.enums import RootCauseType
 from metric_rca.domain.models import AgentAction, Evidence, ReflectionIssue, ReflectionResult, RootCauseCandidate
 
 
@@ -69,7 +71,13 @@ def verify_reflection(
     }
     candidates = [_as_candidate(item) for item in state.get("candidates", [])]
     if not candidates:
-        issues.append(_issue("evidence_coverage", "no root cause candidates"))
+        issues.append(
+            _issue(
+                "evidence_coverage",
+                "no root cause candidates",
+                suggested_action=_suggested_action_for_no_candidates(state),
+            )
+        )
     for candidate in candidates:
         missing_aliases = _missing_required_aliases(state, candidate.evidence_ids)
         if candidate.verdict in {"confirmed", "likely"} and missing_aliases:
@@ -198,6 +206,8 @@ def _e3_signal_matches_candidate(
     candidate: RootCauseCandidate,
     evidence_by_id: dict[str, Evidence],
 ) -> bool:
+    if _aov_drop_is_proven_by_e4_decomposition(state=state, candidate=candidate, evidence_by_id=evidence_by_id):
+        return True
     e3 = _candidate_e3_evidence(state=state, candidate=candidate, evidence_by_id=evidence_by_id)
     if e3 is None:
         return True
@@ -217,6 +227,30 @@ def _e3_signal_matches_candidate(
         and summary.get("dimension") == candidate.dimension
         and str(summary.get("element")) == str(candidate.element)
     )
+
+
+def _aov_drop_is_proven_by_e4_decomposition(
+    *,
+    state: dict[str, Any],
+    candidate: RootCauseCandidate,
+    evidence_by_id: dict[str, Evidence],
+) -> bool:
+    if candidate.root_cause_type != RootCauseType.AOV_DROP.value:
+        return False
+    e4 = evidence_by_id.get(f"{state.get('run_id')}:E4")
+    if e4 is None or f"{state.get('run_id')}:E4" not in candidate.evidence_ids:
+        return False
+    e3 = _candidate_e3_evidence(state=state, candidate=candidate, evidence_by_id=evidence_by_id)
+    if e3 is None:
+        return False
+    e3_summary = e3.result_summary or {}
+    if e3_summary.get("dimension") != candidate.dimension or str(e3_summary.get("element")) != str(candidate.element):
+        return False
+    summary = e4.result_summary or {}
+    decomposition = summary.get("decomposition")
+    if not isinstance(decomposition, dict):
+        return False
+    return str(decomposition.get("largest_drop_factor")) in {"aov", RootCauseType.AOV_DROP.value}
 
 
 def _candidate_e3_evidence(
@@ -299,7 +333,7 @@ def _suggested_action_for_missing_aliases(
                 "dimension": candidate.dimension,
                 "element": candidate.element,
                 "evidence_ids": current_ids,
-                "filters": dict((state.get("parsed_spec") or {}).get("filters") or {}),
+                "filters": _state_filters(state),
             },
             rationale="reflection repair requires contribution evidence",
         )
@@ -325,6 +359,64 @@ def _suggested_action_for_missing_aliases(
                 "evidence_ids": current_ids,
             },
             rationale="reflection repair requires related signal evidence",
+        )
+    return None
+
+
+def _suggested_action_for_no_candidates(state: dict[str, Any]) -> AgentAction | None:
+    aliases = _aliases(state)
+    e3 = _first_evidence_for_alias(state, "E3")
+    if e3 is not None and _has_aliases(aliases, {"E1", "E2"}):
+        summary = e3.result_summary or {}
+        dimension = summary.get("dimension")
+        element = summary.get("element")
+        if dimension is None or element is None:
+            return None
+        return AgentAction(
+            action="calculate_contribution",
+            args={
+                "metric_id": state["metric_id"],
+                "target_date": state.get("target_date"),
+                "dimension": str(dimension),
+                "element": str(element),
+                "evidence_ids": _contribution_repair_chain(state, e3.evidence_id),
+                "filters": _state_filters(state),
+            },
+            rationale="reflection repair requires E4 contribution evidence",
+        )
+
+    e1 = _first_evidence_for_alias(state, "E1")
+    if e1 is None:
+        return None
+    for alias in [*E2_ALIAS_BY_DIMENSION.values(), "E2"]:
+        e2 = _first_evidence_for_alias(state, alias)
+        if e2 is None:
+            continue
+        summary = e2.result_summary or {}
+        dimension = summary.get("dimension")
+        element = _first_candidate_element(summary)
+        if dimension is None or element is None:
+            continue
+        root_cause_type = _repair_root_cause_type(metric_id=str(state.get("metric_id")), dimension=str(dimension))
+        try:
+            signal_type = select_signal_type(
+                metric_id=str(state.get("metric_id")),
+                dimension=str(dimension),
+                root_cause_type=root_cause_type,
+            )
+        except ValueError:
+            continue
+        return AgentAction(
+            action="fetch_related_signal",
+            args={
+                "metric_id": state["metric_id"],
+                "target_date": state.get("target_date"),
+                "signal_type": signal_type,
+                "dimension": str(dimension),
+                "element": str(element),
+                "evidence_ids": [e1.evidence_id, e2.evidence_id],
+            },
+            rationale="reflection repair requires related signal evidence before ranking",
         )
     return None
 
@@ -364,6 +456,61 @@ def _current_evidence_ids(state: dict[str, Any]) -> list[str]:
         for evidence in [_as_evidence(item) for item in state.get("evidences", [])]
         if evidence.evidence_id.startswith(f"{state.get('run_id')}:")
     ]
+
+
+def _first_evidence_for_alias(state: dict[str, Any], alias: str) -> Evidence | None:
+    prefix = f"{state.get('run_id')}:"
+    for evidence in [_as_evidence(item) for item in state.get("evidences", [])]:
+        if not evidence.evidence_id.startswith(prefix):
+            continue
+        actual_alias = evidence.evidence_id.removeprefix(prefix)
+        if actual_alias == alias or actual_alias.startswith(f"{alias}_"):
+            return evidence
+    return None
+
+
+def _first_candidate_element(summary: dict[str, Any]) -> str | None:
+    candidates = summary.get("candidates")
+    if not isinstance(candidates, list) or not candidates:
+        return None
+    first = candidates[0]
+    if not isinstance(first, dict) or first.get("element") is None:
+        return None
+    return str(first["element"])
+
+
+def _repair_root_cause_type(*, metric_id: str, dimension: str) -> str:
+    if metric_id in {"refund_rate", "complaint_rate", "net_gmv"}:
+        return RootCauseType.COMPLAINT_OR_QUALITY_ISSUE.value
+    if metric_id == "pay_cvr" or dimension == "device":
+        return RootCauseType.CONVERSION_DROP.value
+    if dimension == "channel":
+        return RootCauseType.CAMPAIGN_TRAFFIC_DROP.value
+    return RootCauseType.STOCKOUT.value
+
+
+def _contribution_repair_chain(state: dict[str, Any], e3_id: str) -> list[str]:
+    ids: list[str] = []
+    e1 = _first_evidence_for_alias(state, "E1")
+    if e1 is not None:
+        ids.append(e1.evidence_id)
+    e2_alias = e2_alias_for_e3_id(e3_id, run_id=str(state.get("run_id")))
+    e2 = _first_evidence_for_alias(state, e2_alias or "E2")
+    if e2 is not None:
+        ids.append(e2.evidence_id)
+    ids.append(e3_id)
+    return ids
+
+
+def _state_filters(state: dict[str, Any]) -> dict[str, Any]:
+    parsed_filters = (state.get("parsed_spec") or {}).get("filters") or {}
+    if parsed_filters:
+        return dict(parsed_filters)
+    e1 = _first_evidence_for_alias(state, "E1")
+    summary = e1.result_summary if e1 is not None else {}
+    if not isinstance(summary, dict):
+        return {}
+    return dict(summary.get("filters") or {})
 
 
 def _time_range_matches(evidence: Evidence, target_date: Any) -> bool:
