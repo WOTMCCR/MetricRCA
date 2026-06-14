@@ -6,8 +6,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from metric_rca.agent.deep_tools import EXPOSED_TOOL_NAMES
+from metric_rca.agent.deep_tools import PLANNING_TOOL_NAME, TOOL_ARG_SCHEMAS
 from metric_rca.agent.factory import create_metric_rca_agent
 from metric_rca.agent.runner import AgentDependencies, RunOrchestrator
+from metric_rca.services.metric_contracts import ParsedIntent
 from metric_rca.observability.trace import TraceWriter
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +30,11 @@ def test_factory_exposes_whitelist_plus_write_todos() -> None:
     assert {tool.name for tool in captured["tools"]} == EXPOSED_TOOL_NAMES - {"write_todos"}
     assert captured["model"] == "openai:gpt-test"
     assert captured["subagents"] == []
+    assert bundle.guard_context.tool_arg_schemas == dict(TOOL_ARG_SCHEMAS)
+
+
+def test_tool_arg_schema_registry_covers_every_exposed_metric_rca_tool() -> None:
+    assert set(TOOL_ARG_SCHEMAS) == EXPOSED_TOOL_NAMES - {PLANNING_TOOL_NAME}
 
 
 def test_factory_rejects_injected_agent_with_filesystem_tools() -> None:
@@ -103,9 +110,35 @@ def test_orchestrator_injects_run_context_into_agent_message() -> None:
 
     assert result["status"] == "failed"
     assert "target_date: 2026-06-05" in captured["content"]
+    assert "parsed target metric_id: gmv" in captured["content"]
     assert "allowed metric_id values:" in captured["content"]
     assert "gmv" in captured["content"]
-    assert "Use metric_id exactly as listed above" in captured["content"]
+    assert "Every metric_id argument MUST equal the parsed target metric_id" in captured["content"]
+
+
+def test_orchestrator_anchors_run_metric_to_parsed_intent_before_agent_loop() -> None:
+    repo = _Repo()
+    captured = {}
+
+    class Agent(_Agent):
+        def invoke(self, payload, **kwargs):
+            captured["content"] = payload["messages"][0]["content"]
+            captured["target_metric_id"] = captured["middleware"].context.target_metric_id
+            return {}
+
+    def factory(**kwargs):
+        captured["middleware"] = kwargs["middleware"][0]
+        return Agent()
+
+    result = RunOrchestrator(
+        dependencies=_deps(repo, metric_service=_MetricService(metric_id="pay_cvr")),
+        agent_factory=factory,
+    ).run("Why did conversion rate drop yesterday?", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert repo.runs["run-1"]["metric_id"] == "pay_cvr"
+    assert captured["target_metric_id"] == "pay_cvr"
+    assert "parsed target metric_id: pay_cvr" in captured["content"]
 
 
 def test_orchestrator_seeds_explicit_question_scope_into_guard_context() -> None:
@@ -128,6 +161,37 @@ def test_orchestrator_seeds_explicit_question_scope_into_guard_context() -> None
 
     assert result["status"] == "failed"
     assert captured["scope"] == {"category": "electronics"}
+
+
+def test_orchestrator_seeds_parsed_natural_scope_into_guard_context_and_message() -> None:
+    repo = _Repo()
+    captured = {}
+
+    class Agent(_Agent):
+        def invoke(self, payload, **kwargs):
+            captured["content"] = payload["messages"][0]["content"]
+            captured["scope"] = captured["middleware"].context.explicit_filters
+            return {}
+
+    def factory(**kwargs):
+        captured["middleware"] = kwargs["middleware"][0]
+        return Agent()
+
+    result = RunOrchestrator(
+        dependencies=_deps(
+            repo,
+            metric_service=_MetricService(
+                metric_id="gmv",
+                dimension="category",
+                element="electronics",
+            ),
+        ),
+        agent_factory=factory,
+    ).run("Why did electronics GMV fall yesterday?", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert captured["scope"] == {"category": "electronics"}
+    assert "explicit or parsed question filters: category=electronics" in captured["content"]
 
 
 def test_no_anomaly_with_drilldown_trace_fails() -> None:
@@ -172,6 +236,53 @@ def test_agent_invoke_coded_error_preserves_code() -> None:
 
     assert result["status"] == "failed"
     assert result["error_code"] == "TRACE_WRITE_FAILED"
+
+
+def test_terminal_ranked_evidence_allows_transient_llm_error_to_finish_report() -> None:
+    repo = _Repo()
+
+    class RateLimitError(RuntimeError):
+        code = "rate_limit_exceeded"
+
+    class Agent(_Agent):
+        def invoke(self, *args, **kwargs):
+            repo.add_valid_evidences("run-1")
+            e4_summary = repo.evidences["run-1:E4"]["result_summary"]
+            repo.add_evidence(
+                "run-1",
+                "E_rank",
+                {
+                    "metric_id": "gmv",
+                    "ranker": "adtributor_internal",
+                    "selected_candidate": e4_summary["selected_candidate"],
+                    "candidates": e4_summary["candidates"],
+                },
+            )
+            raise RateLimitError("rate limit after terminal tool evidence")
+
+    result = RunOrchestrator(dependencies=_deps(repo), agent_factory=lambda **kwargs: Agent()).run("why", run_id="run-1")
+
+    assert result["status"] == "succeeded"
+    assert result["error_code"] is None
+    assert repo.tasks[0]["root_cause_type"] == "campaign_traffic_drop"
+
+
+def test_transient_llm_error_without_terminal_evidence_still_fails_fast() -> None:
+    repo = _Repo()
+
+    class RateLimitError(RuntimeError):
+        code = "rate_limit_exceeded"
+
+    class Agent(_Agent):
+        def invoke(self, *args, **kwargs):
+            repo.add_evidence("run-1", "E1", {"metric_id": "gmv", "target_date": "2026-06-05", "is_anomaly": True})
+            raise RateLimitError("rate limit before rank evidence")
+
+    result = RunOrchestrator(dependencies=_deps(repo), agent_factory=lambda **kwargs: Agent()).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "rate_limit_exceeded"
+    assert repo.tasks == []
 
 
 def test_orchestrator_persists_token_usage_when_llm_makes_no_tool_call() -> None:
@@ -274,11 +385,19 @@ def test_successful_run_creates_operation_task_from_report() -> None:
     assert repo.tasks[0]["root_cause_type"] == "campaign_traffic_drop"
 
 
-def _deps(repo: "_Repo", *, llm_api_key: str | None = "key", memory_required: bool = False, memory_repo=None) -> AgentDependencies:
+def _deps(
+    repo: "_Repo",
+    *,
+    llm_api_key: str | None = "key",
+    memory_required: bool = False,
+    memory_repo=None,
+    metric_service=None,
+) -> AgentDependencies:
     settings = SimpleNamespace(
         llm_provider="openai",
         llm_model="gpt-test",
         llm_api_key=llm_api_key,
+        business_today=date(2026, 6, 6),
         target_date=date(2026, 6, 5),
         max_steps=8,
         max_query=12,
@@ -291,7 +410,7 @@ def _deps(repo: "_Repo", *, llm_api_key: str | None = "key", memory_required: bo
     return AgentDependencies(
         settings=settings,
         repository=repo,
-        metric_service=SimpleNamespace(),
+        metric_service=metric_service or _MetricService(),
         renderer=SimpleNamespace(),
         trace_writer=TraceWriter(repo),
         memory_repo=memory_repo,
@@ -333,6 +452,31 @@ class _FailingMemoryWriteRepo:
 
     def write(self, *args, **kwargs):
         raise RuntimeError("MEMORY_WRITE_FAILED")
+
+
+class _MetricService:
+    def __init__(
+        self,
+        *,
+        metric_id: str = "gmv",
+        dimension: str | None = None,
+        element: str | None = None,
+    ) -> None:
+        self.metric_id = metric_id
+        self.dimension = dimension
+        self.element = element
+
+    def parse_question(self, question: str, *, business_today: date) -> ParsedIntent:
+        family = "pay_cvr_drop" if self.metric_id == "pay_cvr" else "gmv_drop"
+        filters = {self.dimension: self.element} if self.dimension is not None and self.element is not None else {}
+        return ParsedIntent(
+            metric_id=self.metric_id,
+            target_date=date(2026, 6, 5),
+            question_family=family,
+            dimension=self.dimension,
+            element=self.element,
+            filters=filters,
+        )
 
 
 class _Repo:

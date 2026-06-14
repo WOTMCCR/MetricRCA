@@ -7,11 +7,11 @@ from datetime import date
 from typing import Literal, Protocol
 
 from langchain_core.exceptions import LangChainException, OutputParserException
-from langchain_openai import ChatOpenAI
 from openai import OpenAIError
 from pydantic import Field, ValidationError
 
 from metric_rca.domain.models import StrictModel
+from metric_rca.services.llm_client import LLMClientConfigError, build_openai_compatible_chat_model
 from metric_rca.services.metric_contracts import MetricServiceError, ParsedIntent, QuestionFamily, metric_id_from_question_family
 
 
@@ -36,6 +36,7 @@ BUSINESS TODAY:
 RULES:
 - Output MUST be valid JSON matching the supplied schema.
 - metric_id MUST be one of the supported metrics.
+- If the question contains explicit "metric_id=<value>" text, metric_id MUST be exactly that value.
 - question_family MUST be one of the supported families.
 - dimension MUST be one of the supported dimensions or null.
 - element and filter values MUST come from the supported dimension values when values are listed.
@@ -48,9 +49,16 @@ RULES:
 - If the question mentions a date range other than yesterday, set error_code to DATE_RANGE_INVALID and intent to null.
 - For supported questions, set error_code to null and fill all intent fields.
 - filters MUST be an array of objects with dimension and value keys.
+- Output one top-level JSON object with exactly these keys:
+  error_code, metric_id, target_date, question_family, dimension, element, filters.
+- Do not wrap the fields in an intent object.
 - For unsupported questions, set error_code and set metric_id, target_date,
   question_family, dimension, and element to null, with filters as an empty array.
 - Do not judge facts, write SQL, choose root causes, or infer business evidence.
+- Parse the target metric as the KPI the user asks to explain. Words such as
+  stockout, refund, UV, AOV, logistics, campaign, and quality describe possible
+  cause mechanisms or related signals unless the user explicitly asks for that
+  metric rate itself.
 """
 
 
@@ -99,20 +107,28 @@ class LLMIntentPlanner:
         provider: str | None,
         model: str,
         api_key: str | None,
+        base_url: str | None = None,
+        structured_output_method: Literal["json_schema", "json_mode", "function_calling"] = "json_schema",
     ) -> None:
-        if provider != "openai" or not api_key:
-            raise MetricServiceError("LLM_REQUIRED_UNAVAILABLE", "LLM intent planner is unavailable")
         self._provider = provider
         self._model = model
         self._api_key = api_key
-        chat_model = ChatOpenAI(
-            model=model,
-            api_key=api_key,
-            timeout=30,
-            max_retries=0,
-            max_completion_tokens=600,
+        try:
+            chat_model = build_openai_compatible_chat_model(
+                provider=provider,
+                model=model,
+                api_key=api_key,
+                base_url=base_url,
+                timeout=30,
+                max_retries=0,
+                max_completion_tokens=600,
+            )
+        except LLMClientConfigError as exc:
+            raise MetricServiceError(exc.code, exc.message) from exc
+        self._structured_model = chat_model.with_structured_output(
+            _LLMIntentOutput,
+            method=structured_output_method,
         )
-        self._structured_model = chat_model.with_structured_output(_LLMIntentOutput, method="json_schema")
 
     def parse(
         self,
@@ -132,16 +148,15 @@ class LLMIntentPlanner:
             supported_families=supported_families,
         )
         try:
-            parsed_payload = self._structured_model.invoke([("system", prompt), ("human", question)])
+            raw_payload = self._structured_model.invoke([("system", prompt), ("human", question)])
+            parsed_payload = _coerce_intent_output(raw_payload)
         except OpenAIError as exc:
-            raise MetricServiceError("LLM_REQUIRED_UNAVAILABLE", "OpenAI intent planner request failed") from exc
+            raise MetricServiceError("LLM_REQUIRED_UNAVAILABLE", "LLM intent planner request failed") from exc
         except (OutputParserException, ValidationError) as exc:
             raise MetricServiceError("PARSE_FAILED", "LLM returned invalid intent payload") from exc
         except LangChainException as exc:
             raise MetricServiceError("LLM_REQUIRED_UNAVAILABLE", "LangChain intent planner request failed") from exc
 
-        if not isinstance(parsed_payload, _LLMIntentOutput):
-            raise MetricServiceError("PARSE_FAILED", "LLM returned invalid intent payload type")
         if parsed_payload.error_code is not None:
             raise MetricServiceError(parsed_payload.error_code, f"intent parsing failed: {parsed_payload.error_code}")
         filters = {item.dimension: item.value for item in parsed_payload.filters}
@@ -160,6 +175,14 @@ class LLMIntentPlanner:
             return ParsedIntent.model_validate(intent_payload)
         except ValidationError as exc:
             raise MetricServiceError("PARSE_FAILED", "LLM intent payload failed schema validation") from exc
+
+
+def _coerce_intent_output(payload: object) -> _LLMIntentOutput:
+    if isinstance(payload, _LLMIntentOutput):
+        return payload
+    if isinstance(payload, dict):
+        return _LLMIntentOutput.model_validate(payload)
+    raise MetricServiceError("PARSE_FAILED", "LLM returned invalid intent payload type")
 
 
 def build_system_prompt(

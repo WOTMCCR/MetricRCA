@@ -33,7 +33,7 @@ def current_run_guarded_evidence(
     if not evidence_ids:
         return False
     aliases = {evidence_id.split(":", maxsplit=1)[1] for evidence_id in evidence_ids if ":" in evidence_id}
-    if not required_aliases.issubset(aliases):
+    if not all(_alias_matches(aliases, required_alias) for required_alias in required_aliases):
         return False
     for evidence_id in evidence_ids:
         if not evidence_id.startswith(f"{run_id}:"):
@@ -42,6 +42,10 @@ def current_run_guarded_evidence(
         if row is None or row.get("guard_status") != "passed":
             return False
     return True
+
+
+def _alias_matches(aliases: set[str], required_alias: str) -> bool:
+    return any(alias == required_alias or alias.startswith(f"{required_alias}_") for alias in aliases)
 
 
 def execute_guarded_plan(*, repository: Any, plan: SQLPlan, run_id: str):

@@ -21,6 +21,7 @@ from metric_rca.observability.trace import TraceWriteError, TraceWriter
 from metric_rca.reporting.projector import build_report_from_persisted_artifacts
 from metric_rca.repositories.metadata_repository import MetadataRepository
 from metric_rca.repositories.metric_repository import MetricRepository
+from metric_rca.services.metric_contracts import ParsedIntent
 from metric_rca.services.metric_service import MetricService
 
 
@@ -82,19 +83,40 @@ class RunOrchestrator:
 
         try:
             self._read_required_memory(resolved_run_id)
+            parsed_intent = self.dependencies.metric_service.parse_question(
+                question,
+                business_today=self.dependencies.settings.business_today,
+            )
+            self.dependencies.trace_writer.set_run_context(
+                run_id=resolved_run_id,
+                metric_id=parsed_intent.metric_id,
+                target_date=parsed_intent.target_date,
+            )
             bundle = create_metric_rca_agent(
                 dependencies=self.dependencies,
                 run_id=resolved_run_id,
                 agent_factory=self.agent_factory,
             )
-            bundle.guard_context.explicit_filters = _explicit_scope_from_question(question)
+            bundle.guard_context.explicit_filters = _question_scope(question, parsed_intent)
+            bundle.guard_context.target_metric_id = parsed_intent.metric_id
         except (AgentFactoryError, RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
             code = getattr(exc, "code", None) or _code_from_message(str(exc), "LLM_REQUIRED_UNAVAILABLE")
             return self._fail(resolved_run_id, question, code)
 
         try:
             bundle.agent.invoke(
-                {"messages": [{"role": "user", "content": _agent_user_message(question, self.dependencies.settings)}]},
+                {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": _agent_user_message(
+                                question,
+                                self.dependencies.settings,
+                                parsed_intent=parsed_intent,
+                            ),
+                        }
+                    ]
+                },
                 config={
                     "configurable": {"thread_id": resolved_run_id},
                     "callbacks": [bundle.token_usage_callback],
@@ -102,7 +124,8 @@ class RunOrchestrator:
             )
         except (RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
             code = getattr(exc, "code", None) or _code_from_message(str(exc), "AGENT_INVOKE_FAILED")
-            return self._fail(resolved_run_id, question, code)
+            if not self._can_continue_after_terminal_agent_error(resolved_run_id, code):
+                return self._fail(resolved_run_id, question, code)
         try:
             self._flush_pending_token_usage(bundle.guard_context)
         except TraceWriteError as exc:
@@ -217,6 +240,23 @@ class RunOrchestrator:
             return False
         summary = e1.get("result_summary") or {}
         return summary.get("is_anomaly") is False or summary.get("error_code") == "NO_ANOMALY_DETECTED"
+
+    def _can_continue_after_terminal_agent_error(self, run_id: str, error_code: str) -> bool:
+        if not _is_transient_llm_error_code(error_code):
+            return False
+        if self._is_no_anomaly(run_id):
+            return True
+        e4 = self.dependencies.repository.get_evidence(run_id=run_id, evidence_id=f"{run_id}:E4")
+        e_rank = self.dependencies.repository.get_evidence(run_id=run_id, evidence_id=f"{run_id}:E_rank")
+        if e4 is None or e_rank is None:
+            return False
+        if e4.get("guard_status") != "passed" or e_rank.get("guard_status") != "passed":
+            return False
+        e4_summary = e4.get("result_summary") or {}
+        selected = e4_summary.get("selected_candidate")
+        if not isinstance(selected, dict):
+            return False
+        return _has_required_evidence_chain(run_id, selected.get("evidence_ids"))
 
     def _no_anomaly_contract_error(self, run_id: str) -> str | None:
         if not self._is_no_anomaly(run_id):
@@ -364,24 +404,64 @@ def _code_from_message(message: str, default: str) -> str:
     return code if code and code.isupper() else default
 
 
-def _agent_user_message(question: str, settings: Any) -> str:
-    target_date = getattr(settings, "target_date", None)
+def _is_transient_llm_error_code(error_code: str) -> bool:
+    return str(error_code).lower() in {
+        "llm_required_unavailable",
+        "rate_limit_exceeded",
+        "request_timeout",
+        "timeout",
+    }
+
+
+def _has_required_evidence_chain(run_id: str, evidence_ids: Any) -> bool:
+    if not isinstance(evidence_ids, list):
+        return False
+    prefix = f"{run_id}:"
+    aliases = {
+        str(evidence_id).removeprefix(prefix)
+        for evidence_id in evidence_ids
+        if str(evidence_id).startswith(prefix)
+    }
+    return all(any(alias == required or alias.startswith(f"{required}_") for alias in aliases) for required in {"E1", "E2", "E3", "E4"})
+
+
+def _agent_user_message(question: str, settings: Any, *, parsed_intent: ParsedIntent | None = None) -> str:
+    target_date = parsed_intent.target_date if parsed_intent is not None else getattr(settings, "target_date", None)
     target_date_text = target_date.isoformat() if hasattr(target_date, "isoformat") else str(target_date)
     allowed_metrics = ", ".join(sorted(PHASE1_METRICS))
-    explicit_scope = _explicit_scope_from_question(question)
+    explicit_scope = _question_scope(question, parsed_intent)
     explicit_scope_text = ", ".join(f"{key}={value}" for key, value in sorted(explicit_scope.items()))
+    parsed_metric_text = parsed_intent.metric_id if parsed_intent is not None else "unparsed"
     return (
         f"{question}\n\n"
         "Run context:\n"
         f"- target_date: {target_date_text}\n"
+        f"- parsed target metric_id: {parsed_metric_text}\n"
         "- Interpret relative dates such as yesterday as target_date unless the user gives an explicit date.\n"
         f"- allowed metric_id values: {allowed_metrics}\n"
+        "- Every metric_id argument MUST equal the parsed target metric_id. Do not switch target metrics when checking causes.\n"
+        "- Target metric is the KPI being explained. Words such as stockout, refund, UV, AOV, logistics, or quality are cause mechanisms to verify, not permission to change target metric.\n"
         "- Use metric_id exactly as listed above; do not uppercase, translate, or invent aliases.\n"
-        f"- explicit question filters: {explicit_scope_text or 'none'}\n"
+        f"- explicit or parsed question filters: {explicit_scope_text or 'none'}\n"
+        "- If filters are listed, detect_anomaly, drilldown_dimension, and calculate_contribution must carry the same filters.\n"
     )
 
 
+def _question_scope(question: str, parsed_intent: ParsedIntent | None) -> dict[str, str]:
+    literal_scope = _explicit_scope_from_question(question)
+    if literal_scope:
+        return literal_scope
+    if parsed_intent is None:
+        return {}
+    if len(parsed_intent.filters) == 1:
+        key, value = next(iter(parsed_intent.filters.items()))
+        return {str(key): str(value)}
+    if parsed_intent.dimension is not None and parsed_intent.element is not None:
+        return {str(parsed_intent.dimension): str(parsed_intent.element)}
+    return {}
+
+
 def _explicit_scope_from_question(question: str) -> dict[str, str]:
-    allowed = {"channel", "category", "device", "product"}
-    matches = re.findall(r"\b(channel|category|device|product)\s*=\s*([A-Za-z0-9_-]+)", question)
+    allowed = {"channel", "category", "device", "product", "warehouse"}
+    matches = re.findall(r"\b(channel|category|device|product|warehouse)\s*=\s*([A-Za-z0-9_-]+)", question)
     return {key: value for key, value in matches if key in allowed}

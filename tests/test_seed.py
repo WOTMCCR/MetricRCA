@@ -25,6 +25,28 @@ HASH_TABLES = [
 ]
 TARGET_DATE = date(2026, 6, 5)
 GMV_NO_ANOMALY_DATE = date(2026, 6, 4)
+EXPECTED_GROUND_TRUTH = {
+    "gmv_paid_ads_drop": ("gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", TARGET_DATE),
+    "gmv_stockout_electronics": ("gmv", 1, "stockout", "category", "electronics", TARGET_DATE),
+    "cvr_mobile_drop": ("pay_cvr", 1, "conversion_drop", "device", "mobile", TARGET_DATE),
+    "refund_rate_product_quality": ("refund_rate", 1, "complaint_or_quality_issue", "product", "1", TARGET_DATE),
+    "gmv_no_anomaly": ("gmv", 0, "no_anomaly", None, None, GMV_NO_ANOMALY_DATE),
+    "C06_gmv_multi_channel_drop": ("gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", TARGET_DATE),
+    "C07_gmv_category_channel_cross": ("gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", TARGET_DATE),
+    "C08_gmv_aov_drop": ("gmv", 1, "aov_drop", "product", "2", TARGET_DATE),
+    "C09_gmv_uv_organic_drop": ("gmv", 1, "campaign_traffic_drop", "channel", "organic", TARGET_DATE),
+    "C10_gmv_price_change": ("gmv", 1, "aov_drop", "category", "fashion", TARGET_DATE),
+    "C11_gmv_promo_end_falloff": ("gmv", 1, "campaign_traffic_drop", "channel", "affiliate", TARGET_DATE),
+    "C12_gmv_single_sku_stockout": ("gmv", 1, "stockout", "product", "3", TARGET_DATE),
+    "C13_net_gmv_refund_spike": ("net_gmv", 1, "complaint_or_quality_issue", "product", "1", TARGET_DATE),
+    "C14_net_gmv_gmv_driven": ("net_gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", TARGET_DATE),
+    "C15_refund_rate_logistics": ("refund_rate", 1, "complaint_or_quality_issue", "category", "fashion", TARGET_DATE),
+    "C16_stockout_rate_warehouse": ("stockout_rate", 1, "stockout", "warehouse", "osaka", TARGET_DATE),
+    "C17_complaint_rate_quality": ("complaint_rate", 1, "complaint_or_quality_issue", "category", "electronics", TARGET_DATE),
+    "C18_cvr_channel_landing": ("pay_cvr", 1, "conversion_drop", "channel", "affiliate", TARGET_DATE),
+    "C19_gmv_seasonal_false_positive": ("gmv", 0, "no_anomaly", None, None, GMV_NO_ANOMALY_DATE),
+    "C20_cvr_no_anomaly_noise": ("pay_cvr", 0, "no_anomaly", None, None, GMV_NO_ANOMALY_DATE),
+}
 
 
 def _gmv_anomaly_stats(conn, business_date: date) -> dict[str, float | bool]:
@@ -124,13 +146,15 @@ def test_seed_metric_definitions_and_ground_truth_cases() -> None:
                 row.case_id: dict(row)
                 for row in conn.execute(text("SELECT * FROM anomaly_ground_truth")).mappings()
             }
-            assert set(cases) == {
-                "gmv_paid_ads_drop",
-                "gmv_stockout_electronics",
-                "cvr_mobile_drop",
-                "refund_rate_product_quality",
-                "gmv_no_anomaly",
-            }
+            assert set(cases) == set(EXPECTED_GROUND_TRUTH)
+            assert len(cases) == 20
+            for case_id, (metric_id, expected_anomaly, root_cause, dimension, element, business_date) in EXPECTED_GROUND_TRUTH.items():
+                assert cases[case_id]["metric_id"] == metric_id
+                assert cases[case_id]["expected_anomaly"] == expected_anomaly
+                assert cases[case_id]["root_cause_type"] == root_cause
+                assert cases[case_id]["dimension"] == dimension
+                assert cases[case_id]["element"] == element
+                assert cases[case_id]["business_date"] == business_date
             assert cases["gmv_paid_ads_drop"]["root_cause_type"] == "campaign_traffic_drop"
             assert cases["gmv_stockout_electronics"]["root_cause_type"] == "stockout"
             assert cases["cvr_mobile_drop"]["root_cause_type"] == "conversion_drop"
@@ -141,6 +165,10 @@ def test_seed_metric_definitions_and_ground_truth_cases() -> None:
             assert cases["gmv_no_anomaly"]["expected_anomaly"] == 0
             assert cases["gmv_no_anomaly"]["root_cause_type"] == "no_anomaly"
             assert cases["gmv_no_anomaly"]["business_date"] == GMV_NO_ANOMALY_DATE
+            assert cases["C19_gmv_seasonal_false_positive"]["expected_anomaly"] == 0
+            assert cases["C19_gmv_seasonal_false_positive"]["business_date"] == GMV_NO_ANOMALY_DATE
+            assert cases["C20_cvr_no_anomaly_noise"]["expected_anomaly"] == 0
+            assert cases["C20_cvr_no_anomaly_noise"]["business_date"] == GMV_NO_ANOMALY_DATE
             assert cases["gmv_paid_ads_drop"]["business_date"] == TARGET_DATE
             assert cases["gmv_stockout_electronics"]["business_date"] == TARGET_DATE
     finally:
@@ -269,5 +297,42 @@ def test_seed_injects_stockout_mobile_conversion_and_quality_refund_signals() ->
             ).mappings().one()
             assert float(quality["target_refund"]) > float(quality["baseline_refund"]) * 5
             assert int(quality["target_complaints"]) >= 18
+
+            product_complaints = conn.execute(
+                text(
+                    """
+                    SELECT
+                      SUM(CASE WHEN business_date = '2026-06-05' THEN daily_rate ELSE 0 END) AS target_rate,
+                      AVG(CASE WHEN business_date <> '2026-06-05' THEN daily_rate END) AS baseline_rate
+                    FROM (
+                      SELECT business_date, SUM(is_complaint) / NULLIF(COUNT(ticket_id), 0) AS daily_rate
+                      FROM fact_customer_ticket
+                      WHERE product_id = 1
+                        AND business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29','2026-06-05')
+                      GROUP BY business_date
+                    ) AS daily
+                    """
+                )
+            ).mappings().one()
+            assert float(product_complaints["target_rate"]) > float(product_complaints["baseline_rate"]) * 3
+
+            category_complaints = conn.execute(
+                text(
+                    """
+                    SELECT
+                      SUM(CASE WHEN business_date = '2026-06-05' THEN daily_rate ELSE 0 END) AS target_rate,
+                      AVG(CASE WHEN business_date <> '2026-06-05' THEN daily_rate END) AS baseline_rate
+                    FROM (
+                      SELECT t.business_date, SUM(t.is_complaint) / NULLIF(COUNT(t.ticket_id), 0) AS daily_rate
+                      FROM fact_customer_ticket t
+                      INNER JOIN dim_product p ON t.product_id = p.product_id
+                      WHERE p.category = 'electronics'
+                        AND t.business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29','2026-06-05')
+                      GROUP BY t.business_date
+                    ) AS daily
+                    """
+                )
+            ).mappings().one()
+            assert float(category_complaints["target_rate"]) > float(category_complaints["baseline_rate"]) * 2
     finally:
         engine.dispose()

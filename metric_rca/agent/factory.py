@@ -6,12 +6,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from metric_rca.agent.deep_tools import (
-    CalculateContributionIn,
-    DetectAnomalyIn,
-    DrilldownDimensionIn,
     EXPOSED_TOOL_NAMES,
-    FetchRelatedSignalIn,
-    RankRootCausesIn,
+    TOOL_ARG_SCHEMAS,
     build_metric_rca_tools,
 )
 from langchain_core.exceptions import LangChainException
@@ -20,6 +16,7 @@ from openai import OpenAIError
 from metric_rca.agent.middleware import GuardMiddleware, MetricRCATokenUsageCallback, RunGuardContext
 from metric_rca.agent.prompts import EXPERT_SYSTEM_PROMPT
 from metric_rca.agent.subagents import build_subagents
+from metric_rca.services.llm_client import LLMClientConfigError, build_openai_compatible_chat_model
 
 
 FILESYSTEM_TOOL_NAMES = frozenset({"ls", "read_file", "write_file", "edit_file", "glob", "grep", "execute"})
@@ -57,19 +54,12 @@ def create_metric_rca_agent(
         agent_factory = _create_filesystem_free_deep_agent
 
     tools = build_metric_rca_tools(dependencies=dependencies, run_id=run_id)
-    tool_arg_schemas = {
-        "detect_anomaly": DetectAnomalyIn,
-        "drilldown_dimension": DrilldownDimensionIn,
-        "fetch_related_signal": FetchRelatedSignalIn,
-        "calculate_contribution": CalculateContributionIn,
-        "rank_root_causes": RankRootCausesIn,
-    }
     guard_context = RunGuardContext(
         run_id=run_id,
         settings=settings,
         trace_writer=dependencies.trace_writer,
         repository=dependencies.repository,
-        tool_arg_schemas=tool_arg_schemas,
+        tool_arg_schemas=dict(TOOL_ARG_SCHEMAS),
     )
     middleware = GuardMiddleware(guard_context)
     token_usage_callback = MetricRCATokenUsageCallback(guard_context)
@@ -81,6 +71,7 @@ def create_metric_rca_agent(
             system_prompt=EXPERT_SYSTEM_PROMPT,
             middleware=[middleware],
             subagents=subagents,
+            settings=settings,
         )
         exposed = _compiled_tool_names(agent)
         _validate_compiled_tool_names(exposed)
@@ -105,6 +96,7 @@ def _create_filesystem_free_deep_agent(
     system_prompt: str,
     middleware: list[Any],
     subagents: list[dict[str, Any]],
+    settings: Any,
 ) -> Any:
     if subagents:
         raise AgentFactoryError("MULTI_AGENT_P9_SCOPE", "subagents are disabled until P9")
@@ -119,11 +111,24 @@ def _create_filesystem_free_deep_agent(
         from langchain.agents import create_agent
     except ModuleNotFoundError as exc:
         raise AgentFactoryError("LLM_REQUIRED_UNAVAILABLE", "deepagents dependency is unavailable") from exc
+    try:
+        agent_model = build_openai_compatible_chat_model(
+            provider=getattr(settings, "llm_provider", None),
+            model=getattr(settings, "llm_model", None),
+            api_key=getattr(settings, "llm_api_key", None),
+            base_url=getattr(settings, "llm_base_url", None),
+            temperature=getattr(settings, "llm_temperature", 0.0),
+            timeout=60,
+            max_retries=2,
+            model_kwargs={"parallel_tool_calls": False},
+        )
+    except LLMClientConfigError as exc:
+        raise AgentFactoryError(exc.code, exc.message) from exc
 
     deepagent_middleware = [
         TodoListMiddleware(),
         SummarizationMiddleware(
-            model=model,
+            model=agent_model,
             trigger=("tokens", 170000),
             keep=("messages", 6),
             trim_tokens_to_summarize=None,
@@ -133,7 +138,7 @@ def _create_filesystem_free_deep_agent(
         *middleware,
     ]
     return create_agent(
-        model,
+        agent_model,
         tools=tools,
         system_prompt=f"{system_prompt}\n\n{BASE_AGENT_PROMPT}",
         middleware=deepagent_middleware,

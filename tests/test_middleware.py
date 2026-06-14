@@ -273,6 +273,33 @@ def test_evidence_ids_with_wrong_run_prefix_are_recoverable_precondition_errors(
     assert context.step_count == 0
 
 
+def test_metric_scope_violation_short_circuits_without_budget_or_handler() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.target_metric_id = "gmv"
+    middleware = GuardMiddleware(context)
+    called = False
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E1"]})
+
+    result = middleware.wrap_tool_call(
+        _request("detect_anomaly", {"metric_id": "pay_cvr", "target_date": "2026-06-05"}),
+        handler,
+    )
+
+    payload = json.loads(result.content)
+    assert payload["observation"]["error_code"] == "METRIC_SCOPE_VIOLATION"
+    assert "run target metric is gmv" in payload["observation"]["message"]
+    assert called is False
+    assert context.failed is False
+    assert context.step_count == 0
+    assert context.query_count == 0
+    assert writer.steps[-1]["error_code"] == "METRIC_SCOPE_VIOLATION"
+
+
 def test_budget_exhausted_then_data_tool_attempt_fails_run() -> None:
     writer = _TraceWriter()
     context = _context(writer, max_query=0)
@@ -367,6 +394,46 @@ def test_recoverable_tool_precondition_error_does_not_fail_run() -> None:
     assert writer.steps[-1]["error_code"] == "EVIDENCE_MISSING"
 
 
+def test_existing_e3_blocks_additional_signal_fetch_before_e4_without_budget() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.repository = _Repository(
+        [
+            {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_channel", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E3_ch_paid_ads", "run_id": "run-1", "guard_status": "passed"},
+        ]
+    )
+    middleware = GuardMiddleware(context)
+    called = False
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_ch_social"]})
+
+    result = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "campaign",
+            "dimension": "channel",
+            "element": "social",
+            "evidence_ids": ["run-1:E1", "run-1:E2_channel"],
+        }),
+        handler,
+    )
+
+    payload = json.loads(result.content)
+    assert payload["observation"]["error_code"] == "E3_ALREADY_EXISTS"
+    assert "run-1:E3_ch_paid_ads already exists" in payload["observation"]["message"]
+    assert "calculate_contribution" in payload["observation"]["message"]
+    assert called is False
+    assert context.failed is False
+    assert context.step_count == 0
+    assert context.query_count == 0
+
+
 def test_placeholder_evidence_ids_do_not_trip_budget_before_typed_precondition_error() -> None:
     writer = _TraceWriter()
     context = _context(writer, max_steps=0)
@@ -444,3 +511,17 @@ class _TraceWriter:
 
     def write_step(self, **kwargs) -> None:
         self.steps.append(kwargs)
+
+
+class _Repository:
+    def __init__(self, evidences: list[dict]) -> None:
+        self.evidences = {row["evidence_id"]: dict(row) for row in evidences}
+
+    def get_evidence(self, *, run_id: str, evidence_id: str) -> dict | None:
+        row = self.evidences.get(evidence_id)
+        if row and row.get("run_id") == run_id:
+            return row
+        return None
+
+    def get_evidences(self, run_id: str) -> list[dict]:
+        return [row for row in self.evidences.values() if row.get("run_id") == run_id]

@@ -26,6 +26,12 @@ LLM 只能看到 Out 的结构化摘要，永远看不到原始行集。
 > 工具**，从而消除「LLM 调完 Adtributor 就以为归因结束、停在 E_adt 不再走
 > signal→contribution→rank」这一整类失败。LLM 的动作空间在 P7 保持与 P6 同构。
 
+Evidence alias 约束：系统表 `evidence.evidence_id` 仍是 64 字符上限。P7 发现型
+流程允许 E2/E3 family alias（如 `E2_category`、`E3_ch_paid_ads`、
+`E3_cat_electronics`），eval run_id 生成需给 alias 预留长度。E3 的维度 token 使用
+紧凑映射（channel→ch、category→cat、device→dev、product→prod、warehouse→wh），
+长 element token 用确定性哈希截断；不得依赖 DB 写入失败来发现超长 id。
+
 ## 2. RootCauseCandidate v2
 
 ```python
@@ -71,7 +77,10 @@ adtributor 不适用指标（比率类指标的分子分母分别跑 EP，见 §
 - 候选选择：单维内按 surprise 降序贪心，单元素 EP > T_EEP=0.1，
   累计 EP > T_EP=0.67 停；跨维取 surprise 最高的 top-3 维度。阈值入 Settings
   （`adtributor_t_ep` / `adtributor_t_eep`）。
-- 输出仅作候选排序证据（E_adt），结论仍需 Reflection evidence 校验。
+- 输出仅作候选排序证据（E_rank，并同步 E4 selected/candidates 的 EP/surprise），结论仍需 Reflection evidence 校验。
+- E3 只验证被选元素的一条相关信号；多元素/跨维组合由已持久化的 E2 drilldown
+  per-element actual/forecast 进入 `rank_root_causes` 后计算。E4 前额外 E3 fetch
+  会被 middleware 以 `E3_ALREADY_EXISTS` recoverable 拒绝。
 
 ## 4. 净 GMV 分解
 
@@ -103,12 +112,21 @@ seed 幂等重建即可，无迁移脚本需求。
 
 ```python
 multi_agent_enabled: bool = False
-llm_provider: str | None = None   # 必填
+llm_provider: str | None = None   # 必填；openai 或 openai-compatible/deepseek
 llm_model: str            # 必填，无默认——LLM 不可用必须显式失败
+llm_base_url: str | None = None   # OpenAI-compatible provider 必填；原生 OpenAI 可为空
+llm_structured_output_method: Literal["json_schema","json_mode","function_calling"] = "json_schema"
 llm_temperature: float = 0.0
 adtributor_t_ep: float = 0.67
 adtributor_t_eep: float = 0.10
 ```
+
+> **Provider compatibility（ADL-0011）**：`MetricService` 和 deepagents factory
+> 共用 OpenAI-compatible ChatModel 构造边界。切换 DeepSeek / 私有 OpenAI-compatible
+> 网关 / 其他兼容 endpoint 只允许通过 `METRIC_RCA_LLM_PROVIDER`、
+> `METRIC_RCA_LLM_MODEL`、`METRIC_RCA_LLM_API_KEY`、`METRIC_RCA_LLM_BASE_URL`
+> 和 `METRIC_RCA_LLM_STRUCTURED_OUTPUT_METHOD` 完成。兼容 provider 不得静默读取
+> `OPENAI_API_KEY` 作为第三方 key；缺少 key/base_url 必须 typed fail-fast。
 
 > **模型下限（ADL-0009）**：eval 必须用具备稳健指令遵循能力的模型（下限
 > `gpt-4.1` 同级或更强；**不接受 `gpt-4.1-mini` 作为验收模型**——P7 早期 eval 的
@@ -122,6 +140,8 @@ adtributor_t_eep: float = 0.10
 |---|---|---|
 | BUDGET_EXCEEDED | middleware 预算硬中断后 LLM 仍越权 | 否（run failed） |
 | NO_ANOMALY_CONTRACT_VIOLATED | 无异常却出现下钻/rank/任务 | 否 |
+| E3_ALREADY_EXISTS | E4 前已有 E3-family signal，阻止额外 fetch 并引导 calculate_contribution | 是 |
+| E4_ALREADY_EXISTS | 当前 run 已有 E4，阻止不同选择覆盖并引导 rank_root_causes | 是 |
 | ADTRIBUTOR_NOT_APPLICABLE | 指标/维度不支持 EP 口径 | 是（换单维路径） |
 
 其余错误码表沿用 §18，`LLM_REQUIRED_UNAVAILABLE` 现在适用于所有 run。

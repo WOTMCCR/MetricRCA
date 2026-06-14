@@ -75,7 +75,7 @@ def compute_dimension_contribution(
             )
 
     ranked = rank_root_causes(raw_candidates)
-    if not ranked or ranked[0].contribution_pct < top_threshold:
+    if not ranked:
         return AttributionResult(ok=False, error_code="ATTRIBUTION_COVERAGE_LOW")
     return AttributionResult(ok=True, candidates=ranked, coverage=ranked[0].contribution_pct)
 
@@ -108,12 +108,31 @@ def compute_net_gmv_components(*, gmv: float, refund: float) -> dict[str, float]
 def rank_root_causes(candidates: list[RootCauseCandidate]) -> list[RootCauseCandidate]:
     if not candidates:
         return []
-    max_score = max(candidate.eng_confidence for candidate in candidates)
+    raw_scores = [_candidate_score(candidate) for candidate in candidates]
+    max_score = max(raw_scores)
     normalized: list[RootCauseCandidate] = []
-    for candidate in candidates:
-        confidence = candidate.eng_confidence / max_score if max_score > 0 else 0.0
+    for candidate, raw_score in zip(candidates, raw_scores, strict=True):
+        confidence = raw_score / max_score if max_score > 0 else 0.0
         normalized.append(candidate.model_copy(update={"eng_confidence": confidence}))
-    return sorted(normalized, key=lambda item: item.eng_confidence, reverse=True)
+    return sorted(
+        normalized,
+        key=lambda item: (
+            item.eng_confidence,
+            item.surprise_js if item.surprise_js is not None else -1.0,
+        ),
+        reverse=True,
+    )
+
+
+def _candidate_score(candidate: RootCauseCandidate) -> float:
+    if candidate.explanatory_power is None:
+        return candidate.eng_confidence
+    return (
+        candidate.explanatory_power
+        * candidate.signal_severity
+        * candidate.evidence_support
+        * candidate.reflection_factor
+    )
 
 
 def _values_by_element(rows: list[dict[str, Any]], dimension: str) -> dict[str, float]:

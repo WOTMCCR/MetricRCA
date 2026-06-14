@@ -25,8 +25,10 @@ from metric_rca.data.anomaly_injection import (
     TARGET_DATE,
     campaign_multiplier,
     complaint_count,
+    order_amount_multiplier,
     refund_multiplier,
     stockout_hours,
+    support_ticket_count,
     traffic_multiplier,
 )
 
@@ -49,7 +51,7 @@ PRODUCTS = [
     (8, "Desk Lamp", "home", Decimal("49.00")),
     (9, "Coffee Grinder", "home", Decimal("79.00")),
 ]
-CHANNELS = ["organic", "paid_ads", "affiliate"]
+CHANNELS = ["organic", "paid_ads", "social", "affiliate"]
 DEVICES = ["mobile", "desktop"]
 WAREHOUSES = ["tokyo", "osaka"]
 
@@ -283,22 +285,24 @@ def _insert_business_facts(conn, rng: random.Random) -> None:
         weekday_factor = 1.10 if business_date.weekday() < 5 else 0.86  # 工作日高、周末低
         seasonal_factor = 1.0 + (offset % 14) * 0.006  # 轻微的双周季节波动
 
-        # —— 投放（fact_campaign）：目标日 paid_ads 投放骤降 ——
-        spend_mult, click_mult = campaign_multiplier(
-            business_date=business_date, channel="paid_ads"
-        )
-        base_spend = Decimal("900.00") * Decimal(str(weekday_factor * seasonal_factor))
-        base_clicks = int(4200 * weekday_factor * seasonal_factor)
-        campaign_rows.append(
-            {
-                "business_date": business_date,
-                "campaign_id": 1001,
-                "channel": "paid_ads",
-                "spend": (base_spend * Decimal(str(spend_mult))).quantize(Decimal("0.01")),
-                "clicks": int(base_clicks * click_mult),
-                "impressions": int(base_clicks * click_mult * 8),
-            }
-        )
+        # —— 投放（fact_campaign）：目标日 paid_ads/social 投放骤降 ——
+        for campaign_index, channel in enumerate(CHANNELS, start=1001):
+            spend_mult, click_mult = campaign_multiplier(
+                business_date=business_date, channel=channel
+            )
+            channel_spend_factor = {"organic": 0.18, "paid_ads": 1.0, "social": 0.65, "affiliate": 0.45}[channel]
+            base_spend = Decimal("900.00") * Decimal(str(weekday_factor * seasonal_factor * channel_spend_factor))
+            base_clicks = int(4200 * weekday_factor * seasonal_factor * channel_spend_factor)
+            campaign_rows.append(
+                {
+                    "business_date": business_date,
+                    "campaign_id": campaign_index,
+                    "channel": channel,
+                    "spend": (base_spend * Decimal(str(spend_mult))).quantize(Decimal("0.01")),
+                    "clicks": int(base_clicks * click_mult),
+                    "impressions": int(base_clicks * click_mult * 8),
+                }
+            )
 
         for product_id, _, category, price in PRODUCTS:
             # —— 库存（fact_inventory）：每商品 × 每仓库；目标日 electronics 缺货 ——
@@ -323,7 +327,7 @@ def _insert_business_facts(conn, rng: random.Random) -> None:
 
             # —— 流量（fact_traffic）+ 订单（fact_order）：渠道 × 设备 ——
             for channel in CHANNELS:
-                channel_factor = {"organic": 1.0, "paid_ads": 1.35, "affiliate": 0.72}[channel]
+                channel_factor = {"organic": 1.0, "paid_ads": 1.35, "social": 0.92, "affiliate": 0.72}[channel]
                 for device in DEVICES:
                     device_factor = 1.25 if device == "mobile" else 0.78
                     category_factor = {"electronics": 1.18, "fashion": 0.95, "home": 0.84}[
@@ -343,10 +347,13 @@ def _insert_business_facts(conn, rng: random.Random) -> None:
                         channel=channel,
                         device=device,
                         category=category,
+                        product_id=product_id,
                     )
                     uv = max(1, int(uv_base * uv_mult + rng.randint(0, 6)))
                     base_cvr = 0.082 if device == "desktop" else 0.069
                     pay_user_cnt = max(0, int(uv * base_cvr * pay_mult))
+                    if business_date == TARGET_DATE and (category == "electronics" or product_id in {2, 3}):
+                        pay_user_cnt = max(1, pay_user_cnt)
                     traffic_rows.append(
                         {
                             "business_date": business_date,
@@ -362,10 +369,15 @@ def _insert_business_facts(conn, rng: random.Random) -> None:
                     # 每个支付用户落一条订单；目标日问题商品退款概率飙升。
                     for order_index in range(pay_user_cnt):
                         refund_rate = refund_multiplier(
-                            business_date=business_date, product_id=product_id
+                            business_date=business_date, product_id=product_id, category=category
                         )
                         is_refunded = 1 if rng.random() < refund_rate else 0
-                        refund_amount = price if is_refunded else Decimal("0.00")
+                        order_amount = (price * Decimal(str(order_amount_multiplier(
+                            business_date=business_date,
+                            category=category,
+                            product_id=product_id,
+                        )))).quantize(Decimal("0.01"))
+                        refund_amount = order_amount if is_refunded else Decimal("0.00")
                         order_rows.append(
                             {
                                 "order_id": order_id,
@@ -374,7 +386,7 @@ def _insert_business_facts(conn, rng: random.Random) -> None:
                                 "product_id": product_id,
                                 "channel": channel,
                                 "device": device,
-                                "order_amount": price,
+                                "order_amount": order_amount,
                                 "is_paid": 1,
                                 "is_refunded": is_refunded,
                                 "refund_amount": refund_amount,
@@ -382,15 +394,26 @@ def _insert_business_facts(conn, rng: random.Random) -> None:
                         )
                         order_id += 1
 
-            # —— 工单（fact_customer_ticket）：目标日问题商品投诉激增 ——
-            for ticket_index in range(complaint_count(business_date=business_date, product_id=product_id)):
+            # —— 工单（fact_customer_ticket）：投诉数与非投诉支持工单分开，complaint_rate 才能真实波动。 ——
+            complaint_total = complaint_count(
+                business_date=business_date,
+                product_id=product_id,
+                category=category,
+            )
+            support_total = support_ticket_count(
+                business_date=business_date,
+                product_id=product_id,
+                category=category,
+            )
+            for ticket_index in range(complaint_total + support_total):
+                is_complaint = 1 if ticket_index < complaint_total else 0
                 ticket_rows.append(
                     {
                         "ticket_id": ticket_id,
                         "business_date": business_date,
                         "product_id": product_id,
-                        "ticket_type": "quality" if product_id == 1 else "logistics",
-                        "is_complaint": 1 if ticket_index % 2 == 0 or product_id == 1 else 0,
+                        "ticket_type": "quality" if is_complaint else "support",
+                        "is_complaint": is_complaint,
                     }
                 )
                 ticket_id += 1
@@ -453,7 +476,7 @@ def _insert_business_facts(conn, rng: random.Random) -> None:
 
 
 def _insert_ground_truth(conn) -> None:
-    """写 anomaly_ground_truth：4 个异常 case（TARGET_DATE）+ 1 个无异常 case（另一天）。"""
+    """写 anomaly_ground_truth：P7 20-case library，固定日期且幂等重建。"""
     rows = [
         {
             "case_id": "gmv_paid_ads_drop",
@@ -496,6 +519,141 @@ def _insert_ground_truth(conn) -> None:
             "case_id": "gmv_no_anomaly",
             "business_date": GMV_NO_ANOMALY_DATE,
             "metric_id": "gmv",
+            "expected_anomaly": 0,
+            "root_cause_type": "no_anomaly",
+            "dimension": None,
+            "element": None,
+        },
+        {
+            "case_id": "C06_gmv_multi_channel_drop",
+            "business_date": TARGET_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+        },
+        {
+            "case_id": "C07_gmv_category_channel_cross",
+            "business_date": TARGET_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+        },
+        {
+            "case_id": "C08_gmv_aov_drop",
+            "business_date": TARGET_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "aov_drop",
+            "dimension": "product",
+            "element": "2",
+        },
+        {
+            "case_id": "C09_gmv_uv_organic_drop",
+            "business_date": TARGET_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "organic",
+        },
+        {
+            "case_id": "C10_gmv_price_change",
+            "business_date": TARGET_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "aov_drop",
+            "dimension": "category",
+            "element": "fashion",
+        },
+        {
+            "case_id": "C11_gmv_promo_end_falloff",
+            "business_date": TARGET_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "affiliate",
+        },
+        {
+            "case_id": "C12_gmv_single_sku_stockout",
+            "business_date": TARGET_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "stockout",
+            "dimension": "product",
+            "element": "3",
+        },
+        {
+            "case_id": "C13_net_gmv_refund_spike",
+            "business_date": TARGET_DATE,
+            "metric_id": "net_gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "complaint_or_quality_issue",
+            "dimension": "product",
+            "element": "1",
+        },
+        {
+            "case_id": "C14_net_gmv_gmv_driven",
+            "business_date": TARGET_DATE,
+            "metric_id": "net_gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+        },
+        {
+            "case_id": "C15_refund_rate_logistics",
+            "business_date": TARGET_DATE,
+            "metric_id": "refund_rate",
+            "expected_anomaly": 1,
+            "root_cause_type": "complaint_or_quality_issue",
+            "dimension": "category",
+            "element": "fashion",
+        },
+        {
+            "case_id": "C16_stockout_rate_warehouse",
+            "business_date": TARGET_DATE,
+            "metric_id": "stockout_rate",
+            "expected_anomaly": 1,
+            "root_cause_type": "stockout",
+            "dimension": "warehouse",
+            "element": "osaka",
+        },
+        {
+            "case_id": "C17_complaint_rate_quality",
+            "business_date": TARGET_DATE,
+            "metric_id": "complaint_rate",
+            "expected_anomaly": 1,
+            "root_cause_type": "complaint_or_quality_issue",
+            "dimension": "category",
+            "element": "electronics",
+        },
+        {
+            "case_id": "C18_cvr_channel_landing",
+            "business_date": TARGET_DATE,
+            "metric_id": "pay_cvr",
+            "expected_anomaly": 1,
+            "root_cause_type": "conversion_drop",
+            "dimension": "channel",
+            "element": "affiliate",
+        },
+        {
+            "case_id": "C19_gmv_seasonal_false_positive",
+            "business_date": GMV_NO_ANOMALY_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 0,
+            "root_cause_type": "no_anomaly",
+            "dimension": None,
+            "element": None,
+        },
+        {
+            "case_id": "C20_cvr_no_anomaly_noise",
+            "business_date": GMV_NO_ANOMALY_DATE,
+            "metric_id": "pay_cvr",
             "expected_anomaly": 0,
             "root_cause_type": "no_anomaly",
             "dimension": None,

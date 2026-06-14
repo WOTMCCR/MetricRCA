@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 from typing import Any
 
 from metric_rca.agent.tools.runtime import (
@@ -25,6 +26,15 @@ from metric_rca.guardrails.renderer import SQLRenderer
 from metric_rca.guardrails.sql_guard import guard_sql
 from metric_rca.services.anomaly_service import detect_anomaly_from_rows
 from metric_rca.services.metric_service import MetricServiceError
+
+DIMENSION_ALIAS = {
+    "category": "cat",
+    "channel": "ch",
+    "device": "dev",
+    "product": "prod",
+    "warehouse": "wh",
+}
+MAX_SIGNAL_ELEMENT_TOKEN_LENGTH = 12
 
 
 def fetch_related_signal(
@@ -120,8 +130,9 @@ def fetch_related_signal(
         "query_sources": query_sources(current_plan=current_plan, baseline_plan=baseline_plan),
         **signal.result_summary,
     }
+    evidence_alias = _signal_evidence_alias(args)
     evidence = Evidence(
-        evidence_id=f"{args.run_id}:E3",
+        evidence_id=f"{args.run_id}:{evidence_alias}",
         query_spec=baseline_spec,
         sql=baseline_plan.sql,
         sql_hash=baseline_plan.sql_hash,
@@ -143,34 +154,50 @@ def fetch_related_signal(
             error_code=signal.error_code,
         ),
         evidences=[evidence],
-        evidence_alias="E3",
+        evidence_alias=evidence_alias,
         sql_count=2,
     )
 
 
 def _existing_signal_result(args: FetchRelatedSignalArgs, *, repository: Any) -> ToolResult | None:
-    evidence_id = f"{args.run_id}:E3"
-    row = repository.get_evidence(run_id=args.run_id, evidence_id=evidence_id)
-    if row is None or row.get("guard_status") != "passed":
-        return None
-    summary = row.get("result_summary")
-    if not isinstance(summary, dict):
-        return None
-    if (
-        summary.get("signal_type") != args.signal_type
-        or summary.get("dimension") != args.dimension
-        or str(summary.get("element")) != str(args.element)
-    ):
-        return None
-    if [str(item) for item in summary.get("input_evidence_ids", [])] != [str(item) for item in args.evidence_ids]:
-        return None
-    return ToolResult(
-        observation=Observation(
-            action_name="fetch_related_signal",
-            ok=True,
-            payload=summary,
-            evidence_ids=[evidence_id],
-            error_code=summary.get("error_code"),
-        ),
-        evidence_alias="E3",
-    )
+    for evidence_alias in [_signal_evidence_alias(args), "E3"]:
+        evidence_id = f"{args.run_id}:{evidence_alias}"
+        row = repository.get_evidence(run_id=args.run_id, evidence_id=evidence_id)
+        if row is None or row.get("guard_status") != "passed":
+            continue
+        summary = row.get("result_summary")
+        if not isinstance(summary, dict):
+            continue
+        if (
+            summary.get("signal_type") != args.signal_type
+            or summary.get("dimension") != args.dimension
+            or str(summary.get("element")) != str(args.element)
+        ):
+            continue
+        if [str(item) for item in summary.get("input_evidence_ids", [])] != [str(item) for item in args.evidence_ids]:
+            continue
+        return ToolResult(
+            observation=Observation(
+                action_name="fetch_related_signal",
+                ok=True,
+                payload=summary,
+                evidence_ids=[evidence_id],
+                error_code=summary.get("error_code"),
+            ),
+            evidence_alias=evidence_alias,
+        )
+    return None
+
+
+def _signal_evidence_alias(args: FetchRelatedSignalArgs) -> str:
+    dimension_token = DIMENSION_ALIAS.get(args.dimension, _alias_token(args.dimension))
+    return f"E3_{dimension_token}_{_alias_token(args.element)}"
+
+
+def _alias_token(value: str) -> str:
+    token = "".join(char if char.isalnum() or char == "_" else "_" for char in str(value).lower())
+    token = token.strip("_") or "value"
+    if len(token) <= MAX_SIGNAL_ELEMENT_TOKEN_LENGTH:
+        return token
+    digest = hashlib.sha1(token.encode("utf-8")).hexdigest()[:4]
+    return f"{token[:7]}_{digest}"

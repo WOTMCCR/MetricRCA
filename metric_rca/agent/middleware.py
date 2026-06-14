@@ -25,7 +25,11 @@ RECOVERABLE_TOOL_ERROR_CODES = frozenset(
         "DIMENSION_NOT_ALLOWED",
         "EVIDENCE_MISSING",
         "METRIC_NOT_FOUND",
+        "METRIC_SCOPE_VIOLATION",
         "QUERY_SPEC_INVALID",
+        "ADTRIBUTOR_NOT_APPLICABLE",
+        "E4_ALREADY_EXISTS",
+        "E3_ALREADY_EXISTS",
     }
 )
 
@@ -55,6 +59,7 @@ class RunGuardContext:
     last_schema_invalid_tool: str | None = None
     consecutive_schema_invalid_count: int = 0
     explicit_filters: dict[str, str] = field(default_factory=dict)
+    target_metric_id: str | None = None
 
     def mark_failed(self, code: str) -> None:
         self.failed = True
@@ -141,6 +146,19 @@ class GuardMiddleware(_AgentMiddlewareBase):
                     started_at=started_at,
                 )
 
+        metric_scope_error = self._metric_scope_error(tool_name, args)
+        if metric_scope_error is not None:
+            self._reset_schema_invalid_streak()
+            return self._reject(
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                code="METRIC_SCOPE_VIOLATION",
+                message=metric_scope_error,
+                args=args,
+                started_at=started_at,
+                mark_failed=False,
+            )
+
         scope_error = self._explicit_scope_error(tool_name, args)
         if scope_error is not None:
             self._reset_schema_invalid_streak()
@@ -167,12 +185,24 @@ class GuardMiddleware(_AgentMiddlewareBase):
                 mark_failed=False,
             )
 
+        flow_error = self._evidence_flow_error(tool_name, args)
+        if flow_error is not None:
+            self._reset_schema_invalid_streak()
+            return self._reject(
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                code="E3_ALREADY_EXISTS",
+                message=flow_error,
+                args=args,
+                started_at=started_at,
+                mark_failed=False,
+            )
+
         self._reset_schema_invalid_streak()
         budget_error = None if _has_placeholder_evidence_ids(args) else self._budget_error(tool_name)
         if budget_error is not None:
             self.context.budget_exhausted_once = True
-            if tool_name in DATA_FETCHING_TOOLS:
-                self.context.mark_failed("BUDGET_EXCEEDED")
+            mark_failed = budget_error == "data tool attempted after budget exhaustion"
             return self._reject(
                 tool_call_id=tool_call_id,
                 tool_name=tool_name,
@@ -180,6 +210,7 @@ class GuardMiddleware(_AgentMiddlewareBase):
                 message=budget_error,
                 args=args,
                 started_at=started_at,
+                mark_failed=mark_failed,
             )
 
         self._increment_budget(tool_name)
@@ -229,14 +260,14 @@ class GuardMiddleware(_AgentMiddlewareBase):
         max_steps = int(getattr(self.context.settings, "max_steps", 8))
         max_query = int(getattr(self.context.settings, "max_query", 12))
         max_drilldown_depth = int(getattr(self.context.settings, "max_drilldown_depth", 2))
+        if self.context.budget_exhausted_once and tool_name in DATA_FETCHING_TOOLS:
+            return "data tool attempted after budget exhaustion"
         if self.context.step_count >= max_steps and tool_name not in {RANK_TOOL_NAME, PLANNING_TOOL_NAME}:
             return "step budget exhausted; call rank_root_causes or stop"
         if tool_name in DATA_FETCHING_TOOLS and self.context.query_count >= max_query:
             return "query budget exhausted; call rank_root_causes or stop"
         if tool_name == "drilldown_dimension" and self.context.drilldown_depth >= max_drilldown_depth:
             return "drilldown depth exhausted; call rank_root_causes or stop"
-        if self.context.budget_exhausted_once and tool_name in DATA_FETCHING_TOOLS:
-            return "data tool attempted after budget exhaustion"
         return None
 
     def _increment_budget(self, tool_name: str) -> None:
@@ -281,6 +312,17 @@ class GuardMiddleware(_AgentMiddlewareBase):
             )
         return None
 
+    def _metric_scope_error(self, tool_name: str, args: dict[str, Any]) -> str | None:
+        if tool_name == PLANNING_TOOL_NAME or not self.context.target_metric_id:
+            return None
+        metric_id = args.get("metric_id")
+        if metric_id is None or str(metric_id) == str(self.context.target_metric_id):
+            return None
+        return (
+            f"run target metric is {self.context.target_metric_id}; "
+            f"retry {tool_name} with metric_id={self.context.target_metric_id}"
+        )
+
     def _evidence_id_prefix_error(self, tool_name: str, args: dict[str, Any]) -> str | None:
         if tool_name not in {"drilldown_dimension", "fetch_related_signal", "calculate_contribution"}:
             return None
@@ -294,6 +336,27 @@ class GuardMiddleware(_AgentMiddlewareBase):
         return (
             f"evidence_ids must start with current run prefix {prefix}; "
             f"copy exact evidence_ids from prior tool output; invalid ids: {bad_ids}"
+        )
+
+    def _evidence_flow_error(self, tool_name: str, args: dict[str, Any]) -> str | None:
+        if tool_name != "fetch_related_signal" or self.context.repository is None:
+            return None
+        run_id = self.context.run_id
+        if self.context.repository.get_evidence(run_id=run_id, evidence_id=f"{run_id}:E4") is not None:
+            return None
+        existing_e3_id = _first_alias_family_evidence_id(
+            self.context.repository.get_evidences(run_id),
+            run_id=run_id,
+            alias="E3",
+        )
+        if existing_e3_id is None:
+            return None
+        evidence_ids = [str(item) for item in args.get("evidence_ids") or []]
+        contribution_ids = [*evidence_ids, existing_e3_id]
+        return (
+            f"{existing_e3_id} already exists for this run; do not fetch additional related signals before E4. "
+            f"Call calculate_contribution next with evidence_ids {contribution_ids} for the selected E3 element, "
+            "then call rank_root_causes."
         )
 
     def _reject(
@@ -462,6 +525,18 @@ def _payload_evidence_ids(payload: dict[str, Any]) -> list[str]:
     if isinstance(observation, dict) and isinstance(observation.get("evidence_ids"), list):
         return [str(item) for item in observation["evidence_ids"]]
     return []
+
+
+def _first_alias_family_evidence_id(rows: list[dict[str, Any]], *, run_id: str, alias: str) -> str | None:
+    prefix = f"{run_id}:"
+    for row in rows:
+        evidence_id = str(row.get("evidence_id") or "")
+        if not evidence_id.startswith(prefix) or row.get("guard_status") != "passed":
+            continue
+        evidence_alias = evidence_id.removeprefix(prefix)
+        if evidence_alias == alias or evidence_alias.startswith(f"{alias}_"):
+            return evidence_id
+    return None
 
 
 def _token_usage_from_llm_result(response: LLMResult) -> dict[str, Any] | None:

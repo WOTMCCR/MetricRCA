@@ -29,10 +29,12 @@ COMPLIANCE_MATRIX 无红行。
 ## P7（08）Adtributor + 净 GMV + 20 case — codex/p7-adtributor-20cases
 
 1. adtributor_service（EP/JS/贪心选择 + 阈值 Settings）+ 单测（论文数值例）。
-2. adtributor_attribute 工具 + RootCauseCandidate v2 字段。
+2. rank_root_causes 内部确定性调用 Adtributor + RootCauseCandidate v2 字段（不暴露 adtributor_attribute 工具）。
 3. net_gmv_chain 分解。
 4. anomaly_injection 扩 20 case + ground truth；seed 幂等。
 5. eval 扩 20 case（C19/C20 误报陷阱、C06/C07 多维断言）。
+6. 发现型多元素/跨维证明来自 E2-family drilldown + ranker-internal Adtributor；
+   首个 E3-family signal 后进入 E4，禁止逐元素 E3 fetch 消耗预算。
 
 验收：20/20 intent 与 anomaly；top1≥80%、top3≥90%；C19/C20 零误报。
 

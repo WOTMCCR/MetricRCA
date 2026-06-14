@@ -16,7 +16,7 @@ RunOrchestrator (agent/runner.py，新)          ← 确定性，非 LLM
    │      └─ 单 expert 直连（=false，默认；P6–P8 仅此模式）
    │      工具层（确定性，全部经 GuardMiddleware）：
    │        detect_anomaly / drilldown_dimension / fetch_related_signal /
-   │        calculate_contribution / adtributor_attribute(P7) / rank_root_causes
+   │        calculate_contribution / rank_root_causes（P7 内部调用 Adtributor）
    ├── 3. Reflection 校验（确定性，agent 循环之外）
    │      不过 → 一次 repair 重入 agent → 仍不过 → REFLECTION_REPAIR_FAILED
    ├── 4. report 投影（ADL-0006，persisted artifacts 重构，非 LLM 文本）
@@ -85,6 +85,12 @@ LLM 仍自由选择工具，但不得自行改写配置日期、发明 metric_id
    `fetch_related_signal` 还会按 deterministic signal policy 校验
    metric/dimension → signal_type（如 `refund_rate` + `product` 必须为
    `refund_quality`）；错选返回 recoverable typed error，不执行查询。
+   P7 发现型流程中，E2/E3 可使用 family alias（如 `E2_category`、
+   `E3_ch_paid_ads`、`E3_cat_electronics`）以保留多维 evidence 且满足
+   `evidence_id VARCHAR(64)`。在 E4 之前如果已有 E3-family evidence，
+   middleware 以 recoverable `E3_ALREADY_EXISTS` 拒绝额外 signal fetch，
+   提示调用 `calculate_contribution`；多元素/跨维排序由 `rank_root_causes`
+   读取 E2 drilldown Evidence 完成。
    `rank_root_causes` 只能从持久化 E4 派生 E_rank；E4 缺失 candidates 或
    `sql_text` 时返回 typed error，不合成占位 SQL。
 5. **失败语义**：工具返回 ok=False observation；可由 LLM 修正的 typed
@@ -132,6 +138,10 @@ LLM 仍自由选择工具，但不得自行改写配置日期、发明 metric_id
   「ReflectionIssue + suggested_action」构造 repair 消息重入同一 agent thread
   （checkpointer 续上下文），repair 动作同样经 GuardMiddleware。
 - 仍不过 → `REFLECTION_REPAIR_FAILED`，run failed，绝不编造主因。
+- 如果 deepagents 在 terminal artifacts 已持久化后（no_anomaly E1，或完整
+  E4+E_rank 证据链）遇到 transient provider error（rate limit/timeout），
+  orchestrator 可继续 deterministic Reflection/report projection；同样错误在
+  证据链不完整时仍 fail-fast。
 
 ## 6. no_anomaly 分支
 

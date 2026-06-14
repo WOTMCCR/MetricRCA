@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import time
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -18,6 +19,7 @@ from metric_rca.repositories.metric_repository import MetricRepository
 
 DEFAULT_CASES_PATH = Path(__file__).with_name("cases.jsonl")
 DEFAULT_OUTPUT_DIR = Path("eval_out")
+MAX_EVAL_RUN_ID_LENGTH = 42
 
 
 def load_cases(path: Path = DEFAULT_CASES_PATH) -> list[EvalCase]:
@@ -53,22 +55,24 @@ def run_eval(
     close_repository = repository is None
     resolved_eval_id = eval_id or f"eval-{uuid4().hex[:8]}"
     try:
+        _validate_eval_model(resolved_settings)
         cases = load_cases(cases_path)
         ground_truth = _load_ground_truth(resolved_repository, cases)
         case_scores: list[dict[str, Any]] = []
         for case in cases:
             gt = ground_truth[case.case_id]
-            run_id = _run_id(resolved_eval_id, case.case_id)
             case_settings = _settings_for_case(resolved_settings, gt)
-            rca_runner(
-                case.question,
-                run_id=run_id,
+            run_id, attempts = _run_case_with_retries(
+                rca_runner=rca_runner,
+                case=case,
+                eval_id=resolved_eval_id,
                 settings=case_settings,
                 repository=resolved_repository,
-                memory_repo=None,
             )
             artifacts = _read_artifacts(resolved_repository, run_id)
             score = score_case(case_id=case.case_id, ground_truth=gt, artifacts=artifacts)
+            score["detail"]["eval_attempts"] = attempts
+            score["detail"]["final_run_id"] = run_id
             case_scores.append(score)
             resolved_repository.create_eval_case_result(
                 {
@@ -85,6 +89,8 @@ def run_eval(
                         "report_traceable_ok": score["report_traceable_ok"],
                         "memory_pollution_ok": score["memory_pollution_ok"],
                         "no_anomaly_task_ok": score["no_anomaly_task_ok"],
+                        "adtributor_used": score["adtributor_used"],
+                        "multi_agent_path": score["multi_agent_path"],
                         **score["detail"],
                     },
                 }
@@ -93,6 +99,8 @@ def run_eval(
             case_scores,
             dangerous_sql_blocked=dangerous_sql_blocked(),
         )
+        summary["llm_provider"] = resolved_settings.llm_provider
+        summary["llm_model"] = resolved_settings.llm_model
         thresholds_met = _thresholds_met(summary)
         summary["thresholds_met"] = thresholds_met
         resolved_repository.create_eval_run(
@@ -159,6 +167,36 @@ def _settings_for_case(settings: Settings, ground_truth: GroundTruth) -> Setting
     return Settings(**values)
 
 
+def _run_case_with_retries(
+    *,
+    rca_runner: Callable[..., dict[str, Any]],
+    case: EvalCase,
+    eval_id: str,
+    settings: Settings,
+    repository: Any,
+) -> tuple[str, int]:
+    max_attempts = int(getattr(settings, "eval_llm_max_attempts", 3))
+    retry_seconds = float(getattr(settings, "eval_llm_retry_seconds", 20.0))
+    base_run_id = _run_id(eval_id, case.case_id)
+    last_run_id = base_run_id
+    for attempt in range(1, max_attempts + 1):
+        run_id = _attempt_run_id(base_run_id, attempt)
+        last_run_id = run_id
+        result = rca_runner(
+            case.question,
+            run_id=run_id,
+            settings=settings,
+            repository=repository,
+            memory_repo=None,
+        )
+        error_code = str(result.get("error_code") or "")
+        if not _is_transient_llm_error(error_code) or attempt == max_attempts:
+            return run_id, attempt
+        if retry_seconds > 0:
+            time.sleep(retry_seconds)
+    return last_run_id, max_attempts
+
+
 def _read_artifacts(repository: Any, run_id: str) -> PersistedArtifacts:
     agent_run = repository.get_agent_run(run_id)
     evidences = repository.get_evidences(run_id)
@@ -203,8 +241,9 @@ def _markdown(output: dict[str, Any]) -> str:
 def _thresholds_met(summary: dict[str, Any]) -> bool:
     return (
         summary.get("case_total", 0) > 0
-        and summary.get("top1_rate") == 1.0
-        and summary.get("top3_rate") == 1.0
+        and summary.get("intent_accuracy") == 1.0
+        and summary.get("top1_rate", 0.0) >= 0.80
+        and summary.get("top3_rate", 0.0) >= 0.90
         and summary.get("anomaly_accuracy") == 1.0
         and summary.get("evidence_coverage_avg") == 1.0
         and summary.get("sql_safe_rate") == 1.0
@@ -216,8 +255,30 @@ def _thresholds_met(summary: dict[str, Any]) -> bool:
     )
 
 
+def _validate_eval_model(settings: Settings) -> None:
+    if settings.llm_model == "gpt-4.1-mini":
+        raise EvalRuntimeError("EVAL_MODEL_TOO_WEAK", "P7 acceptance requires gpt-4.1 or stronger, not gpt-4.1-mini")
+
+
 def _run_id(eval_id: str, case_id: str) -> str:
-    return f"{eval_id}-{case_id}"[:64]
+    return f"{eval_id}-{case_id}"[:MAX_EVAL_RUN_ID_LENGTH]
+
+
+def _attempt_run_id(base_run_id: str, attempt: int) -> str:
+    if attempt == 1:
+        return base_run_id
+    suffix = f"-r{attempt}"
+    return f"{base_run_id[: MAX_EVAL_RUN_ID_LENGTH - len(suffix)]}{suffix}"
+
+
+def _is_transient_llm_error(error_code: str) -> bool:
+    normalized = error_code.lower()
+    return normalized in {
+        "llm_required_unavailable",
+        "rate_limit_exceeded",
+        "request_timeout",
+        "timeout",
+    }
 
 
 if __name__ == "__main__":

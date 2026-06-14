@@ -18,6 +18,7 @@ from metric_rca.agent.tools.runtime import (
     tool_error,
 )
 from metric_rca.agent.tools.schemas import CalculateContributionArgs, ToolResult
+from metric_rca.domain.enums import RootCauseType
 from metric_rca.domain.models import Evidence, Observation, RootCauseCandidate
 from metric_rca.guardrails.query_spec import QuerySpecError, build_query_spec
 from metric_rca.guardrails.renderer import SQLRenderer
@@ -115,6 +116,10 @@ def calculate_contribution(
             "ATTRIBUTION_COVERAGE_LOW",
             "selected element is not the top attributed candidate",
         )
+    attribution_candidates = [
+        selected_candidate if candidate.dimension == args.dimension and str(candidate.element) == str(args.element) else candidate
+        for candidate in attribution.candidates
+    ]
 
     result_summary = {
         "metric_id": args.metric_id,
@@ -123,7 +128,7 @@ def calculate_contribution(
         "input_evidence_ids": args.evidence_ids,
         "query_sources": query_sources(current_plan=current_plan, baseline_plan=baseline_plan),
         "selected_candidate": selected_candidate.model_dump(mode="json"),
-        "candidates": [candidate.model_dump(mode="json") for candidate in attribution.candidates],
+        "candidates": [candidate.model_dump(mode="json") for candidate in attribution_candidates],
     }
     sql_count = 2
     if args.metric_id == "gmv":
@@ -148,6 +153,16 @@ def calculate_contribution(
             if code in {"NO_CURRENT_DATA", "INSUFFICIENT_BASELINE_DATA"}:
                 return tool_error(action, code, "factor decomposition failed")
             raise
+        if factor_summary["decomposition"]["largest_drop_factor"] == "aov":
+            selected_candidate = selected_candidate.model_copy(update={"root_cause_type": RootCauseType.AOV_DROP.value})
+            attribution_candidates = [
+                selected_candidate
+                if candidate.dimension == args.dimension and str(candidate.element) == str(args.element)
+                else candidate
+                for candidate in attribution_candidates
+            ]
+            result_summary["selected_candidate"] = selected_candidate.model_dump(mode="json")
+            result_summary["candidates"] = [candidate.model_dump(mode="json") for candidate in attribution_candidates]
         result_summary["decomposition"] = factor_summary["decomposition"]
         result_summary["factor_query_sources"] = factor_summary["query_sources"]
         sql_count += int(factor_summary["sql_count"])
@@ -171,7 +186,20 @@ def calculate_contribution(
             if code in {"NO_CURRENT_DATA", "INSUFFICIENT_BASELINE_DATA"}:
                 return tool_error(action, code, "factor decomposition failed")
             raise
+        if factor_summary["decomposition"]["largest_driver"] == "refund_increase":
+            selected_candidate = selected_candidate.model_copy(
+                update={"root_cause_type": RootCauseType.COMPLAINT_OR_QUALITY_ISSUE.value}
+            )
+            attribution_candidates = [
+                selected_candidate
+                if candidate.dimension == args.dimension and str(candidate.element) == str(args.element)
+                else candidate
+                for candidate in attribution_candidates
+            ]
+            result_summary["selected_candidate"] = selected_candidate.model_dump(mode="json")
+            result_summary["candidates"] = [candidate.model_dump(mode="json") for candidate in attribution_candidates]
         result_summary["net_gmv_decomposition"] = factor_summary["decomposition"]
+        result_summary["net_gmv_chain"] = factor_summary["net_gmv_chain"]
         result_summary["factor_query_sources"] = factor_summary["query_sources"]
         sql_count += int(factor_summary["sql_count"])
     else:
@@ -204,7 +232,7 @@ def calculate_contribution(
         ),
         evidences=[evidence],
         evidence_alias="E4",
-        candidates=attribution.candidates,
+        candidates=attribution_candidates,
         sql_count=sql_count,
     )
 
@@ -216,15 +244,15 @@ def _existing_contribution_result(args: CalculateContributionArgs, *, repository
         return None
     summary = row.get("result_summary")
     if not isinstance(summary, dict):
-        return None
+        return _existing_e4_mismatch_result(evidence_id)
     if (
         summary.get("metric_id") != args.metric_id
         or summary.get("dimension") != args.dimension
         or str(summary.get("element")) != str(args.element)
     ):
-        return None
+        return _existing_e4_mismatch_result(evidence_id)
     if [str(item) for item in summary.get("input_evidence_ids", [])] != [str(item) for item in args.evidence_ids]:
-        return None
+        return _existing_e4_mismatch_result(evidence_id)
     candidates = [RootCauseCandidate.model_validate(candidate) for candidate in summary.get("candidates", [])]
     return ToolResult(
         observation=Observation(
@@ -235,6 +263,19 @@ def _existing_contribution_result(args: CalculateContributionArgs, *, repository
         ),
         evidence_alias="E4",
         candidates=candidates,
+    )
+
+
+def _existing_e4_mismatch_result(evidence_id: str) -> ToolResult:
+    return ToolResult(
+        observation=Observation(
+            action_name="calculate_contribution",
+            ok=False,
+            error_code="E4_ALREADY_EXISTS",
+            message="E4 evidence is already persisted for this run; call rank_root_causes with the existing E4.",
+            evidence_ids=[evidence_id],
+        ),
+        evidence_alias="E4",
     )
 
 
@@ -358,12 +399,23 @@ def _net_gmv_factor_decomposition(
         "gmv_drop": gmv_drop,
         "refund_increase": refund_increase,
     }
+    largest_driver = max(drivers, key=drivers.get)
     return {
         "decomposition": {
             "current": current_components,
             "baseline": baseline_components,
             "relative_drops_or_increases": drivers,
-            "largest_driver": max(drivers, key=drivers.get),
+            "largest_driver": largest_driver,
+        },
+        "net_gmv_chain": {
+            "model": "net_gmv_chain",
+            "first_split": {
+                "gmv_delta": baseline_components["gmv"] - current_components["gmv"],
+                "refund_delta": current_components["refund"] - baseline_components["refund"],
+                "net_gmv_delta": baseline_components["net_gmv"] - current_components["net_gmv"],
+            },
+            "dominant_side": "gmv" if largest_driver == "gmv_drop" else "refund",
+            "continued_path": "uv_pay_cvr_aov" if largest_driver == "gmv_drop" else "refund_dimension_drilldown",
         },
         "query_sources": factor_query_sources,
         "sql_count": len(factor_query_sources) * 2,

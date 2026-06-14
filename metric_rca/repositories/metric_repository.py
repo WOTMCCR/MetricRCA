@@ -163,7 +163,7 @@ class MetricRepository:
                     conn.execute(
                         text(
                             """
-                            SELECT evidence_id, run_id, query_spec, sql_hash, guard_status,
+                            SELECT evidence_id, run_id, query_spec, sql_text, sql_hash, guard_status,
                                    result_summary, data_source, created_at
                             FROM evidence
                             WHERE run_id = :run_id AND evidence_id = :evidence_id
@@ -471,6 +471,20 @@ class MetricRepository:
             )
             """,
             payload,
+        )
+
+    def update_evidence_result_summary(self, *, run_id: str, evidence_id: str, result_summary: dict[str, Any]) -> None:
+        self._write(
+            """
+            UPDATE evidence
+            SET result_summary = :result_summary
+            WHERE run_id = :run_id AND evidence_id = :evidence_id
+            """,
+            {
+                "run_id": run_id,
+                "evidence_id": evidence_id,
+                "result_summary": json.dumps(result_summary),
+            },
         )
 
     def create_operation_task(self, row: dict[str, Any]) -> None:

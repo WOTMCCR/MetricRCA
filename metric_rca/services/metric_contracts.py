@@ -15,6 +15,8 @@ QuestionFamily = Literal[
     "net_gmv_drop",
     "pay_cvr_drop",
     "refund_rate_increase",
+    "stockout_rate_increase",
+    "complaint_rate_increase",
     "channel_gmv_anomaly",
     "category_gmv_anomaly",
 ]

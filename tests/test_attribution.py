@@ -11,6 +11,7 @@ from metric_rca.services.attribution_service import (
     compute_dimension_contribution,
     compute_gmv_decomposition,
     compute_net_gmv_components,
+    rank_root_causes,
 )
 
 
@@ -96,6 +97,26 @@ def test_attribution_mobile_cvr_top1_conversion_drop() -> None:
     assert result.candidates[0].element == "mobile"
 
 
+def test_attribution_distributed_drop_still_returns_candidates_for_adtributor_ranker() -> None:
+    result = compute_dimension_contribution(
+        metric_definition=_metric("gmv"),
+        dimension="channel",
+        current_rows=[
+            {"channel": "paid_ads", "metric_value": 60.0},
+            {"channel": "social", "metric_value": 70.0},
+            {"channel": "organic", "metric_value": 80.0},
+        ],
+        baseline_rows=_baseline("channel", {"paid_ads": 100.0, "social": 100.0, "organic": 100.0}),
+        evidence_ids=["run-1:E1"],
+        top_threshold=0.60,
+    )
+
+    assert result.ok is True
+    assert result.coverage < 0.60
+    assert [candidate.element for candidate in result.candidates] == ["paid_ads", "social", "organic"]
+    assert {candidate.verdict for candidate in result.candidates} == {"likely"}
+
+
 def test_root_cause_mapping_uses_config_override(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = Settings(
         db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
@@ -160,6 +181,23 @@ def test_net_gmv_components_are_gmv_minus_refund() -> None:
     assert components == {"gmv": 1000.0, "refund": 125.0, "net_gmv": 875.0}
 
 
+def test_rank_root_causes_uses_ep_before_v1_formula_for_adtributor_candidates() -> None:
+    old_formula_winner = _candidate("channel", "organic", contribution_pct=0.9, eng_confidence=0.6)
+    ep_winner = _candidate(
+        "channel",
+        "paid_ads",
+        contribution_pct=0.5,
+        eng_confidence=0.2,
+        explanatory_power=0.8,
+        surprise_js=0.2,
+    )
+
+    ranked = rank_root_causes([old_formula_winner, ep_winner])
+
+    assert ranked[0].element == "paid_ads"
+    assert ranked[0].eng_confidence == 1.0
+
+
 def test_empty_rows_do_not_create_candidate() -> None:
     result = compute_dimension_contribution(
         metric_definition=_metric("gmv"),
@@ -188,3 +226,28 @@ def test_missing_evidence_ids_do_not_create_candidate() -> None:
     assert result.ok is False
     assert result.error_code == "EVIDENCE_MISSING"
     assert result.candidates == []
+
+
+def _candidate(
+    dimension: str,
+    element: str,
+    *,
+    contribution_pct: float,
+    eng_confidence: float,
+    explanatory_power: float | None = None,
+    surprise_js: float | None = None,
+):
+    return attribution_service.RootCauseCandidate(
+        root_cause_type="campaign_traffic_drop",
+        dimension=dimension,
+        element=element,
+        contribution_pct=contribution_pct,
+        explanatory_power=explanatory_power,
+        surprise_js=surprise_js,
+        signal_severity=1.0,
+        evidence_support=1.0,
+        reflection_factor=1.0,
+        eng_confidence=eng_confidence,
+        verdict="confirmed",
+        evidence_ids=["run-1:E1"],
+    )

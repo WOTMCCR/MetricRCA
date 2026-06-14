@@ -33,8 +33,32 @@ SIGNAL_RULES: tuple[SignalRule, ...] = (
     ),
     SignalRule(
         root_cause_type=RootCauseType.STOCKOUT.value,
+        metric_id=MetricId.NET_GMV.value,
+        dimension=DimensionId.PRODUCT.value,
+        signal_type="refund_quality",
+    ),
+    SignalRule(
+        root_cause_type=RootCauseType.COMPLAINT_OR_QUALITY_ISSUE.value,
+        metric_id=MetricId.NET_GMV.value,
+        dimension=DimensionId.PRODUCT.value,
+        signal_type="refund_quality",
+    ),
+    SignalRule(
+        root_cause_type=RootCauseType.STOCKOUT.value,
         metric_id=MetricId.GMV.value,
         dimension=DimensionId.CATEGORY.value,
+        signal_type="inventory",
+    ),
+    SignalRule(
+        root_cause_type=RootCauseType.STOCKOUT.value,
+        metric_id=MetricId.GMV.value,
+        dimension=DimensionId.PRODUCT.value,
+        signal_type="inventory",
+    ),
+    SignalRule(
+        root_cause_type=RootCauseType.STOCKOUT.value,
+        metric_id=MetricId.STOCKOUT_RATE.value,
+        dimension=DimensionId.WAREHOUSE.value,
         signal_type="inventory",
     ),
     SignalRule(
@@ -44,9 +68,27 @@ SIGNAL_RULES: tuple[SignalRule, ...] = (
         signal_type="conversion",
     ),
     SignalRule(
+        root_cause_type=RootCauseType.CONVERSION_DROP.value,
+        metric_id=MetricId.PAY_CVR.value,
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="conversion",
+    ),
+    SignalRule(
         root_cause_type=RootCauseType.COMPLAINT_OR_QUALITY_ISSUE.value,
         metric_id=MetricId.REFUND_RATE.value,
         dimension=DimensionId.PRODUCT.value,
+        signal_type="refund_quality",
+    ),
+    SignalRule(
+        root_cause_type=RootCauseType.COMPLAINT_OR_QUALITY_ISSUE.value,
+        metric_id=MetricId.REFUND_RATE.value,
+        dimension=DimensionId.CATEGORY.value,
+        signal_type="refund_quality",
+    ),
+    SignalRule(
+        root_cause_type=RootCauseType.COMPLAINT_OR_QUALITY_ISSUE.value,
+        metric_id=MetricId.COMPLAINT_RATE.value,
+        dimension=DimensionId.CATEGORY.value,
         signal_type="refund_quality",
     ),
 )

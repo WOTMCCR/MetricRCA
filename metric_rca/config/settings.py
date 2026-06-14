@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import date
 from functools import lru_cache
 import os
+from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -60,7 +61,11 @@ class Settings(BaseSettings):
     llm_provider: str | None = None
     llm_model: str | None = Field(default=None, min_length=1)
     llm_api_key: str | None = None
+    llm_base_url: str | None = None
+    llm_structured_output_method: Literal["json_schema", "json_mode", "function_calling"] = "json_schema"
     llm_temperature: float = 0.0
+    eval_llm_max_attempts: int = 3
+    eval_llm_retry_seconds: float = 20.0
     multi_agent_enabled: bool = False
     adtributor_t_ep: float = 0.67
     adtributor_t_eep: float = 0.10
@@ -81,6 +86,8 @@ class Settings(BaseSettings):
         default_factory=lambda: {
             "refund_rate": "complaint_or_quality_issue",
             "pay_cvr": "conversion_drop",
+            "stockout_rate": "stockout",
+            "complaint_rate": "complaint_or_quality_issue",
         }
     )
     root_cause_type_by_dimension: dict[str, str] = Field(
@@ -88,6 +95,7 @@ class Settings(BaseSettings):
             "channel": "campaign_traffic_drop",
             "category": "stockout",
             "device": "conversion_drop",
+            "product": "stockout",
         }
     )
     root_cause_type_by_dimension_element: dict[str, str] = Field(
@@ -96,7 +104,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _required_provider_available(self) -> Settings:
-        if self.llm_api_key is None:
+        if self.llm_api_key is None and self.llm_provider in {None, "openai"}:
             self.llm_api_key = os.getenv("OPENAI_API_KEY")
         signal_keys = set(self.signal_metric_by_type)
         if signal_keys != REQUIRED_SIGNAL_TYPES:

@@ -89,13 +89,20 @@ def drilldown_dimension(
     result_summary = {
         "metric_id": args.metric_id,
         "dimension": args.dimension,
+        "filters": args.filters,
         "input_evidence_ids": args.evidence_ids,
         "query_sources": query_sources(current_plan=current_plan, baseline_plan=baseline_plan),
         "candidates": [candidate.model_dump(mode="json") for candidate in attribution.candidates],
         "coverage": attribution.coverage,
+        "adtributor_elements": _adtributor_elements(
+            dimension=args.dimension,
+            current_rows=current.rows,
+            baseline_rows=baseline.rows,
+        ),
     }
+    evidence_alias = _drilldown_evidence_alias(args, repository=repository)
     evidence = Evidence(
-        evidence_id=f"{args.run_id}:E2",
+        evidence_id=f"{args.run_id}:{evidence_alias}",
         query_spec=baseline_spec,
         sql=baseline_plan.sql,
         sql_hash=baseline_plan.sql_hash,
@@ -116,32 +123,74 @@ def drilldown_dimension(
             evidence_ids=[evidence.evidence_id],
         ),
         evidences=[evidence],
-        evidence_alias="E2",
+        evidence_alias=evidence_alias,
         candidates=attribution.candidates,
         sql_count=2,
     )
 
 
+def _adtributor_elements(
+    *,
+    dimension: str,
+    current_rows: list[dict[str, Any]],
+    baseline_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    current_by_element: dict[str, float] = {}
+    baseline_values: dict[str, list[float]] = {}
+    for row in current_rows:
+        if row.get(dimension) is not None and row.get("metric_value") is not None:
+            current_by_element[str(row[dimension])] = float(row["metric_value"])
+    for row in baseline_rows:
+        if row.get(dimension) is not None and row.get("metric_value") is not None:
+            baseline_values.setdefault(str(row[dimension]), []).append(float(row["metric_value"]))
+    return [
+        {
+            "dimension": dimension,
+            "element": element,
+            "actual": actual,
+            "forecast": sum(baseline_values[element]) / len(baseline_values[element]),
+        }
+        for element, actual in current_by_element.items()
+        if element in baseline_values and baseline_values[element]
+    ]
+
+
 def _existing_drilldown_result(args: DrilldownDimensionArgs, *, repository: Any) -> ToolResult | None:
-    evidence_id = f"{args.run_id}:E2"
-    row = repository.get_evidence(run_id=args.run_id, evidence_id=evidence_id)
-    if row is None or row.get("guard_status") != "passed":
-        return None
-    summary = row.get("result_summary")
-    if not isinstance(summary, dict):
-        return None
-    if summary.get("metric_id") != args.metric_id or summary.get("dimension") != args.dimension:
-        return None
-    if [str(item) for item in summary.get("input_evidence_ids", [])] != [str(item) for item in args.evidence_ids]:
-        return None
-    candidates = [RootCauseCandidate.model_validate(candidate) for candidate in summary.get("candidates", [])]
-    return ToolResult(
-        observation=Observation(
-            action_name="drilldown_dimension",
-            ok=True,
-            payload=summary,
-            evidence_ids=[evidence_id],
-        ),
-        evidence_alias="E2",
-        candidates=candidates,
+    for evidence_alias in _drilldown_alias_candidates(args):
+        evidence_id = f"{args.run_id}:{evidence_alias}"
+        row = repository.get_evidence(run_id=args.run_id, evidence_id=evidence_id)
+        if row is None or row.get("guard_status") != "passed":
+            continue
+        summary = row.get("result_summary")
+        if not isinstance(summary, dict) or not _drilldown_summary_matches(args, summary):
+            continue
+        candidates = [RootCauseCandidate.model_validate(candidate) for candidate in summary.get("candidates", [])]
+        return ToolResult(
+            observation=Observation(
+                action_name="drilldown_dimension",
+                ok=True,
+                payload=summary,
+                evidence_ids=[evidence_id],
+            ),
+            evidence_alias=evidence_alias,
+            candidates=candidates,
+        )
+    return None
+
+
+def _drilldown_evidence_alias(args: DrilldownDimensionArgs, *, repository: Any) -> str:
+    return f"E2_{args.dimension}"
+
+
+def _drilldown_alias_candidates(args: DrilldownDimensionArgs) -> list[str]:
+    return [f"E2_{args.dimension}", "E2"]
+
+
+def _drilldown_summary_matches(args: DrilldownDimensionArgs, summary: dict[str, Any]) -> bool:
+    return (
+        summary.get("metric_id") == args.metric_id
+        and summary.get("dimension") == args.dimension
+        and {str(key): str(value) for key, value in (summary.get("filters") or {}).items()}
+        == {str(key): str(value) for key, value in args.filters.items()}
+        and [str(item) for item in summary.get("input_evidence_ids", [])] == [str(item) for item in args.evidence_ids]
     )

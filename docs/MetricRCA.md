@@ -502,6 +502,12 @@ stateDiagram-v2
 The active v2 ReAct contract is:
 
 - The LLM is required and runs with `temperature=0`.
+- The LLM client is configured through Settings only. Native OpenAI and
+  OpenAI-compatible providers share the same ChatModel construction boundary:
+  `llm_provider`, `llm_model`, `llm_api_key`, optional `llm_base_url`, and
+  `llm_structured_output_method`. Compatible providers such as DeepSeek require
+  an explicit base URL and API key; they must not silently reuse `OPENAI_API_KEY`
+  or fall back to another provider/model.
 - The exposed tools are exactly the MetricRCA whitelist plus deepagents
   planning `write_todos`; filesystem tools (`ls`, `read_file`, `write_file`,
   `edit_file`, and equivalents) are not part of the exposed action set.
@@ -512,11 +518,23 @@ The active v2 ReAct contract is:
 - Budget counters (`max_steps`, `max_query`, `max_drilldown_depth`) live in a
   run-scoped context outside LLM-visible state. Budget exhaustion returns
   `BUDGET_EXCEEDED`; repeated illegal data-tool attempts fail the run.
+- In discovery flows, E2/E3 evidence may use family aliases (for example
+  `E2_category`, `E3_ch_paid_ads`, `E3_cat_electronics`) to keep multiple
+  drilldowns/signals current-run scoped and inside the 64-character evidence id
+  schema limit. Once an E3-family evidence exists before E4, middleware rejects
+  extra `fetch_related_signal` attempts with recoverable `E3_ALREADY_EXISTS`
+  and directs the agent to `calculate_contribution`; multi-element proof comes
+  from E2 drilldown Evidence plus ranker-internal Adtributor, not repeated E3
+  signal fetching.
 - Tool implementations still produce `Observation + Evidence` by calling the
   deterministic services. A data-fetching tool without a persisted current-run
   evidence id is treated as a tool defect and returned as typed failure.
 - Reflection repair is not performed inside a tool. It is orchestrator-owned and
   re-enters the same deepagents thread once through the normal tool path.
+- If a transient LLM provider error occurs after terminal persisted artifacts
+  already exist (`no_anomaly` E1 or complete E4+E_rank chain), RunOrchestrator
+  may continue to deterministic Reflection/report projection. The same error
+  before terminal evidence remains fail-fast.
 
 ### 6.A v1 ReAct Design（superseded; kept as appendix）
 
@@ -828,7 +846,16 @@ CREATE TABLE eval_case_result (
 
 异常注入框架：在「正常基线生成」之后，对 `target_date=2026-06-05` 按异常 case 配置叠加异常，并写入 `anomaly_ground_truth`。`gmv_no_anomaly` 是未注入异常的 control case，使用 `2026-06-04`，不得通过补偿其它分群来把 `target_date` 大盘 GMV 压成无异常。
 
-**5 个 MVP 异常 case**：
+**P7 20-case 异常库**（以 `docs/final-design/02-interfaces-and-data.md` §9 为准）。
+保留 MVP 5 case 的 `case_id` 与语义（C01-C05），新增 C06-C20。异常注入日为
+`2026-06-05`；no-anomaly case（C05、C19、C20）使用 `2026-06-04`，不得在无异常
+case 上产生候选、任务、下钻或 rank trace。
+
+**P7 eval 题面完整性（ADL-0009）**：`evals/cases.jsonl` 必须使用自然业务问句。
+禁止把 `metric_id=<x>` 写入 question；禁止把根因机制（stockout/refund/UV/AOV/
+logistics/high-price mix 等）作为答案预置到发现型题面；C06/C07/C08/C09 等发现型
+case 不得在 question 中给出待发现的维度/元素。`intent_accuracy` 必须来自真实
+LLM parse，而不是从题面硬编码 metric 得到。
 
 | case_id | 指标 | 注入方式 | 期望主因 |
 |---|---|---|---|
@@ -837,8 +864,21 @@ CREATE TABLE eval_case_result (
 | cvr_mobile_drop | pay_cvr↓ | mobile 设备 pay_user_cnt 骤降 | conversion_drop |
 | refund_rate_product_quality | refund_rate↑ | 某商品 complaint / refund 激增 | complaint_or_quality_issue |
 | gmv_no_anomaly | gmv | `2026-06-04` 不注入异常 | no_anomaly（不可强行归因 / 不建任务） |
-
-**1 个月 20-case 分类法（节选）**：多渠道同时下降、类目+渠道交叉、AOV 驱动、UV 驱动、价格变更、促销结束回落、单 SKU 爆款缺货、物流时效、季节性误报（应判无异常）等。
+| C06_gmv_multi_channel_drop | gmv↓ | paid_ads + social 同步下降 | campaign_traffic_drop（Adtributor 多元素） |
+| C07_gmv_category_channel_cross | gmv↓ | electronics × paid_ads 交叉下降 | campaign_traffic_drop（channel=paid_ads，多维组合含 category） |
+| C08_gmv_aov_drop | gmv↓ | 高价 SKU 销量占比骤降 | aov_drop |
+| C09_gmv_uv_organic_drop | gmv↓ | organic UV 骤降且 spend 正常 | campaign_traffic_drop |
+| C10_gmv_price_change | gmv↓ | 类目级降价，量平价跌 | aov_drop |
+| C11_gmv_promo_end_falloff | gmv↓ | 前 7 天 promo 抬高、当日回落 | campaign_traffic_drop |
+| C12_gmv_single_sku_stockout | gmv↓ | 爆款 SKU 全仓缺货 | stockout |
+| C13_net_gmv_refund_spike | net_gmv↓ | GMV 平、refund_amount 激增 | complaint_or_quality_issue |
+| C14_net_gmv_gmv_driven | net_gmv↓ | refund 平、GMV 渠道下降 | campaign_traffic_drop |
+| C15_refund_rate_logistics | refund_rate↑ | logistics ticket + 多商品退款 | complaint_or_quality_issue |
+| C16_stockout_rate_warehouse | stockout_rate↑ | 单仓 stockout_hours 激增 | stockout |
+| C17_complaint_rate_quality | complaint_rate↑ | 单类目 quality ticket 激增 | complaint_or_quality_issue |
+| C18_cvr_channel_landing | pay_cvr↓ | 单渠道 add_cart→pay 断崖 | conversion_drop |
+| C19_gmv_seasonal_false_positive | gmv | 周末效应，同星期几基线不应报 | no_anomaly |
+| C20_cvr_no_anomaly_noise | pay_cvr | 小幅噪声，低于异常阈值 | no_anomaly |
 
 **可复现**：种子 + 业务日固定，`make seed` 幂等重建。
 
@@ -964,7 +1004,13 @@ drop_by_dim[e]      = max(0, baseline_value[e] - current_value[e])
 contribution_pct[e] = drop_by_dim[e] / sum(drop_by_dim)
 ```
 
-**GMV 分解**：MVP 使用与当前 DDL 一致的近似分解 `GMV = UV × PAY_CVR × AOV`，其中 `PAY_CVR = pay_user_cnt / UV`，`AOV = GMV / pay_user_cnt`。`fact_traffic` 暂无 `pay_orders` 字段，因此不要在 MVP 中使用 `GMV / pay_orders` 口径；若 1 个月版本新增 `pay_orders`，需同步修改 DDL、QuerySpec、SQLRenderer、算法测试与指标定义。比较各因子相对基线的变动占比，定位主驱动因子。**净 GMV**：`net_gmv = gmv - refund_amount`，先判 gmv 与 refund 各自贡献。
+**GMV 分解**：MVP 使用与当前 DDL 一致的近似分解 `GMV = UV × PAY_CVR × AOV`，其中 `PAY_CVR = pay_user_cnt / UV`，`AOV = GMV / pay_user_cnt`。`fact_traffic` 暂无 `pay_orders` 字段，因此不要使用 `GMV / pay_orders` 口径。比较各因子相对基线的变动占比，定位主驱动因子。
+
+**P7 net-GMV 链路**：`net_gmv = gmv - refund_amount`。`calculate_contribution`
+的 `net_gmv_chain` 先拆分 GMV delta 与 refund delta 的贡献，主导侧再继续：
+若 GMV 侧主导，沿用 `UV × PAY_CVR × AOV`；若 refund 侧主导，输出 refund 侧
+drilldown 建议与已查询的 `gmv/refund/net_gmv` 当前/基线数值。不得增加
+`fact_traffic.pay_orders` 或绕过 QuerySpec→SQLRenderer→SQLGuard→Repository。
 
 **主因排序（工程置信度，明确不是统计置信度）**：
 ```
@@ -978,12 +1024,20 @@ eng_confidence = normalize(score)   # 命名为"工程置信度(engineering conf
 
 **多因主因**：允许返回 top-3 候选并标 verdict（confirmed / likely）。证据不足时输出「insufficient」而非强行归因。
 
-**1 个月增强 — Adtributor 多维归因**（已对照原文核验）：
+**P7 增强 — Adtributor 多维归因**（已对照原文核验；旧 v1 维度贡献公式保留为单维 fallback 路径）：
 来源为 Ranjita Bhagwan, Rahul Kumar, Ramachandran Ramjee, George Varghese, Surjyakanta Mohapatra, Hemanth Manoharan, Piyush Shah（Microsoft），*"Adtributor: Revenue Debugging in Advertising Systems,"* NSDI '14（11th USENIX Symposium on NSDI），Seattle, WA, pp. 43–55, 2014 年 4 月。其核心三概念为 **explanatory power（解释力）、succinctness（简洁性）、surprise**。
 - **解释力 EP**（基础可加指标）：`EP_ij = (A_ij − F_ij) / (A − F)`，其中 F 为预测 / 期望值、A 为实际值；同一维度各元素 EP 之和为 100%（可超过 100% 或为负，若方向相反）。
 - **Surprise（基于 Jensen-Shannon 散度）**：`p_ij = F_ij / F`，`q_ij = A_ij / A`，`S_ij = 0.5 · (p · log(2p/(p+q)) + q · log(2q/(p+q)))`；JS 散度对称、即使 p 或 q 为 0 也有限，取值 [0,1]。
-- **候选选择**：单维内按 surprise 降序贪心加入元素（要求单元素 `EP > T_EEP`），累计 `EP > T_EP` 即停；跨维取最 surprising 的 top-3。论文部署值 `T_EP = 67%`、`T_EEP = 10%`。**关键假设：根因位于单一维度**（论文据约一年告警观察，多维共同致因极罕见，故只找单维度的布尔表达式）。
-- **本系统改造**：把 forecast `F` 用「前 4 个同星期几基线均值」替代，作为净 GMV / GMV 的多维定位增强；仍保留证据校验，Adtributor 仅用于候选排序而非直接结论。
+- **候选选择**：单维内按 surprise 降序贪心加入元素（要求单元素 `EP > T_EEP`），累计 `EP > T_EP` 即停；跨维取最 surprising 的 top-3。部署阈值由 Settings 提供，默认 `T_EP = 0.67`、`T_EEP = 0.10`。
+- **本系统改造（ADL-0009）**：forecast `F` 用「前 4 个同星期几基线均值」替代；
+  `adtributor_service.py` 是纯确定性服务，不导入 DB/repository，不读事实表或
+  `anomaly_ground_truth`，只消费 `rank_root_causes` 传入的、由
+  `drilldown_dimension` 已持久化 Evidence 中的 per-element actual/forecast。
+  Adtributor 不在 LLM 动作空间中暴露为独立工具；`rank_root_causes` 适用时在确定性
+  ranker 内部调用它，把 EP/surprise 写入 E4 的 selected/candidates，并持久化 E_rank。
+  不适用时返回 typed `ADTRIBUTOR_NOT_APPLICABLE` 语义并继续单维排序路径，绝不产出伪 EP。
+- **RootCauseCandidate v2**：新增 `dimension_elements: list[tuple[str,str]]`、`explanatory_power`、`surprise_js`。Adtributor 结果排序以 EP 为贡献分数、surprise 为并列 tie-breaker；非 Adtributor 路径保留 v1 `contribution_pct × signal_severity × evidence_support × reflection_factor`。
+- **Ratio metrics**：`pay_cvr/refund_rate/stockout_rate/complaint_rate` 只有在 Evidence 同时提供分子/分母 actual/forecast 时才计算 numerator/denominator EP 组合；否则返回 typed `ADTRIBUTOR_NOT_APPLICABLE`，由 agent 继续走单维下钻，不静默产出错误数值。
 
 ---
 
@@ -1002,7 +1056,7 @@ eng_confidence = normalize(score)   # 命名为"工程置信度(engineering conf
 | drilldown_dimension | 维度下钻 | metric,dim | contrib | DIMENSION_NOT_ALLOWED | 是 | 是 | 是 |
 | fetch_related_signal | 拉取相关信号 | signal,filters | signal evidence | SQL_EXECUTION_FAILED / DIMENSION_NOT_ALLOWED | 是 | 是 | 是 |
 | calculate_contribution | 贡献 / 分解 | evidences, factor_specs | factors + evidence | SQL_EXECUTION_FAILED / QUERY_SPEC_INVALID | 是 | 是(经守卫，GMV 分解需 fact_traffic) | 是 |
-| rank_root_causes | 主因排序 | candidates | ranked | ATTRIBUTION_COVERAGE_LOW | 否 | 否 | 否 |
+| rank_root_causes | 主因排序（P7 内部调用 Adtributor） | persisted E4 + current-run drilldown Evidence | ranked + E_rank | ATTRIBUTION_COVERAGE_LOW / ADTRIBUTOR_NOT_APPLICABLE | 是(选动作) | 否 | 是 |
 | verify_evidence | 证据校验 | report,evidences | issues | EVIDENCE_MISSING | 否 | 否 | 否 |
 | search_memory | 读记忆 | key | hits | MEMORY_READ_FAILED | 否 | 是 | 否 |
 | write_memory | 写记忆 | record | ok | MEMORY_WRITE_FAILED | 否 | 是 | 否 |
@@ -1155,6 +1209,10 @@ P5 必须额外校验：
 | INSUFFICIENT_BASELINE_DATA | 否 | 否 | 结构化「证据不足」 |
 | NO_ANOMALY_DETECTED | 否 | 否 | 结构化「无异常」，不建任务 |
 | ACTION_SCHEMA_INVALID | 是 | 否 | GuardMiddleware 记录 error observation 并短路；重复/不可恢复非法数据工具尝试使 run failed，不允许确定性动作选择兜底 |
+| METRIC_SCOPE_VIOLATION | 是 | 否 | 工具 metric_id 与 parsed target metric 不一致；GuardMiddleware 短路、trace、handler 不执行且不消耗预算 |
+| E3_ALREADY_EXISTS | 是 | 否 | E4 前已有 E3-family 证据；GuardMiddleware 阻止额外 signal fetch，引导直接 calculate_contribution，不消耗预算 |
+| E4_ALREADY_EXISTS | 是 | 否 | 当前 run 已有 E4；calculate_contribution 不覆盖不同选择，agent 应调用 rank_root_causes 复用既有 E4 |
+| ADTRIBUTOR_NOT_APPLICABLE | 是 | 否 | ranker 内部 Adtributor 不适用于当前 metric/evidence；继续单维排序路径，不伪造 EP/JS |
 | LLM_REQUIRED_UNAVAILABLE | 否 | 否 | error_return |
 | REFLECTION_REPAIR_FAILED | 否 | 否 | error_return（不编造） |
 | MEMORY_READ / WRITE_FAILED | 否 | 否 | error_return（MVP memory 为 required；若配置 memory_enabled=false，则不调用 memory） |

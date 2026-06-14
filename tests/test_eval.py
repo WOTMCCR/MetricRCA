@@ -6,8 +6,9 @@ from typing import Any
 
 import pytest
 
+from metric_rca.config.settings import Settings
 from metric_rca.evals.models import EvalRuntimeError, GroundTruth, PersistedArtifacts
-from metric_rca.evals.runner import load_cases, run_eval
+from metric_rca.evals.runner import _attempt_run_id, _run_id, load_cases, run_eval
 from metric_rca.evals.scorer import dangerous_sql_blocked, score_case, summarize_scores
 
 
@@ -20,6 +21,43 @@ def test_eval_loads_cases_and_ground_truth(tmp_path: Path) -> None:
 
     assert [case.case_id for case in cases] == ["gmv_paid_ads_drop", "gmv_no_anomaly"]
     assert repo.gt_requests == [["gmv_paid_ads_drop", "gmv_no_anomaly"]]
+
+
+def test_eval_cases_are_natural_questions_without_answer_leakage() -> None:
+    cases = load_cases(Path("metric_rca/evals/cases.jsonl"))
+    by_id = {case.case_id: case.question.lower() for case in cases}
+
+    assert len(cases) == 20
+    assert all("metric_id=" not in question for question in by_id.values())
+    discovery_forbidden = {
+        "stockout",
+        "refund",
+        "uv",
+        "aov",
+        "logistics",
+        "high-price",
+        "high price",
+        "paid_ads",
+        "paid ads",
+        "social",
+        "electronics",
+        "organic",
+        "product 2",
+    }
+    for case_id in [
+        "C06_gmv_multi_channel_drop",
+        "C07_gmv_category_channel_cross",
+        "C08_gmv_aov_drop",
+        "C09_gmv_uv_organic_drop",
+    ]:
+        assert [token for token in discovery_forbidden if token in by_id[case_id]] == []
+
+
+def test_eval_run_ids_leave_room_for_long_evidence_aliases() -> None:
+    run_id = _attempt_run_id(_run_id("eval-4787ddf2", "C06_gmv_multi_channel_drop"), 4)
+
+    assert len(run_id) <= 42
+    assert len(f"{run_id}:E3_cat_electronics") <= 64
 
 
 def test_eval_missing_ground_truth_returns_EVAL_GROUND_TRUTH_MISSING(tmp_path: Path) -> None:
@@ -51,6 +89,30 @@ def test_eval_threshold_failure_returns_EVAL_THRESHOLD_NOT_MET(tmp_path: Path) -
 
     assert exc.value.code == "EVAL_THRESHOLD_NOT_MET"
     assert repo.eval_runs[0]["summary"]["thresholds_met"] is False
+
+
+def test_eval_rejects_gpt_4_1_mini_for_p7_acceptance(tmp_path: Path) -> None:
+    from metric_rca.config.settings import Settings
+
+    settings = Settings(
+        db_dsn="sqlite://",
+        readonly_db_dsn="sqlite://",
+        llm_provider="openai",
+        llm_model="gpt-4.1-mini",
+        llm_api_key="key",
+    )
+
+    with pytest.raises(EvalRuntimeError) as exc:
+        run_eval(
+            repository=_EvalRepository(),
+            rca_runner=_fake_runner,
+            settings=settings,
+            cases_path=_cases_file(tmp_path),
+            output_dir=tmp_path,
+            eval_id="eval-1",
+        )
+
+    assert exc.value.code == "EVAL_MODEL_TOO_WEAK"
 
 
 def test_eval_mutating_ground_truth_changes_score() -> None:
@@ -100,6 +162,7 @@ def test_eval_writes_eval_run_and_eval_case_result(tmp_path: Path) -> None:
     output = run_eval(repository=repo, rca_runner=_fake_runner, cases_path=_cases_file(tmp_path), output_dir=tmp_path, eval_id="eval-1")
 
     assert repo.eval_runs[0]["summary"] == output["summary"]
+    assert "llm_model" in repo.eval_runs[0]["summary"]
     assert [row["case_id"] for row in repo.case_results] == ["gmv_paid_ads_drop", "gmv_no_anomaly"]
 
 
@@ -117,6 +180,62 @@ def test_eval_scores_intent_anomaly_top1_top3_evidence_sql_reflection() -> None:
     assert score["evidence_coverage"] == 1.0
     assert score["sql_safe"] == 1
     assert score["reflection_repair_ok"] == 1
+
+
+def test_eval_scores_adtributor_used_and_multi_agent_path() -> None:
+    score = score_case(
+        case_id="C06_gmv_multi_channel_drop",
+        ground_truth=_gt("C06_gmv_multi_channel_drop"),
+        artifacts=_artifacts("run-1", selected=_candidate(dimension_elements=[("channel", "paid_ads"), ("channel", "social")])),
+    )
+
+    assert score["adtributor_used"] == 1
+    assert score["multi_agent_path"] == "single_agent"
+    assert score["top1_ok"] == 1
+
+
+def test_eval_requires_dimension_elements_for_c06_c07() -> None:
+    missing = score_case(
+        case_id="C06_gmv_multi_channel_drop",
+        ground_truth=_gt("C06_gmv_multi_channel_drop"),
+        artifacts=_artifacts("run-1", selected=_candidate()),
+    )
+    present = score_case(
+        case_id="C07_gmv_category_channel_cross",
+        ground_truth=_gt("C07_gmv_category_channel_cross", dimension="channel", element="paid_ads"),
+        artifacts=_artifacts(
+            "run-1",
+            selected=_candidate(
+                dimension="channel",
+                element="paid_ads",
+                dimension_elements=[("channel", "paid_ads"), ("category", "electronics")],
+            ),
+        ),
+    )
+
+    assert missing["top1_ok"] == 0
+    assert missing["detail"]["dimension_elements_required"] is True
+    assert present["top1_ok"] == 1
+
+
+def test_eval_c07_requires_exact_channel_category_pair() -> None:
+    wrong_pair = score_case(
+        case_id="C07_gmv_category_channel_cross",
+        ground_truth=_gt("C07_gmv_category_channel_cross", dimension="channel", element="paid_ads"),
+        artifacts=_artifacts(
+            "run-1",
+            selected=_candidate(
+                dimension="channel",
+                element="paid_ads",
+                dimension_elements=[("channel", "paid_ads"), ("category", "fashion")],
+            ),
+        ),
+    )
+
+    assert wrong_pair["top1_ok"] == 0
+    assert ("category", "electronics") in {
+        tuple(item) for item in wrong_pair["detail"]["required_dimension_elements"]
+    }
 
 
 def test_eval_expected_anomaly_requires_e1_anomaly_evidence() -> None:
@@ -199,11 +318,101 @@ def test_no_anomaly_correct_requires_no_task_no_attribute_rank_no_candidate() ->
     assert p6_polluted["no_anomaly_task_ok"] == 0
 
 
+def test_no_anomaly_correct_requires_all_no_anomaly_traps_clean() -> None:
+    scores = [
+        score_case(
+            case_id="gmv_no_anomaly",
+            ground_truth=_gt("gmv_no_anomaly", expected_anomaly=False, root_cause_type=None, dimension=None, element=None),
+            artifacts=_no_anomaly_artifacts("run-1"),
+        ),
+        score_case(
+            case_id="C19_gmv_seasonal_false_positive",
+            ground_truth=_gt("C19_gmv_seasonal_false_positive", expected_anomaly=False, root_cause_type=None, dimension=None, element=None),
+            artifacts=_no_anomaly_artifacts("run-2"),
+        ),
+        score_case(
+            case_id="C20_cvr_no_anomaly_noise",
+            ground_truth=_gt("C20_cvr_no_anomaly_noise", expected_anomaly=False, root_cause_type=None, dimension=None, element=None),
+            artifacts=_no_anomaly_artifacts("run-3", trace_action="rank_root_causes"),
+        ),
+    ]
+
+    summary = summarize_scores(scores, dangerous_sql_blocked=True)
+
+    assert scores[-1]["no_anomaly_task_ok"] == 0
+    assert summary["no_anomaly_correct"] is False
+
+
+def test_eval_summary_accepts_p7_thresholds() -> None:
+    rows = []
+    for index in range(20):
+        rows.append(
+            {
+                "case_id": f"C{index + 1:02d}",
+                "intent_ok": 1,
+                "anomaly_ok": 1,
+                "top1_ok": 1 if index < 16 else 0,
+                "top3_ok": 1 if index < 18 else 0,
+                "evidence_coverage": 1.0,
+                "sql_safe": 1,
+                "reflection_repair_ok": 1,
+                "report_traceable_ok": 1,
+                "memory_pollution_ok": 1,
+                "no_anomaly_task_ok": 1,
+            }
+        )
+    rows[4]["case_id"] = "gmv_no_anomaly"
+    rows[18]["case_id"] = "C19_gmv_seasonal_false_positive"
+    rows[19]["case_id"] = "C20_cvr_no_anomaly_noise"
+
+    summary = summarize_scores(rows, dangerous_sql_blocked=True)
+
+    assert summary["case_total"] == 20
+    assert summary["intent_accuracy"] == 1.0
+    assert summary["top1_rate"] == 0.8
+    assert summary["top3_rate"] == 0.9
+    assert summary["no_anomaly_correct"] is True
+
+
 def test_eval_json_and_markdown_outputs_exist(tmp_path: Path) -> None:
     run_eval(repository=_EvalRepository(), rca_runner=_fake_runner, cases_path=_cases_file(tmp_path), output_dir=tmp_path, eval_id="eval-1")
 
     assert (tmp_path / "eval-1.json").exists()
     assert (tmp_path / "eval-1.md").exists()
+
+
+def test_eval_retries_transient_llm_errors_with_same_case(tmp_path: Path) -> None:
+    repo = _EvalRepository()
+    calls: list[str] = []
+
+    def runner(question: str, **kwargs: Any) -> dict[str, Any]:
+        run_id = kwargs["run_id"]
+        calls.append(run_id)
+        if len(calls) == 1:
+            return {"run_id": run_id, "status": "failed", "error_code": "rate_limit_exceeded"}
+        case_id = "gmv_paid_ads_drop" if "gmv_paid_ads_drop" in run_id else "gmv_no_anomaly"
+        repo.persist_case(run_id, case_id)
+        return {"run_id": run_id, "status": repo.agent_runs[run_id]["status"], "error_code": None}
+
+    output = run_eval(
+        repository=repo,
+        rca_runner=runner,
+        cases_path=_cases_file(tmp_path),
+        output_dir=tmp_path,
+        eval_id="eval-1",
+        settings=Settings(
+            db_dsn="mysql+pymysql://app:app@localhost/db",
+            readonly_db_dsn="mysql+pymysql://reader:reader@localhost/db",
+            llm_provider="openai",
+            llm_model="gpt-test",
+            llm_api_key="key",
+            eval_llm_retry_seconds=0,
+        ),
+    )
+
+    assert calls[:2] == ["eval-1-gmv_paid_ads_drop", "eval-1-gmv_paid_ads_drop-r2"]
+    assert output["cases"][0]["detail"]["eval_attempts"] == 2
+    assert output["summary"]["thresholds_met"] is True
 
 
 def test_runtime_code_outside_seed_eval_tests_does_not_read_anomaly_ground_truth() -> None:
@@ -304,13 +513,15 @@ def _gt(
 
 def _candidate(
     *,
+    dimension: str = "channel",
     element: str = "paid_ads",
     contribution_pct: float = 0.9,
     evidence_ids: list[str] | None = None,
+    dimension_elements: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
-    return {
+    candidate = {
         "root_cause_type": "campaign_traffic_drop",
-        "dimension": "channel",
+        "dimension": dimension,
         "element": element,
         "contribution_pct": contribution_pct,
         "signal_severity": 0.8,
@@ -319,6 +530,11 @@ def _candidate(
         "verdict": "confirmed",
         "evidence_ids": evidence_ids or ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"],
     }
+    if dimension_elements is not None:
+        candidate["dimension_elements"] = dimension_elements
+        candidate["explanatory_power"] = 0.91
+        candidate["surprise_js"] = 0.12
+    return candidate
 
 
 def _artifacts(run_id: str, *, selected: dict[str, Any]) -> PersistedArtifacts:
@@ -326,11 +542,14 @@ def _artifacts(run_id: str, *, selected: dict[str, Any]) -> PersistedArtifacts:
     if evidence_ids and all(value.startswith("run-1:") for value in evidence_ids):
         evidence_ids = [f"{run_id}:{value.split(':', maxsplit=1)[1]}" for value in evidence_ids]
     run_selected = {**selected, "evidence_ids": evidence_ids}
+    e4_summary = {"selected_candidate": run_selected, "candidates": [run_selected]}
+    if run_selected.get("explanatory_power") is not None:
+        e4_summary["ranker"] = "adtributor_internal"
     evidences = [
         _evidence(f"{run_id}:E1", {"is_anomaly": True}),
         _evidence(f"{run_id}:E2", {"candidates": [run_selected]}),
         _evidence(f"{run_id}:E3", {"signal_type": "campaign"}),
-        _evidence(f"{run_id}:E4", {"selected_candidate": run_selected, "candidates": [run_selected]}),
+        _evidence(f"{run_id}:E4", e4_summary),
     ]
     report = {
         "status": "succeeded",

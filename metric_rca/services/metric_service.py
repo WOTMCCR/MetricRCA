@@ -85,6 +85,8 @@ class MetricService:
             provider=self._settings.llm_provider,
             model=self._settings.llm_model,
             api_key=self._settings.llm_api_key,
+            base_url=self._settings.llm_base_url,
+            structured_output_method=self._settings.llm_structured_output_method,
         )
         return self._intent_planner
 
@@ -117,6 +119,7 @@ def parse_question(
         supported_dimensions=supported_dimensions,
         supported_dimension_values=supported_dimension_values,
     )
+    _validate_explicit_metric_id(question=question, parsed=parsed, supported_metrics=supported_metrics)
     return _validate_parsed_intent(
         parsed,
         business_today=business_today,
@@ -202,3 +205,19 @@ def _validate_explicit_dimension_filters(
                 parsed.dimension == dimension and parsed.element == value
             ):
                 raise MetricServiceError("PARSE_FAILED", "LLM omitted explicit dimension filter")
+
+
+def _validate_explicit_metric_id(
+    *,
+    question: str,
+    parsed: ParsedIntent,
+    supported_metrics: list[str],
+) -> None:
+    match = re.search(r"(?<!\w)metric_id\s*=\s*([A-Za-z0-9_:-]+)", question)
+    if match is None:
+        return
+    metric_id = match.group(1)
+    if metric_id not in supported_metrics:
+        raise MetricServiceError("METRIC_NOT_FOUND", f"metric not found: {metric_id}")
+    if parsed.metric_id != metric_id:
+        raise MetricServiceError("PARSE_FAILED", "LLM omitted explicit metric_id")

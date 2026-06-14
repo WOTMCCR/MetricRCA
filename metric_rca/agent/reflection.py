@@ -101,7 +101,13 @@ def verify_reflection(
             ):
                 issues.append(_issue("persisted_evidence", "candidate evidence is not persisted guard-passed evidence"))
         if candidate is candidates[0] and candidate.contribution_pct < ATTRIBUTION_COVERAGE_THRESHOLD:
-            issues.append(_issue("ATTRIBUTION_COVERAGE_LOW", "top candidate attribution coverage is below threshold"))
+            issues.append(
+                _issue(
+                    "ATTRIBUTION_COVERAGE_LOW",
+                    "top candidate attribution coverage is below threshold",
+                    suggested_action=_suggested_rank_action_for_low_coverage(state),
+                )
+            )
         if candidate is candidates[0] and not _e3_signal_matches_candidate(
             state=state,
             candidate=candidate,
@@ -192,8 +198,8 @@ def _e3_signal_matches_candidate(
     candidate: RootCauseCandidate,
     evidence_by_id: dict[str, Evidence],
 ) -> bool:
-    e3 = evidence_by_id.get(f"{state.get('run_id')}:E3")
-    if e3 is None or f"{state.get('run_id')}:E3" not in candidate.evidence_ids:
+    e3 = _candidate_e3_evidence(state=state, candidate=candidate, evidence_by_id=evidence_by_id)
+    if e3 is None:
         return True
     summary = e3.result_summary
     if not summary:
@@ -211,6 +217,22 @@ def _e3_signal_matches_candidate(
         and summary.get("dimension") == candidate.dimension
         and str(summary.get("element")) == str(candidate.element)
     )
+
+
+def _candidate_e3_evidence(
+    *,
+    state: dict[str, Any],
+    candidate: RootCauseCandidate,
+    evidence_by_id: dict[str, Evidence],
+) -> Evidence | None:
+    prefix = f"{state.get('run_id')}:"
+    for evidence_id in candidate.evidence_ids:
+        if not evidence_id.startswith(prefix):
+            continue
+        alias = evidence_id.removeprefix(prefix)
+        if alias == "E3" or alias.startswith("E3_"):
+            return evidence_by_id.get(evidence_id)
+    return None
 
 
 def _top_candidate_matches_persisted_e4(
@@ -240,7 +262,8 @@ def _top_candidate_matches_persisted_e4(
     if not isinstance(selected, dict):
         return False
 
-    return _canonical(candidate) == _canonical(selected)
+    selected_candidate = RootCauseCandidate.model_validate(selected)
+    return _canonical(candidate) == _canonical(selected_candidate)
 
 
 def _missing_required_aliases(state: dict[str, Any], evidence_ids: list[str]) -> list[str]:
@@ -249,7 +272,11 @@ def _missing_required_aliases(state: dict[str, Any], evidence_ids: list[str]) ->
     for evidence_id in evidence_ids:
         if evidence_id.startswith(prefix):
             aliases.add(evidence_id.removeprefix(prefix))
-    return [alias for alias in REQUIRED_EVIDENCE_ALIASES if alias not in aliases]
+    return [
+        alias
+        for alias in REQUIRED_EVIDENCE_ALIASES
+        if not any(actual == alias or actual.startswith(f"{alias}_") for actual in aliases)
+    ]
 
 
 def _suggested_action_for_missing_aliases(
@@ -261,7 +288,7 @@ def _suggested_action_for_missing_aliases(
     current_ids = _current_evidence_ids(state)
     state_aliases = _aliases(state)
     target_date = state.get("target_date")
-    if "E4" in missing_aliases and {"E1", "E2", "E3"}.issubset(state_aliases):
+    if "E4" in missing_aliases and _has_aliases(state_aliases, {"E1", "E2", "E3"}):
         if not candidate.dimension or not candidate.element:
             return None
         return AgentAction(
@@ -276,7 +303,7 @@ def _suggested_action_for_missing_aliases(
             },
             rationale="reflection repair requires contribution evidence",
         )
-    if "E3" in missing_aliases and {"E1", "E2"}.issubset(state_aliases):
+    if "E3" in missing_aliases and _has_aliases(state_aliases, {"E1", "E2"}):
         if not candidate.dimension or not candidate.element:
             return None
         try:
@@ -302,6 +329,19 @@ def _suggested_action_for_missing_aliases(
     return None
 
 
+def _suggested_rank_action_for_low_coverage(state: dict[str, Any]) -> AgentAction | None:
+    if not _has_aliases(_aliases(state), {"E1", "E2", "E3", "E4"}):
+        return None
+    return AgentAction(
+        action="rank_root_causes",
+        args={
+            "metric_id": state["metric_id"],
+            "target_date": state.get("target_date"),
+        },
+        rationale="low single-element coverage requires ranker-internal Adtributor over persisted drilldowns",
+    )
+
+
 def _aliases(state: dict[str, Any]) -> set[str]:
     prefix = f"{state.get('run_id')}:"
     return {
@@ -309,6 +349,13 @@ def _aliases(state: dict[str, Any]) -> set[str]:
         for evidence in [_as_evidence(item) for item in state.get("evidences", [])]
         if evidence.evidence_id.startswith(prefix)
     }
+
+
+def _has_aliases(actual_aliases: set[str], required_aliases: set[str]) -> bool:
+    return all(
+        any(actual == required or actual.startswith(f"{required}_") for actual in actual_aliases)
+        for required in required_aliases
+    )
 
 
 def _current_evidence_ids(state: dict[str, Any]) -> list[str]:
@@ -329,7 +376,7 @@ def _time_range_matches(evidence: Evidence, target_date: Any) -> bool:
 
 def _metric_matches(evidence: Evidence, metric_id: Any) -> bool:
     alias = evidence.evidence_id.split(":", maxsplit=1)[1] if ":" in evidence.evidence_id else ""
-    if alias == "E3" and evidence.result_summary.get("signal_metric_id"):
+    if (alias == "E3" or alias.startswith("E3_")) and evidence.result_summary.get("signal_metric_id"):
         return True
     return evidence.query_spec.metric_id == metric_id
 

@@ -17,6 +17,19 @@ Normal anomaly workflow:
 4. call fetch_related_signal for the selected element
 5. call calculate_contribution
 6. call rank_root_causes
+Never stop after calculate_contribution for an anomaly run. rank_root_causes is
+mandatory after E4 and returns E_rank; final RCA reporting must use the ranked
+candidate from persisted evidence.
+
+Use the parsed target metric_id from the run context for every metric_id
+argument. The target metric is the KPI being explained. Do not switch target
+metrics just because the question or evidence mentions stockout, refunds, UV,
+AOV, logistics, quality, or campaign traffic; those are cause mechanisms to
+validate with evidence.
+
+rank_root_causes performs deterministic Adtributor EP/surprise enhancement
+inside the ranker when persisted drilldown evidence supports it. There is no
+separate Adtributor tool to call.
 
 Evidence IDs are strict:
 - drilldown_dimension evidence_ids must include E1
@@ -37,14 +50,28 @@ detect_anomaly. Then call fetch_related_signal for the exact dimension/value
 from the user question with E1 and E2. Then call calculate_contribution for that
 exact dimension/value with E1, E2, E3, and the same filters.
 Do not switch to a different dimension or element for explicit dimension=value
-questions. Valid dimension names are channel, category, device, and product.
+questions. Valid dimension names are channel, category, device, product, and
+warehouse.
 Never use signal_type words (campaign, inventory, conversion, refund_quality) as
 dimension values.
+
+For broad discovery GMV questions with no explicit slice, inspect more than one
+business dimension when budget allows. Prefer channel and category drilldowns
+before final ranking so the deterministic ranker can prove multi-element or
+cross-dimension candidates from persisted evidence. Use the exact evidence_ids
+returned by each drilldown; later drilldown ids may be named like E2_category.
+After the first successful fetch_related_signal creates an E3-family evidence
+id, immediately call calculate_contribution for that same element. Do not fetch
+signals for additional elements before E4; rank_root_causes uses persisted
+drilldown evidence for multi-element and cross-dimension Adtributor ranking.
 Use these signal_type choices for explicit slices:
 - channel -> campaign
-- category -> inventory
+- category with GMV/stockout context -> inventory
+- category with refund_rate/complaint context -> refund_quality
 - device -> conversion
 - product with refund_rate/complaint context -> refund_quality
+- product with GMV/stockout context -> inventory
+- warehouse -> inventory
 
 If a tool returns a typed error, either correct the arguments with another
 legal tool call or stop. Do not proceed to attribution after insufficient or

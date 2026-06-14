@@ -44,6 +44,9 @@ def test_phase1_domain_models_exist_and_forbid_extra_fields() -> None:
         models.Observation(action_name="detect_anomaly", ok=True),
         models.RootCauseCandidate(
             root_cause_type="campaign_traffic_drop",
+            dimension_elements=[("channel", "paid_ads"), ("channel", "social")],
+            explanatory_power=0.93,
+            surprise_js=0.08,
             contribution_pct=0.8,
             signal_severity=2.5,
             evidence_support=1.0,
@@ -89,3 +92,24 @@ def test_phase1_domain_models_exist_and_forbid_extra_fields() -> None:
         assert round_tripped == instance
         with pytest.raises(ValidationError):
             type(instance).model_validate({**instance.model_dump(), "unexpected": "nope"})
+
+
+def test_root_cause_candidate_v2_serialization_round_trips() -> None:
+    candidate = models.RootCauseCandidate(
+        root_cause_type="campaign_traffic_drop",
+        dimension="channel",
+        element="paid_ads",
+        dimension_elements=[("channel", "paid_ads"), ("channel", "social")],
+        explanatory_power=0.93,
+        surprise_js=0.12,
+        contribution_pct=0.5,
+        signal_severity=0.8,
+        evidence_support=1.0,
+        eng_confidence=0.88,
+        verdict="confirmed",
+        evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4", "run-1:E_rank"],
+    )
+
+    dumped = candidate.model_dump(mode="json")
+    assert dumped["dimension_elements"] == [["channel", "paid_ads"], ["channel", "social"]]
+    assert models.RootCauseCandidate.model_validate(dumped) == candidate

@@ -12,7 +12,7 @@ from metric_rca.config.settings import Settings, get_settings
 from metric_rca.data.seed_data import main as seed_main
 from metric_rca.domain.models import MetricDefinition
 from metric_rca.repositories.metadata_repository import MetadataRepository
-from metric_rca.services.intent_planner import LLMIntentPlanner, IntentPlanner
+from metric_rca.services.intent_planner import LLMIntentPlanner, IntentPlanner, build_system_prompt
 from metric_rca.services.metric_service import MetricService, MetricServiceError, ParsedIntent
 
 
@@ -332,6 +332,19 @@ def test_intent_planner_protocol_documents_live_planner_boundary() -> None:
     assert hasattr(IntentPlanner, "parse")
 
 
+def test_intent_planner_prompt_for_json_mode_disallows_intent_wrapper() -> None:
+    prompt = build_system_prompt(
+        business_today=date(2026, 6, 6),
+        supported_metrics=["net_gmv"],
+        supported_dimensions=["product"],
+        supported_dimension_values={"product": ["1"]},
+        supported_families=["net_gmv_drop"],
+    )
+
+    assert "Do not wrap the fields in an intent object." in prompt
+    assert "error_code, metric_id, target_date, question_family, dimension, element, filters" in prompt
+
+
 def test_llm_intent_planner_maps_langchain_invocation_error_to_typed_error() -> None:
     class BrokenStructuredModel:
         def invoke(self, messages):
@@ -351,3 +364,65 @@ def test_llm_intent_planner_maps_langchain_invocation_error_to_typed_error() -> 
         )
 
     assert exc_info.value.code == "LLM_REQUIRED_UNAVAILABLE"
+
+
+def test_openai_compatible_intent_planner_uses_configured_base_url_and_json_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeStructuredModel:
+        def invoke(self, messages):
+            captured["messages"] = messages
+            return {
+                "error_code": None,
+                "metric_id": "net_gmv",
+                "target_date": "2026-06-05",
+                "question_family": "net_gmv_drop",
+                "dimension": "product",
+                "element": "1",
+                "filters": [{"dimension": "product", "value": "1"}],
+            }
+
+    class FakeChatOpenAI:
+        def __init__(self, **kwargs):
+            captured["chat_kwargs"] = kwargs
+
+        def with_structured_output(self, schema, *, method: str):
+            captured["schema"] = schema
+            captured["method"] = method
+            return FakeStructuredModel()
+
+    monkeypatch.setattr("metric_rca.services.llm_client.ChatOpenAI", FakeChatOpenAI)
+
+    planner = LLMIntentPlanner(
+        provider="openai-compatible",
+        model="deepseek-chat",
+        api_key="deepseek-key",
+        base_url="https://api.deepseek.com",
+        structured_output_method="json_mode",
+    )
+    parsed = planner.parse(
+        "Why did net GMV fall for product 1 yesterday?",
+        business_today=date(2026, 6, 6),
+        supported_metrics=["net_gmv"],
+        supported_dimensions=["product"],
+        supported_dimension_values={"product": ["1"]},
+        supported_families=["net_gmv_drop"],
+    )
+
+    assert captured["chat_kwargs"]["model"] == "deepseek-chat"
+    assert captured["chat_kwargs"]["api_key"] == "deepseek-key"
+    assert captured["chat_kwargs"]["base_url"] == "https://api.deepseek.com"
+    assert captured["method"] == "json_mode"
+    assert parsed.metric_id == "net_gmv"
+    assert parsed.filters == {"product": "1"}
+
+
+def test_openai_compatible_intent_planner_requires_base_url() -> None:
+    with pytest.raises(MetricServiceError) as exc_info:
+        LLMIntentPlanner(
+            provider="openai-compatible",
+            model="deepseek-chat",
+            api_key="deepseek-key",
+        )
+
+    assert exc_info.value.code == "LLM_BASE_URL_REQUIRED"

@@ -72,6 +72,10 @@ def test_reflection_low_attribution_coverage_returns_ATTRIBUTION_COVERAGE_LOW() 
 
     assert result.passed is False
     assert "ATTRIBUTION_COVERAGE_LOW" in _checks(result)
+    issue = next(issue for issue in result.issues if issue.check == "ATTRIBUTION_COVERAGE_LOW")
+    assert issue.suggested_action is not None
+    assert issue.suggested_action.action == "rank_root_causes"
+    assert issue.suggested_action.args["metric_id"] == "gmv"
 
 
 def test_reflection_no_anomaly_cannot_have_operation_task() -> None:
@@ -229,6 +233,99 @@ def test_reflection_wrong_signal_type_for_candidate_fails() -> None:
     assert "signal_consistency" in _checks(result)
 
 
+def test_reflection_accepts_related_signal_metric_for_aliased_e3_evidence() -> None:
+    candidate = _candidate(evidence_ids=["run-1:E1", "run-1:E2_channel", "run-1:E3_channel_paid_ads", "run-1:E4"])
+    state = _state(
+        candidates=[candidate],
+        evidences=[
+            _evidence("run-1:E1"),
+            _evidence("run-1:E2_channel"),
+            _evidence(
+                "run-1:E3_channel_paid_ads",
+                metric_id="uv",
+                summary={
+                    "signal_type": "campaign",
+                    "signal_metric_id": "uv",
+                    "dimension": "channel",
+                    "element": "paid_ads",
+                    "value": 0.90,
+                },
+            ),
+            _evidence("run-1:E4", summary={"selected_candidate": candidate.model_dump(mode="json"), "value": 0.90}),
+        ],
+    )
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(state["evidences"]))
+
+    assert result.passed is True
+
+
+def test_reflection_checks_signal_consistency_for_aliased_e3_evidence() -> None:
+    state = _state(
+        candidates=[
+            _candidate(evidence_ids=["run-1:E1", "run-1:E2_channel", "run-1:E3_channel_paid_ads", "run-1:E4"])
+        ],
+        evidences=[
+            _evidence("run-1:E1"),
+            _evidence("run-1:E2_channel"),
+            _evidence(
+                "run-1:E3_channel_paid_ads",
+                metric_id="stockout_rate",
+                summary={
+                    "signal_type": "inventory",
+                    "signal_metric_id": "stockout_rate",
+                    "dimension": "channel",
+                    "element": "paid_ads",
+                    "value": 0.90,
+                },
+            ),
+            _evidence("run-1:E4"),
+        ],
+    )
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(state["evidences"]))
+
+    assert result.passed is False
+    assert "signal_consistency" in _checks(result)
+
+
+def test_reflection_accepts_net_gmv_refund_quality_signal_for_quality_candidate() -> None:
+    candidate = _candidate(
+        root_cause_type="complaint_or_quality_issue",
+        dimension="product",
+        element="1",
+        evidence_ids=["run-1:E1", "run-1:E2_product", "run-1:E3_prod_1", "run-1:E4"],
+    )
+    state = _state(
+        metric_id="net_gmv",
+        candidates=[candidate],
+        evidences=[
+            _evidence("run-1:E1", metric_id="net_gmv"),
+            _evidence("run-1:E2_product", metric_id="net_gmv"),
+            _evidence(
+                "run-1:E3_prod_1",
+                metric_id="complaint_rate",
+                summary={
+                    "signal_type": "refund_quality",
+                    "signal_metric_id": "complaint_rate",
+                    "dimension": "product",
+                    "element": "1",
+                    "value": 0.90,
+                },
+            ),
+            _evidence(
+                "run-1:E4",
+                metric_id="net_gmv",
+                summary={"selected_candidate": candidate.model_dump(mode="json"), "value": 0.90},
+            ),
+        ],
+    )
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(state["evidences"]))
+
+    assert result.passed is True
+
+
 def test_reflection_repair_count_increment_without_new_evidence_does_not_pass() -> None:
     state = _state(
         repair_count=1,
@@ -288,14 +385,17 @@ def _state(**overrides: Any) -> dict[str, Any]:
 
 def _candidate(
     *,
+    root_cause_type: str = "campaign_traffic_drop",
+    dimension: str = "channel",
+    element: str = "paid_ads",
     contribution_pct: float = 0.90,
     verdict: str = "confirmed",
     evidence_ids: list[str] | None = None,
 ) -> RootCauseCandidate:
     return RootCauseCandidate(
-        root_cause_type="campaign_traffic_drop",
-        dimension="channel",
-        element="paid_ads",
+        root_cause_type=root_cause_type,
+        dimension=dimension,
+        element=element,
         contribution_pct=contribution_pct,
         signal_severity=0.90,
         evidence_support=1.0,

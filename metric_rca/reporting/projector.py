@@ -12,7 +12,7 @@ from typing import Any
 
 
 IDENTITY_FIELDS = ("root_cause_type", "dimension", "element", "verdict")
-NUMERIC_CLAIM_FIELDS = ("contribution_pct",)
+NUMERIC_CLAIM_FIELDS = ("contribution_pct", "explanatory_power", "surprise_js")
 
 
 def build_report_from_persisted_artifacts(
@@ -99,6 +99,8 @@ def numeric_claims_from_e4(e4_result_summary: dict[str, Any], e4_id: str) -> lis
     claims: list[dict[str, Any]] = []
     for field in NUMERIC_CLAIM_FIELDS:
         value = selected.get(field)
+        if value is None:
+            continue
         if isinstance(value, bool) or not isinstance(value, int | float):
             return []
         claims.append({"name": field, "value": float(value), "evidence_id": e4_id})
@@ -160,12 +162,17 @@ def _candidate_evidence_ids_are_current_run_passed(
     evidences: list[dict[str, Any]],
     run_id: str,
 ) -> bool:
-    required = {f"{run_id}:E1", f"{run_id}:E2", f"{run_id}:E3", f"{run_id}:E4"}
+    required_aliases = {"E1", "E2", "E3", "E4"}
     actual = set(evidence_ids)
-    if actual != required:
+    if not all(
+        any(_evidence_id_matches_alias(evidence_id, run_id=run_id, alias=alias) for evidence_id in actual)
+        for alias in required_aliases
+    ):
         return False
     by_id = {str(row.get("evidence_id")): row for row in evidences}
-    for evidence_id in required:
+    for evidence_id in actual:
+        if not evidence_id.startswith(f"{run_id}:"):
+            return False
         row = by_id.get(evidence_id)
         if row is None:
             return False
@@ -174,6 +181,13 @@ def _candidate_evidence_ids_are_current_run_passed(
         if row.get("guard_status") != "passed":
             return False
     return True
+
+
+def _evidence_id_matches_alias(evidence_id: str, *, run_id: str, alias: str) -> bool:
+    if not evidence_id.startswith(f"{run_id}:"):
+        return False
+    actual_alias = evidence_id.removeprefix(f"{run_id}:")
+    return actual_alias == alias or actual_alias.startswith(f"{alias}_")
 
 
 def _date_string(value: Any) -> str | None:

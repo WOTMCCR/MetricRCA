@@ -76,6 +76,9 @@ class SpyRepository:
             return row
         return None
 
+    def get_evidences(self, run_id: str) -> list[dict[str, Any]]:
+        return [row for row in self.persisted_evidence.values() if row.get("run_id") == run_id]
+
     def execute_plan(self, plan: SQLPlan, *, run_id: str):
         assert plan.guard_status == "passed"
         self.executed.append(plan)
@@ -172,6 +175,11 @@ class SpyRepository:
     def create_evidence(self, row: dict[str, Any]) -> None:
         self.evidence_rows.append(row)
         self.persisted_evidence[row["evidence_id"]] = dict(row)
+
+    def update_evidence_result_summary(self, *, run_id: str, evidence_id: str, result_summary: dict[str, Any]) -> None:
+        row = self.persisted_evidence[evidence_id]
+        assert row["run_id"] == run_id
+        row["result_summary"] = result_summary
 
 
 class RejectingRenderer:
@@ -344,6 +352,7 @@ def test_detect_anomaly_sample_n_lt_3_returns_insufficient_baseline_data() -> No
 
 def test_drilldown_tool_uses_renderer_guard_repository_and_persists_evidence() -> None:
     repo = SpyRepository()
+    repo.persisted_evidence.pop("run-1:E2")
     result = drilldown_dimension(
         DrilldownDimensionArgs(
             run_id="run-1",
@@ -357,8 +366,8 @@ def test_drilldown_tool_uses_renderer_guard_repository_and_persists_evidence() -
     )
 
     assert result.observation.ok is True
-    assert result.observation.evidence_ids == ["run-1:E2"]
-    assert result.evidence_alias == "E2"
+    assert result.observation.evidence_ids == ["run-1:E2_channel"]
+    assert result.evidence_alias == "E2_channel"
     assert repo.evidence_rows[0]["guard_status"] == "passed"
     assert len(repo.executed) == 2
     assert result.sql_count == 2
@@ -634,13 +643,13 @@ def test_tools_evidence_persistence_failure_returns_typed_observation(
 def test_fetch_related_signal_covers_campaign_inventory_conversion_refund_quality() -> None:
     repo = SpyRepository()
     scenarios = [
-        ("campaign", "gmv", "channel", "paid_ads"),
-        ("inventory", "gmv", "category", "electronics"),
-        ("conversion", "pay_cvr", "device", "mobile"),
-        ("refund_quality", "refund_rate", "product", "1"),
+        ("campaign", "gmv", "channel", "paid_ads", "E3_ch_paid_ads"),
+        ("inventory", "gmv", "category", "electronics", "E3_cat_electronics"),
+        ("conversion", "pay_cvr", "device", "mobile", "E3_dev_mobile"),
+        ("refund_quality", "refund_rate", "product", "1", "E3_prod_1"),
     ]
 
-    for signal_type, metric_id, dimension, element in scenarios:
+    for signal_type, metric_id, dimension, element, expected_alias in scenarios:
         repo.runs["run-1"]["metric_id"] = metric_id
         result = fetch_related_signal(
             FetchRelatedSignalArgs(
@@ -656,8 +665,9 @@ def test_fetch_related_signal_covers_campaign_inventory_conversion_refund_qualit
             metric_service=StaticMetricService(),
         )
         assert result.observation.ok is True
-        assert result.evidence_alias == "E3"
-        assert result.evidences[0].evidence_id == "run-1:E3"
+        assert result.evidence_alias == expected_alias
+        assert result.evidences[0].evidence_id == f"run-1:{expected_alias}"
+        assert len(result.evidences[0].evidence_id) <= 64
 
 
 def test_fetch_related_signal_rejects_signal_type_that_conflicts_with_metric_dimension_policy() -> None:
@@ -803,6 +813,42 @@ def test_calculate_contribution_rejects_element_that_is_not_top_attributed_candi
     assert repo.evidence_rows == []
 
 
+def test_calculate_contribution_returns_typed_error_when_e4_already_exists_for_different_selection() -> None:
+    repo = SpyRepository()
+    repo.persisted_evidence["run-1:E4"] = {
+        "evidence_id": "run-1:E4",
+        "run_id": "run-1",
+        "guard_status": "passed",
+        "result_summary": {
+            "metric_id": "gmv",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "input_evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3"],
+            "candidates": [],
+        },
+    }
+
+    result = calculate_contribution(
+        CalculateContributionArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            dimension="category",
+            element="electronics",
+            evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == "E4_ALREADY_EXISTS"
+    assert result.observation.evidence_ids == ["run-1:E4"]
+    assert result.evidences == []
+    assert repo.evidence_rows == []
+    assert repo.executed == []
+
+
 def test_calculate_contribution_factor_queries_keep_base_filters() -> None:
     repo = SpyRepository()
 
@@ -933,6 +979,7 @@ def test_calculate_contribution_net_gmv_can_identify_refund_increase_driver() ->
     assert split["relative_drops_or_increases"]["gmv_drop"] == 0.0
     assert split["relative_drops_or_increases"]["refund_increase"] == 3.0
     assert split["largest_driver"] == "refund_increase"
+    assert result.evidences[0].result_summary["selected_candidate"]["root_cause_type"] == "complaint_or_quality_issue"
 
 
 def test_calculate_contribution_rejects_unpersisted_current_run_evidence() -> None:
@@ -969,6 +1016,82 @@ def test_calculate_contribution_requires_e1_e2_and_e3_before_e4() -> None:
 
     assert result.observation.ok is False
     assert result.observation.error_code == "EVIDENCE_MISSING"
+
+
+def test_rank_root_causes_invokes_internal_adtributor_and_updates_e4() -> None:
+    repo = SpyRepository()
+    repo.persisted_evidence["run-1:E2"] = {
+        "evidence_id": "run-1:E2",
+        "run_id": "run-1",
+        "guard_status": "passed",
+        "result_summary": {
+            "metric_id": "gmv",
+            "dimension": "channel",
+            "adtributor_elements": [
+                {"dimension": "channel", "element": "paid_ads", "actual": 20.0, "forecast": 100.0},
+                {"dimension": "channel", "element": "social", "actual": 40.0, "forecast": 100.0},
+                {"dimension": "channel", "element": "organic", "actual": 90.0, "forecast": 100.0},
+            ],
+        },
+    }
+    repo.persisted_evidence["run-1:E2_category"] = {
+        "evidence_id": "run-1:E2_category",
+        "run_id": "run-1",
+        "guard_status": "passed",
+        "result_summary": {
+            "metric_id": "gmv",
+            "dimension": "category",
+            "adtributor_elements": [
+                {"dimension": "category", "element": "electronics", "actual": 20.0, "forecast": 100.0},
+                {"dimension": "category", "element": "fashion", "actual": 1.0, "forecast": 20.0},
+            ],
+        },
+    }
+    repo.persisted_evidence["run-1:E4"] = {
+        "evidence_id": "run-1:E4",
+        "run_id": "run-1",
+        "query_spec": {},
+        "sql_text": "SELECT order_amount FROM fact_order WHERE business_date = :target_date LIMIT 1000",
+        "sql_hash": "e4" * 32,
+        "guard_status": "passed",
+        "data_source": "fact_order",
+        "result_summary": {
+            "selected_candidate": {
+                "root_cause_type": "campaign_traffic_drop",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "contribution_pct": 0.8,
+                "signal_severity": 0.8,
+                "evidence_support": 1.0,
+                "reflection_factor": 1.0,
+                "eng_confidence": 0.8,
+                "verdict": "confirmed",
+                "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"],
+            }
+        },
+    }
+    deps = SimpleNamespace(
+        repository=repo,
+        metric_service=StaticMetricService(),
+        renderer=None,
+        settings=Settings(db_dsn="sqlite://", readonly_db_dsn="sqlite://"),
+        trace_writer=None,
+    )
+    rank_tool = next(tool for tool in build_metric_rca_tools(dependencies=deps, run_id="run-1") if tool.name == "rank_root_causes")
+
+    result = rank_tool.invoke({"metric_id": "gmv", "target_date": date(2026, 6, 5)})
+
+    assert result["observation"]["ok"] is True
+    selected = repo.persisted_evidence["run-1:E4"]["result_summary"]["selected_candidate"]
+    assert selected["explanatory_power"] is not None
+    assert selected["surprise_js"] is not None
+    assert ("channel", "paid_ads") in [tuple(item) for item in selected["dimension_elements"]]
+    assert ("category", "electronics") in [tuple(item) for item in selected["dimension_elements"]]
+    assert repo.persisted_evidence["run-1:E4"]["result_summary"]["ranker"] == "adtributor_internal"
+    assert repo.evidence_rows[-1]["evidence_id"] == "run-1:E_rank"
+    assert repo.evidence_rows[-1]["result_summary"]["selected_candidate"]["explanatory_power"] is not None
+    forbidden_alias = "E" + "_adt"
+    assert all(not evidence_id.endswith(f":{forbidden_alias}") for evidence_id in repo.persisted_evidence)
 
 
 def test_rank_root_causes_requires_persisted_e4_sql_text() -> None:

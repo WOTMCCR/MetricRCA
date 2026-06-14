@@ -1,3 +1,89 @@
+## ADL-0011: LLM provider 通过 OpenAI-compatible 配置适配，禁止跨 provider key 替换
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-14 |
+| 状态 | accepted |
+| 关联迭代 | P7 provider compatibility hardening |
+| 影响范围 | Settings, LLMIntentPlanner, deepagents factory, eval/smoke configuration |
+
+### 背景与场景
+
+P7 验收后需要切换到 DeepSeek 模型测试。DeepSeek 暴露 OpenAI-compatible chat
+endpoint，但当前实现把 intent planner 固定为 `provider="openai"` +
+`with_structured_output(..., method="json_schema")`，agent factory 也只在
+`openai:` 前缀下构造 `ChatOpenAI`。真实 smoke 证明 DeepSeek endpoint 不支持
+OpenAI `json_schema` response_format，而支持 JSON object/json_mode 类路径。
+
+### 决策
+
+新增统一 LLM 客户端构造边界：`provider/model/api_key/base_url` 全部来自 Settings。
+`provider="openai"` 走原生 OpenAI；`provider="openai-compatible"` 或显式
+兼容 provider（如 `deepseek`）必须配置 `llm_base_url`，否则 typed fail-fast。
+intent planner 的 structured output method 也通过
+`llm_structured_output_method` 显式配置（默认 `json_schema`；兼容 endpoint 可设
+`json_mode`）。`MetricService` 和 deepagents factory 共享同一构造器，避免两套
+provider 分支。
+
+### 理由
+
+模型/endpoint 切换应是配置问题，不能靠改底层实现或在业务代码写模型名特判。
+同时，兼容 provider 不得静默读取 `OPENAI_API_KEY` 当成第三方 key；除原生 OpenAI
+外，API key 必须通过 `METRIC_RCA_LLM_API_KEY` 等显式配置注入。缺少 key/base_url
+是配置错误，应 fail-fast，而不是替换 provider 或回退模型。
+
+### 被否决的方案
+
+- 让 DeepSeek 伪装成 `provider="openai"` 且只改环境变量：会掩盖 provider 契约。
+- 运行时捕获 `json_schema` 失败后自动改用 `json_mode`：这是 provider fallback。
+- 为 DeepSeek 写专用业务分支：后续其他 OpenAI-compatible endpoint 仍需改代码。
+
+### 后续跟进
+
+无。
+
+## ADL-0010: P7 终态证据链优先于最终 LLM 文本，且 evidence_id 必须预留别名长度
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-14 |
+| 状态 | accepted |
+| 关联迭代 | final-design P7（Adtributor + 20 case acceptance） |
+| 影响范围 | RunOrchestrator, GuardMiddleware, eval runner, E2/E3 evidence aliases, prompts |
+
+### 背景与场景
+
+P7 真实 20-case eval 暴露两个非业务逻辑失败：长 case_id 生成的 run_id 加上
+`E3_category_electronics` 超过 `evidence.evidence_id VARCHAR(64)`；另有真实 LLM
+在 E4/E_rank 已持久化后，为最终文本收束再次调用模型时 hit rate limit，导致完整
+证据链 run 被错误标 failed。
+
+### 决策
+
+eval run_id 最大长度收敛到可容纳 E3-family alias 的范围；E3 alias 采用紧凑维度 token
+（如 `E3_ch_paid_ads`、`E3_cat_electronics`）并对过长元素 token 做确定性哈希截断。
+GuardMiddleware 在 E4 前发现已有 E3-family evidence 时，拒绝额外
+`fetch_related_signal` 并提示直接 `calculate_contribution`，不消耗预算。RunOrchestrator
+仅在 transient LLM 错误且已存在 no_anomaly E1 或完整 E4+E_rank 终态证据链时继续
+deterministic Reflection/report；未完成证据仍 fail-fast。
+
+### 理由
+
+schema 长度是持久化契约，不能靠数据库异常暴露给 agent；P7 多元素/跨维证明来自
+drilldown Evidence + ranker-internal Adtributor，不需要逐元素 E3。最终报告已按
+ADL-0006 从 persisted artifacts 投影，E_rank 后的 LLM 最终文本不是事实来源；允许
+terminal artifact 继续可以消除速率抖动，同时仍由 Reflection 约束证据完整性。
+
+### 被否决的方案
+
+- 扩大预算或让 agent 多 fetch：会把 P7 证明路径从 Adtributor/E2 退回逐元素信号试探。
+- 放宽 DB schema 或吞掉 `SYSTEM_TABLE_WRITE_FAILED`：掩盖 evidence_id 契约问题。
+- 任意 LLM 错误后都继续投影：会变成 fallback；必须只允许已完成终态证据链。
+
+### 后续跟进
+
+无。
+
 ## ADL-0009: P7 修正——eval 题面零答案泄漏、Adtributor 归位确定性 ranker、多维须证明
 
 | 字段 | 值 |

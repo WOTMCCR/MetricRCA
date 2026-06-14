@@ -37,6 +37,8 @@ def test_settings_defaults_and_required_dsn_failure(monkeypatch: pytest.MonkeyPa
     assert settings.llm_provider is None
     assert settings.llm_model is None
     assert settings.llm_api_key is None
+    assert settings.llm_base_url is None
+    assert settings.llm_structured_output_method == "json_schema"
     assert settings.llm_temperature == 0.0
     assert settings.multi_agent_enabled is False
 
@@ -76,3 +78,18 @@ def test_signal_metric_mapping_must_be_complete_and_metric_whitelisted() -> None
             llm_api_key="key",
             signal_metric_by_type=invalid,
         )
+
+
+def test_openai_compatible_provider_does_not_substitute_openai_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    monkeypatch.delenv("METRIC_RCA_LLM_API_KEY", raising=False)
+
+    settings = Settings(
+        db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
+        readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+        llm_provider="openai-compatible",
+        llm_model="deepseek-chat",
+        llm_base_url="https://api.deepseek.com",
+    )
+
+    assert settings.llm_api_key is None

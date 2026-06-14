@@ -34,6 +34,12 @@ def score_case(
     report_traceable_ok = _report_traceable(report=report, evidences=artifacts.evidences)
     memory_pollution_ok = _memory_pollution_ok(selected_candidate)
     no_anomaly_task_ok = _no_anomaly_task_ok(agent_run=agent_run, artifacts=artifacts)
+    adtributor_used = _adtributor_used(selected_candidate=selected_candidate, artifacts=artifacts)
+    required_dimension_elements = _required_dimension_elements(case_id)
+    dimension_elements_required = bool(required_dimension_elements)
+    if required_dimension_elements and not _has_dimension_elements(selected_candidate, required_dimension_elements):
+        top1_ok = False
+        top3_ok = False
 
     return {
         "case_id": case_id,
@@ -47,11 +53,15 @@ def score_case(
         "report_traceable_ok": int(report_traceable_ok),
         "memory_pollution_ok": int(memory_pollution_ok),
         "no_anomaly_task_ok": int(no_anomaly_task_ok),
+        "adtributor_used": int(adtributor_used),
+        "multi_agent_path": "single_agent",
         "detail": {
             "status": agent_run.get("status"),
             "metric_id": agent_run.get("metric_id"),
             "expected_metric": ground_truth.metric_id,
             "selected_candidate": selected_candidate,
+            "dimension_elements_required": dimension_elements_required,
+            "required_dimension_elements": sorted(required_dimension_elements),
         },
     }
 
@@ -71,6 +81,7 @@ def summarize_scores(
 
     return {
         "case_total": total,
+        "intent_accuracy": _rate(case_scores, "intent_ok"),
         "top1_rate": _rate(case_scores, "top1_ok"),
         "top3_rate": _rate(case_scores, "top3_ok"),
         "anomaly_accuracy": _rate(case_scores, "anomaly_ok"),
@@ -83,10 +94,7 @@ def summarize_scores(
         "reflection_repair_ok": all(bool(row["reflection_repair_ok"]) for row in case_scores),
         "memory_pollution_ok": all(bool(row["memory_pollution_ok"]) for row in case_scores),
         "dangerous_sql_blocked": dangerous_sql_blocked,
-        "no_anomaly_correct": any(
-            row["case_id"] == "gmv_no_anomaly" and bool(row["no_anomaly_task_ok"]) and bool(row["anomaly_ok"])
-            for row in case_scores
-        ),
+        "no_anomaly_correct": _all_no_anomaly_traps_clean(case_scores),
     }
 
 
@@ -135,14 +143,22 @@ def _evidence_coverage(candidate: dict[str, Any] | None, artifacts: PersistedArt
     evidence_ids = candidate.get("evidence_ids")
     if not isinstance(evidence_ids, list):
         return 0.0
-    required = {f"{artifacts.agent_run['run_id']}:{alias}" for alias in ("E1", "E2", "E3", "E4")}
+    required_aliases = {"E1", "E2", "E3", "E4"}
     present_ids = {str(item) for item in evidence_ids}
     persisted = {
         row.get("evidence_id")
         for row in artifacts.evidences
         if row.get("guard_status") == "passed"
     }
-    return round(len(required & present_ids & persisted) / len(required), 6)
+    covered = {
+        alias
+        for alias in required_aliases
+        if any(
+            _evidence_id_matches_alias(evidence_id, run_id=str(artifacts.agent_run["run_id"]), alias=alias)
+            for evidence_id in present_ids & persisted
+        )
+    }
+    return round(len(covered) / len(required_aliases), 6)
 
 
 def _sql_safe(sql_audit: list[dict[str, Any]]) -> bool:
@@ -246,3 +262,53 @@ def _candidate_list(e4_summary: dict[str, Any]) -> list[dict[str, Any]]:
     if isinstance(selected, dict):
         return [selected]
     return []
+
+
+def _adtributor_used(*, selected_candidate: dict[str, Any] | None, artifacts: PersistedArtifacts) -> bool:
+    if selected_candidate is not None and selected_candidate.get("explanatory_power") is not None:
+        return True
+    return any(
+        isinstance((row.get("result_summary") or {}).get("ranker"), str)
+        and (row.get("result_summary") or {}).get("ranker") == "adtributor_internal"
+        for row in artifacts.evidences
+    )
+
+
+def _required_dimension_elements(case_id: str) -> set[tuple[str, str]]:
+    if case_id == "C06_gmv_multi_channel_drop":
+        return {("channel", "paid_ads"), ("channel", "social")}
+    if case_id == "C07_gmv_category_channel_cross":
+        return {("channel", "paid_ads"), ("category", "electronics")}
+    return set()
+
+
+def _has_dimension_elements(candidate: dict[str, Any] | None, required: set[tuple[str, str]]) -> bool:
+    if candidate is None:
+        return False
+    dimension_elements = candidate.get("dimension_elements")
+    if not isinstance(dimension_elements, list):
+        return False
+    observed = {
+        (str(item[0]), str(item[1]))
+        for item in dimension_elements
+        if isinstance(item, list | tuple) and len(item) == 2
+    }
+    return required.issubset(observed)
+
+
+def _evidence_id_matches_alias(evidence_id: str, *, run_id: str, alias: str) -> bool:
+    prefix = f"{run_id}:"
+    if not evidence_id.startswith(prefix):
+        return False
+    actual_alias = evidence_id.removeprefix(prefix)
+    return actual_alias == alias or actual_alias.startswith(f"{alias}_")
+
+
+def _all_no_anomaly_traps_clean(case_scores: list[dict[str, Any]]) -> bool:
+    traps = {"gmv_no_anomaly", "C19_gmv_seasonal_false_positive", "C20_cvr_no_anomaly_noise"}
+    present = {row["case_id"] for row in case_scores if row["case_id"] in traps}
+    return bool(present) and all(
+        bool(row["no_anomaly_task_ok"]) and bool(row["anomaly_ok"])
+        for row in case_scores
+        if row["case_id"] in traps
+    )

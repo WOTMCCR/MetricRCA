@@ -189,6 +189,9 @@ class RootCauseCandidate(StrictModel):
     root_cause_type: str
     dimension: str | None = None
     element: str | None = None  # 维度值，如 paid_ads / electronics
+    dimension_elements: list[tuple[str, str]] = Field(default_factory=list)
+    explanatory_power: float | None = None
+    surprise_js: float | None = None
     contribution_pct: float
     signal_severity: float
     evidence_support: float
