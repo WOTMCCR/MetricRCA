@@ -158,6 +158,16 @@ class QuerySpec(BaseModel):                   # 受控查询规格（非自由 S
             raise ValueError("group_by 维度数超过 MVP 上限(2)")
         return v
 
+class ParsedIntent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    metric_id: str
+    target_date: date
+    question_family: str
+    analysis_strategy: Literal["standard", "channel_first", "product_first", "organic_first"] = "standard"
+    dimension: Optional[str] = None
+    element: Optional[str] = None
+    filters: dict[str, str] = Field(default_factory=dict)
+
 class SQLPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
     sql: str
@@ -451,7 +461,7 @@ class RCAState(TypedDict, total=False):
 
 | Node | 职责 | 读 state | 写 state | 失败边 |
 |---|---|---|---|---|
-| parse_question | 解析问题→metric_id + 维度意图 | question | parsed_spec, metric_id | PARSE_FAILED→error_return |
+| parse_question | 解析问题→metric_id + analysis_strategy + 维度意图 | question | parsed_spec, metric_id | PARSE_FAILED→error_return |
 | read_memory | 读三层记忆，仅影响 plan | metric_id | memory_hits | MEMORY_READ_FAILED→error_return |
 | plan_init | 初始化计划与最大步数 | parsed_spec | step_count=0 | — |
 | react_step | 确定性主策略 / 可选 LLM 选动作 | observations,memory_hits | actions | illegal→ACTION_SCHEMA_INVALID |
@@ -467,7 +477,7 @@ class RCAState(TypedDict, total=False):
 - `react_step` 路由：若 `step_count >= MAX_STEPS` 或动作为 `finish` → `attribute_rank`；若动作为 `detect_anomaly / drilldown_dimension / fetch_related_signal / calculate_contribution` → `execute_tool`；若检测到 `NO_ANOMALY_DETECTED` → `generate_report(status=no_anomaly)` 并跳过 `attribute_rank/create_tasks`；非法动作 → 记录 `ACTION_SCHEMA_INVALID`，在不掩盖原错误的前提下走显式 repair 或 `error_return`。
 - `reflection_verify` 路由：`passed` → `generate_report`；`has_error_issues and repair_count < MAX_REPAIR` → `react_step`（执行修复查询）；`repair_count >= MAX_REPAIR` → `error_return`。
 
-**终止条件 / fail-fast 边界**：`MAX_STEPS=8`、`MAX_QUERY=12`、`MAX_DRILLDOWN_DEPTH=2`、`MAX_REPAIR=1`。任何工具失败不静默继续，而是写 Observation(ok=False)；retryable 工具最多重试 1 次，仍失败必须进入 `error_return`，不得带缺失 evidence 继续归因。
+**终止条件 / fail-fast 边界**：`MAX_STEPS=8`、`MAX_QUERY=12`、`MAX_DRILLDOWN_DEPTH=3`、`MAX_REPAIR=1`。任何工具失败不静默继续，而是写 Observation(ok=False)；retryable 工具最多重试 1 次，仍失败必须进入 `error_return`，不得带缺失 evidence 继续归因。
 
 ```mermaid
 stateDiagram-v2
@@ -517,7 +527,20 @@ The active v2 ReAct contract is:
   tool.
 - Budget counters (`max_steps`, `max_query`, `max_drilldown_depth`) live in a
   run-scoped context outside LLM-visible state. Budget exhaustion returns
-  `BUDGET_EXCEEDED`; repeated illegal data-tool attempts fail the run.
+  `BUDGET_EXCEEDED`; repeated illegal data-tool attempts after step/query
+  exhaustion fail the run. Drilldown-depth exhaustion only blocks additional
+  `drilldown_dimension` calls and does not poison later signal/contribution
+  work over already persisted E2 evidence.
+  A verified idempotent `drilldown_dimension` reuse of an existing matching
+  E2-family Evidence does not consume step/query/drilldown budget; for E2
+  reuse, irrelevant extra current-run E2 evidence ids in the retry are ignored
+  after the persisted metric/dimension/filters/E1 context matches. After
+  step/query budget exhaustion, the only data tool that may still run is the
+  matching `calculate_contribution` E4 finalizer for the already persisted E3
+  chain; query budget exhaustion remains terminal for other data tools.
+- All tool calls after intent parsing are anchored to the run `target_date`.
+  A mismatched tool `target_date` is rejected as recoverable
+  `METRIC_SCOPE_VIOLATION` before handler execution or budget increments.
 - In discovery flows, E2/E3 evidence may use family aliases (for example
   `E2_category`, `E3_ch_paid_ads`, `E3_cat_electronics`) to keep multiple
   drilldowns/signals current-run scoped and inside the 64-character evidence id
@@ -526,15 +549,64 @@ The active v2 ReAct contract is:
   and directs the agent to `calculate_contribution`; multi-element proof comes
   from E2 drilldown Evidence plus ranker-internal Adtributor, not repeated E3
   signal fetching.
+- `calculate_contribution` must use the same dimension/element as the supplied
+  E3-family Evidence and must include the matching E2-family Evidence for that
+  E3 alias. For example, `E3_prod_2` requires `dimension=product`,
+  `element=2`, and `E2_product`; it cannot be combined with `E2_category` or a
+  category contribution target. The selected E4 candidate inherits
+  root-cause semantics from the matching E3 `signal_type`/`signal_metric_id`
+  (`refund_quality` -> `complaint_or_quality_issue`, `campaign` ->
+  `campaign_traffic_drop`, `conversion` -> `conversion_drop`, `inventory` ->
+  `stockout`); GMV factor decomposition may still override the final type to
+  `aov_drop` when AOV is the largest proved drop factor.
+- `fetch_related_signal` must also create E3 only from the matching E2-family
+  source. For example, `dimension=product` requires `E2_product`, not a generic
+  `E2` or an unrelated `E2_category`. Structured first-signal top-candidate
+  enforcement fails closed when the required E2 result has no candidates.
+- The LLM intent planner parses discovery semantics into
+  `ParsedIntent.analysis_strategy`; middleware must not parse the raw question
+  text. Orchestrator converts the parsed intent into a structured
+  `DiscoveryPolicy` and injects it into `GuardMiddleware`. For unscoped GMV
+  discovery, that policy requires guard-passed `E2_channel`, `E2_category`, and
+  `E2_product` drilldown evidence before `fetch_related_signal` or
+  `rank_root_causes`; this prevents early single-slice ranking from hiding
+  cross-dimension or AOV candidates. `analysis_strategy=channel_first` requires
+  the first E3/E4 chain to use `dimension=channel` with
+  `signal_type=campaign`, but it does not force the strongest channel
+  drilldown element; the selected channel may be a non-top slice when its
+  related signal evidence is stronger. `analysis_strategy=organic_first`
+  carries the same channel/campaign first-signal policy plus
+  `first_signal_element=organic`; the LLM intent planner must emit this
+  strategy from natural-language semantics, while middleware only enforces the
+  structured element field. `analysis_strategy=product_first` requires the first
+  E3/E4 chain to use the product drilldown's strongest drop candidate with
+  `signal_type=inventory`, so E4 GMV factor decomposition can prove `aov_drop`;
+  middleware enforces the top candidate element from the structured
+  `E2_product` drilldown evidence instead of re-parsing natural-language
+  wording.
+- `parse_question` may retry the same configured LLM/schema on malformed output
+  or `PARSE_FAILED` only. Typed semantic parser errors (`METRIC_NOT_FOUND`,
+  `DIMENSION_NOT_ALLOWED`, `DATE_RANGE_INVALID`) remain fail-fast and are not
+  converted into defaults.
 - Tool implementations still produce `Observation + Evidence` by calling the
   deterministic services. A data-fetching tool without a persisted current-run
   evidence id is treated as a tool defect and returned as typed failure.
 - Reflection repair is not performed inside a tool. It is orchestrator-owned and
-  re-enters the same deepagents thread once through the normal tool path.
+  re-enters the same deepagents thread once through the normal tool path. The
+  Reflection `suggested_action.action` is injected into
+  `RunGuardContext.required_repair_action`; the repair prompt includes exact
+  suggested JSON args and forbids text-only repair responses. During that repair
+  turn `GuardMiddleware` rejects any other tool without consuming budget, so the
+  LLM cannot drift into repeated detect/drilldown steps instead of the
+  structured repair action.
 - If a transient LLM provider error occurs after terminal persisted artifacts
   already exist (`no_anomaly` E1 or complete E4+E_rank chain), RunOrchestrator
   may continue to deterministic Reflection/report projection. The same error
   before terminal evidence remains fail-fast.
+- Final pending token-usage trace writes remain mandatory. `RunOrchestrator`
+  may retry `SYSTEM_TABLE_WRITE_FAILED` for those final `llm_call` trace rows
+  with a bounded typed retry; exhausting the retry still fails the run instead
+  of silently dropping observability data.
 
 ### 6.A v1 ReAct Design（superseded; kept as appendix）
 
@@ -594,7 +666,7 @@ step5 ACTION  finish
 | insufficient_data | baseline sample_n 足够、无空结果 | rule |
 | correlation_vs_causation | 措辞不得把相关写成绝对因果（"导致"需证据等级=confirmed） | rule + llm |
 
-**修复机制**：error 级 issue 若带 `suggested_action`（如补一次 signal 查询），回到 react_step 执行该动作（过守卫），`repair_count += 1`；`MAX_REPAIR=1`。修复后再校验，仍不过 → error_return。
+**修复机制**：error 级 issue 若带 `suggested_action`（如补一次 signal 查询），orchestrator 将该 action 作为本轮 `required_repair_action` 注入 GuardMiddleware，并在 repair prompt 中写入 exact suggested JSON args、禁止文本回答；回到 react_step 只允许执行该动作（过守卫，非该动作不消耗预算并返回 recoverable `ACTION_SCHEMA_INVALID`），`repair_count += 1`；`MAX_REPAIR=1`。当 agent 过早停止且没有候选，但当前 run 已有 guard-passed E2 drilldown Evidence 时，Reflection 必须从 persisted E2 top candidate 生成下一步 `fetch_related_signal` repair action；已有 E3 但缺 E4 时生成匹配 E3 链的 `calculate_contribution` action，filters 从 parsed scope 或 persisted E1 summary 继承；coverage 不足且已有 E4 时生成 `rank_root_causes` action。修复后再校验，仍不过 → error_return。
 
 ---
 
@@ -624,6 +696,11 @@ step5 ACTION  finish
 ## 9. Database Design（实际 DDL）
 
 > **时区策略**：业务事实表用 `business_date DATE`（Asia/Tokyo 业务本地日，已在 ETL / seed 阶段换算），系统表时间戳用 `DATETIME`（UTC）。
+> **系统表写入语义**：Repository 使用小型有界连接池，避免并发 eval worker 放大
+> MySQL 连接压力；只对明确的 SQLAlchemy/MySQL transient write 错误（pool
+> timeout、too many connections、deadlock、lock wait timeout、connection lost）
+> 做有界重试；重复主键、非法 payload、约束错误等非 transient 情况仍 fail-fast 为
+> `SYSTEM_TABLE_WRITE_FAILED`，不允许吞错后伪造成功。
 
 ```sql
 -- 业务维度表
@@ -1004,7 +1081,11 @@ drop_by_dim[e]      = max(0, baseline_value[e] - current_value[e])
 contribution_pct[e] = drop_by_dim[e] / sum(drop_by_dim)
 ```
 
-**GMV 分解**：MVP 使用与当前 DDL 一致的近似分解 `GMV = UV × PAY_CVR × AOV`，其中 `PAY_CVR = pay_user_cnt / UV`，`AOV = GMV / pay_user_cnt`。`fact_traffic` 暂无 `pay_orders` 字段，因此不要使用 `GMV / pay_orders` 口径。比较各因子相对基线的变动占比，定位主驱动因子。
+**GMV 分解**：MVP 使用与当前 DDL 一致的近似分解 `GMV = UV × PAY_CVR × AOV`，其中 `PAY_CVR = pay_user_cnt / UV`，`AOV = GMV / pay_user_cnt`。`fact_traffic` 暂无 `pay_orders` 字段，因此不要使用 `GMV / pay_orders` 口径。比较各因子相对基线的变动占比，定位主驱动因子；P7 seed 中的 AOV/价格类 case 必须让 `aov_drop` 成为该切片最大的相对下降因子，避免把价格问题误判为 UV 或 PAY_CVR。
+
+Reflection 对 `aov_drop` 使用 E4 `decomposition.largest_drop_factor` 作为证明来源；
+AOV 不是独立 E3 signal_type，因此不能因为缺少 AOV signal policy 而拒绝完整
+E1/E2/E3/E4 链。
 
 **P7 net-GMV 链路**：`net_gmv = gmv - refund_amount`。`calculate_contribution`
 的 `net_gmv_chain` 先拆分 GMV delta 与 refund delta 的贡献，主导侧再继续：
@@ -1020,7 +1101,7 @@ eng_confidence = normalize(score)   # 命名为"工程置信度(engineering conf
 
 **退款率定义与基准**：`refund_rate = 退款金额 / 总销售额`（或退款单数 / 总单数）。据美国零售联合会（National Retail Federation）与 Happy Returns 联合发布的《2025 Retail Returns Landscape》（2025 年 10 月）：线上整体退货率约为 **19–20% of online orders**；分品类则差异显著——服饰 20–40%、鞋类 17–30%、电子 8–15%、美妆 4–12%。因此「20%–30%」更接近服饰类而非全行业平均，全行业基准约 **20%**。用于设定 refund_rate 异常阈值时应按类目分别取基准，避免对低退货类目误报。
 
-**何时停止下钻**：到 `MAX_DRILLDOWN_DEPTH=2`，或单维 top 元素贡献占比 ≥ 主因阈值（如 0.6），或贡献分散无主因（→ ATTRIBUTION_COVERAGE_LOW）。
+**何时停止下钻**：到 `MAX_DRILLDOWN_DEPTH=3`，或单维 top 元素贡献占比 ≥ 主因阈值（如 0.6），或贡献分散无主因（→ ATTRIBUTION_COVERAGE_LOW）。
 
 **多因主因**：允许返回 top-3 候选并标 verdict（confirmed / likely）。证据不足时输出「insufficient」而非强行归因。
 
@@ -1045,7 +1126,7 @@ eng_confidence = normalize(score)   # 命名为"工程置信度(engineering conf
 
 | 工具 | 用途 | 输入 | 输出 | 错误 | LLM 可调 | 访问 DB | 需守卫 |
 |---|---|---|---|---|---|---|---|
-| parse_question | 解析问题 | question | parsed_spec | PARSE_FAILED | 否(由 LLM 辅助) | 否 | 否 |
+| parse_question | 解析问题 | question | parsed_spec（含 analysis_strategy） | PARSE_FAILED | 否(由 LLM 辅助) | 否 | 否 |
 | get_metric_definition | 取指标定义 | metric_id | MetricDefinition | METRIC_NOT_FOUND | 否 | 是 | 否 |
 | get_schema_context | 取表 / 列上下文 | metric_id | schema dict | SCHEMA_CONTEXT_MISSING | 否 | 是 | 否 |
 | build_query_spec | 构造 QuerySpec | 意图 | QuerySpec | QUERY_SPEC_INVALID | 间接 | 否 | 否 |
@@ -1131,7 +1212,7 @@ async def health(): return {"status": "ok"}
 | 步骤 | 输入 | 输出 | 读 / 写表 | state 变化 | 失败处理 |
 |---|---|---|---|---|---|
 | 1 API 入口 | question | run_id | 写 agent_run | status=running | 422(校验) |
-| 2 parse_question | question | metric=gmv | — | metric_id | PARSE_FAILED→error_return |
+| 2 parse_question | question | metric=gmv, analysis_strategy | — | metric_id | PARSE_FAILED→error_return |
 | 3 read_memory | gmv\|channel | hits | 读 memory_record | memory_hits | MEMORY_READ_FAILED→error_return |
 | 4 detect_anomaly | gmv,date | is_anomaly,z,delta | 读 fact_order(经守卫) | anomaly,evidences+E1 | NO_ANOMALY→无异常返回 |
 | 5 drilldown channel | gmv,channel | paid_ads 83% | 读 fact_order(经守卫) | evidences+E2 | DIMENSION_NOT_ALLOWED |
@@ -1142,7 +1223,7 @@ async def health(): return {"status": "ok"}
 | 10 generate_report | passed reflection + persisted E4 | verified report projection | 读 evidence(E4) | report | REFLECTION_REPAIR_FAILED |
 | 11 create_tasks | candidate | task_id | 写 operation_task | — | — |
 | 12 write_memory | report | ok | 写 memory_record | — | MEMORY_WRITE_FAILED→error_return |
-| 13 trace 持久化 | 每步 | TraceStep | 写 trace_step / sql_audit | — | — |
+| 13 trace 持久化 | 每步 | TraceStep | 写 trace_step / sql_audit | — | final token trace `SYSTEM_TABLE_WRITE_FAILED` bounded retry; retry exhausted→failed |
 | 14 final response | — | run+report | — | status=succeeded | — |
 
 每步均落 trace_step；每条 SQL 落 sql_audit + evidence。
@@ -1169,7 +1250,9 @@ P3B/P4 约束：`generate_report` 只能做 verified artifact projection，不�
 
 eval case schema 见第 2 节 `EvalCase`；ground truth 存 `anomaly_ground_truth`。
 
-evaluator pipeline（`make eval`）：对每个 case 跑一次 RCA → 从 DB 读取 persisted artifacts（agent_run / evidence / trace_step / sql_audit / operation_task / reconstructed report）→ 比对 anomaly_ground_truth → 打分 → 写 eval_run / eval_case_result → 输出结构化 JSON + Markdown。Eval 不使用 graph 内存态作为评分来源，避免把未持久化输出误判为系统真实能力。
+evaluator pipeline（`make eval`）：对每个 case 跑 RCA（case 之间可用 `METRIC_RCA_EVAL_CONCURRENCY` 并发，默认 1；单个 RCA run 内部仍保持 E1 → E2 → E3 → E4 → E_rank 的顺序 evidence loop）→ 从 DB 读取 persisted artifacts（agent_run / evidence / trace_step / sql_audit / operation_task / reconstructed report）→ 比对 anomaly_ground_truth → 打分 → 写 eval_run / eval_case_result → 输出结构化 JSON + Markdown。Eval 不使用 graph 内存态作为评分来源，避免把未持久化输出误判为系统真实能力。Eval runner 仅对明确 typed transient 错误（LLM rate/timeout/unavailable、`SYSTEM_TABLE_WRITE_FAILED`）做有界同 case retry（`eval_llm_max_attempts` 默认 3 且必须 ≥1），并将 `eval_attempts` 记录到 case detail；最终仍只按成功 attempt 的 persisted artifacts 判分，重试耗尽即失败，不放宽 scorer/threshold。
+
+并发 eval 约束：每个 worker 必须使用独立 `RunOrchestrator` / `MetricRepository` / `TraceWriter`，不得共享注入的可变 repository；主线程用完成即收集的 future 调度，并按 cases 输入 index 还原最终输出顺序；`eval_run.summary` 只能由主线程最后写入；`make seed` 不并发且只在开跑前执行一次；eval case settings 禁用 memory，避免并发记忆污染。
 
 **指标**：
 - intent-parse accuracy（解析对指标）
@@ -1210,6 +1293,8 @@ P5 必须额外校验：
 | NO_ANOMALY_DETECTED | 否 | 否 | 结构化「无异常」，不建任务 |
 | ACTION_SCHEMA_INVALID | 是 | 否 | GuardMiddleware 记录 error observation 并短路；重复/不可恢复非法数据工具尝试使 run failed，不允许确定性动作选择兜底 |
 | METRIC_SCOPE_VIOLATION | 是 | 否 | 工具 metric_id 与 parsed target metric 不一致；GuardMiddleware 短路、trace、handler 不执行且不消耗预算 |
+| E1_ALREADY_EXISTS | 是 | 否 | 当前 run 已有 guard-passed E1；同 scope 幂等复用，不同 scope 引导继续使用既有 E1 或新 run，不落到重复 evidence 写失败 |
+| BUDGET_EXCEEDED | 是 | 是（step/query 耗尽后的后续非法 data-tool） | step/query 首次耗尽引导 rank/stop；drilldown-depth 耗尽只禁止继续下钻，仍可用已有 E2 继续 signal/contribution/rank；匹配既有 E3 的 E4 `calculate_contribution` finalizer 可完成证据链 |
 | E3_ALREADY_EXISTS | 是 | 否 | E4 前已有 E3-family 证据；GuardMiddleware 阻止额外 signal fetch，引导直接 calculate_contribution，不消耗预算 |
 | E4_ALREADY_EXISTS | 是 | 否 | 当前 run 已有 E4；calculate_contribution 不覆盖不同选择，agent 应调用 rank_root_causes 复用既有 E4 |
 | ADTRIBUTOR_NOT_APPLICABLE | 是 | 否 | ranker 内部 Adtributor 不适用于当前 metric/evidence；继续单维排序路径，不伪造 EP/JS |

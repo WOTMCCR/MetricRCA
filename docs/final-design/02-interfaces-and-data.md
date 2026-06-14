@@ -19,6 +19,19 @@
 
 LLM 只能看到 Out 的结构化摘要，永远看不到原始行集。
 
+`parse_question` 的结构化输出包含 `analysis_strategy`，取值为
+`standard`、`channel_first`、`product_first`、`organic_first`。该字段是发现型
+guard policy 的唯一自然语言语义入口：LLM intent planner 负责从 question 解析它，
+orchestrator 负责将 `ParsedIntent` 转成 `DiscoveryPolicy`，middleware 只消费结构化
+policy，不再读取或关键词匹配原始 question 文本。`organic_first` 通过
+`DiscoveryPolicy.first_signal_element=organic` 表达首个 channel/campaign signal 的
+element 约束，不在 middleware 中重放自然语言解析。intent planner 可对 malformed schema 或
+`PARSE_FAILED` 做有界的同模型重试；`METRIC_NOT_FOUND`、`DIMENSION_NOT_ALLOWED`、
+`DATE_RANGE_INVALID` 等 typed semantic errors 不重试、不替换模型、不默认改写 intent。
+自然语言 KPI/维度别名（如 net GMV、paid ads）只能在 LLM intent planner 的结构化
+输出中解析为 `metric_id=net_gmv`、`channel=paid_ads` 等受支持值；下游 runner 和
+middleware 不再用关键词或正则重新推断这些自然语言语义。
+
 > **ADL-0009 决策（2026-06-13）**：Adtributor **不是** LLM 动作空间里的独立工具。
 > 设计原意是「Adtributor 仅用于候选排序而非直接结论」，而排序是确定性的——因此
 > Adtributor 落在 `rank_root_causes` 的确定性实现内部，适用时自动对已持久化的
@@ -28,9 +41,10 @@ LLM 只能看到 Out 的结构化摘要，永远看不到原始行集。
 
 Evidence alias 约束：系统表 `evidence.evidence_id` 仍是 64 字符上限。P7 发现型
 流程允许 E2/E3 family alias（如 `E2_category`、`E3_ch_paid_ads`、
-`E3_cat_electronics`），eval run_id 生成需给 alias 预留长度。E3 的维度 token 使用
-紧凑映射（channel→ch、category→cat、device→dev、product→prod、warehouse→wh），
-长 element token 用确定性哈希截断；不得依赖 DB 写入失败来发现超长 id。
+`E3_cat_electronics`），eval run_id 生成需给 alias 预留长度。E3 的维度 token 与
+E3→E2 family 映射必须来自同一个 alias helper（channel→ch、category→cat、
+device→dev、product→prod、warehouse→wh），长 element token 用确定性哈希截断；
+不得依赖 DB 写入失败来发现超长 id。
 
 ## 2. RootCauseCandidate v2
 
@@ -80,7 +94,8 @@ adtributor 不适用指标（比率类指标的分子分母分别跑 EP，见 §
 - 输出仅作候选排序证据（E_rank，并同步 E4 selected/candidates 的 EP/surprise），结论仍需 Reflection evidence 校验。
 - E3 只验证被选元素的一条相关信号；多元素/跨维组合由已持久化的 E2 drilldown
   per-element actual/forecast 进入 `rank_root_causes` 后计算。E4 前额外 E3 fetch
-  会被 middleware 以 `E3_ALREADY_EXISTS` recoverable 拒绝。
+  会被 middleware 以 `E3_ALREADY_EXISTS` recoverable 拒绝，并且该提示优先于
+  channel-first/product-first retry，直接引导使用既有 E3 计算 E4。
 
 ## 4. 净 GMV 分解
 
@@ -146,6 +161,7 @@ adtributor_t_eep: float = 0.10
 |---|---|---|
 | BUDGET_EXCEEDED | 首次预算耗尽时提示只能 rank/结束；预算耗尽后再次调用 data-fetching 工具则 run failed | 首次是；重复越权否 |
 | NO_ANOMALY_CONTRACT_VIOLATED | 无异常却出现下钻/rank/任务 | 否 |
+| E1_ALREADY_EXISTS | 已有 guard-passed E1；同 scope 幂等复用，不同 scope 禁止重复写 E1 并提示继续使用既有 E1 或新 run | 是 |
 | E3_ALREADY_EXISTS | E4 前已有 E3-family signal，阻止额外 fetch 并引导 calculate_contribution | 是 |
 | E4_ALREADY_EXISTS | 当前 run 已有 E4，阻止不同选择覆盖并引导 rank_root_causes | 是 |
 | ADTRIBUTOR_NOT_APPLICABLE | 指标/维度不支持 EP 口径 | 是（换单维路径） |

@@ -1,3 +1,271 @@
+## ADL-0018: Eval runner 对 typed transient case failure 做有界重试
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-14 |
+| 状态 | accepted |
+| 关联迭代 | P7 eval acceptance hardening |
+| 影响范围 | evals/runner.py, MetricRCA §17, final-design/03 |
+
+### 背景与场景
+
+P7 live eval 中 C08 已产出正确 E1/E2/E3/E4/E_rank，selected candidate 为
+`product=2` / `aov_drop`，但在并发 20-case run 中 E_rank 之后的系统表写入偶发返回
+`SYSTEM_TABLE_WRITE_FAILED`，导致该 case 的 RCA 业务证据正确但 run status 标失败。
+单跑 C08 以及 C08+C09 并发复现均能成功，说明问题属于 case 级基础设施瞬态失败，而不是
+scorer、prompt、seed 或 ground truth 问题。
+
+### 决策
+
+Eval runner 的 case retry predicate 从 LLM transient 扩展为 typed eval transient：
+`LLM_REQUIRED_UNAVAILABLE`、rate/timeout，以及 `SYSTEM_TABLE_WRITE_FAILED`。retry 仍然是
+同一 case 的有界 attempt（`eval_llm_max_attempts` 默认 3 且配置必须 ≥1）；新的 attempt
+使用带后缀的唯一 run_id，`eval_attempts` 写入 case detail。最终 scoring 只读取最后一个
+attempt 的 persisted artifacts；若 attempt 耗尽，case 仍失败并进入真实 summary。
+
+Production `RunOrchestrator` 不吞掉系统写失败：final token trace 或任务/记忆写失败仍使该
+run fail-fast。这个 retry 只存在于 eval 调度层，用于吸收已诊断的基础设施瞬态抖动。
+
+### 理由
+
+Eval 的目标是评估 RCA 系统在自然问题上的能力，而不是让一次偶发系统表写入耗尽污染 20-case
+结果。重试必须 typed、bounded、可审计，并且不能凭空构造成功 artifacts。保留失败 attempt
+的 agent_run/trace，同时只按成功 attempt 的持久化产物计分，能兼顾可追溯与验收稳定性。
+
+### 被否决的方案
+
+- 忽略 final token trace 写失败并把生产 run 标成功：违反 fail-fast 和 observability contract。
+- 手工重跑整轮 eval 直到绿色：不可审计，且掩盖 flaky case。
+- 修改 C08 question/ground truth 或放宽 anomaly/report threshold：违反 eval integrity。
+
+---
+
+## ADL-0017: Reflection repair action guard 与 E3 signal root-cause 覆盖
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-14 |
+| 状态 | accepted |
+| 关联迭代 | P7 eval acceptance hardening |
+| 影响范围 | RunOrchestrator, GuardMiddleware, calculate_contribution |
+
+### 背景与场景
+
+P7 live eval 中 C07 已有完整 E1/E2/E3/E4，但 Reflection repair 重入后模型重新执行
+detect/drilldown，耗尽 step budget，未调用 `rank_root_causes` 产出 E_rank。C13 的 E3
+为 `refund_quality`/`complaint_rate` 异常，但 E4/E_rank 沿用 E2 product drilldown 的
+`stockout` root_cause_type，导致 top1 root cause type 与 ground truth 不一致。
+
+### 决策
+
+Reflection repair 重入必须携带 `suggested_action.action` 作为
+`RunGuardContext.required_repair_action`。repair turn 中 middleware 只允许该 tool，其它
+tool 返回 recoverable `ACTION_SCHEMA_INVALID` 且不消耗预算；orchestrator repair message
+也明确要求只调用该 tool，携带 exact suggested JSON args，并禁止文本回答。Reflection repair
+args 从 parsed scope 或 persisted E1 summary 继承 filters。`calculate_contribution` 在生成 E4 selected candidate 时读取匹配
+E3 summary 的 `signal_type`/`signal_metric_id`，用 `refund_quality`、`campaign`、
+`conversion`、`inventory` 映射 root_cause_type；GMV AOV decomposition 仍可在其后覆盖为
+`aov_drop`。
+
+### 理由
+
+repair 的下一步已经由 deterministic Reflection 给出，允许模型在 repair turn 自由重跑前序
+工具会烧预算并掩盖真正缺口。E4 candidate 的根因类型应由当前 run 的 related signal evidence
+校正；否则 `refund_quality` 证据只提高 signal_severity，却不能改变从 E2 delta 继承来的粗粒度
+root cause。
+
+### 被否决的方案
+
+- 让 Reflection 直接执行 `rank_root_causes`：绕过 deepagents/middleware tool-call path。
+- 仅靠 prompt 要求模型 repair 时别重跑前序工具：C07 已证明不稳定。
+- 根据 eval ground truth 覆盖 root_cause_type：违反 eval integrity。
+
+---
+
+## ADL-0016: channel-first 与 organic-first discovery 使用结构化 first-signal policy
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-14 |
+| 状态 | accepted |
+| 关联迭代 | P7 eval acceptance hardening |
+| 影响范围 | ParsedIntent, DiscoveryPolicy, GuardMiddleware, calculate_contribution, seed data |
+
+### 背景与场景
+
+P7 20-case eval 的 C09 是无显式 slice 的「stable merchandising」GMV 问题，ground
+truth 为 organic channel traffic drop。先前 `channel_first` policy 同时要求
+`dimension=channel`、`signal_type=campaign` 和 `E2_channel` top candidate，导致
+agent 必须选择 paid_ads，即使 organic 的 related traffic/campaign signal 更能解释该
+case。该约束也让 `calculate_contribution` 拒绝非 top 但已有 E3 证据支持的 channel。
+
+### 决策
+
+`channel_first` 只强制首个 E3/E4 chain 使用 `dimension=channel` 与
+`signal_type=campaign`；不强制 channel top element。为表达 C09 的「stable
+merchandising, organic traffic/campaign first」语义，`ParsedIntent.analysis_strategy`
+新增 `organic_first`，orchestrator 将其转换为 `DiscoveryPolicy(first_signal_dimension=channel,
+first_signal_type=campaign, first_signal_element=organic)`。middleware 只执行这些结构化
+policy 字段，不读取或关键词匹配 raw question。`product_first` 仍强制 `E2_product` top
+candidate，以保护 merchandise/price/AOV 场景。E4 contribution 允许 selected element 是
+attribution candidates 中的非第一名，但必须存在于候选列表并由匹配 E3 证据支持；selected
+candidate 的 `signal_severity` 可由 E3 的 `delta_pct` 提升。C09 seed 中 organic 的
+campaign/UV signal strength 调整为 strongest channel drop，使 persisted evidence 与
+ground truth 一致。
+
+### 理由
+
+Channel discovery 的目标是找到被 related signal 证明的 traffic/campaign 机制，不是把
+GMV 贡献第一名硬编码成根因。Top-element 强制适合 product-first/AOV，因为 E4 factor
+decomposition 需要验证最强 product slice；普通 channel-first 由 E3 signal evidence 与
+ranker 共同决定。需要业务语义指定 element 时，必须通过 intent planner 的结构化
+strategy 和 `DiscoveryPolicy.first_signal_element` 表达，而不是在 middleware 中复制自然语言
+keyword parser。
+
+### 被否决的方案
+
+- 修改 eval question 或 ground truth：违反 eval integrity。
+- 在 middleware 根据 raw question 识别 C09：违反 ADL-0013。
+- 放开不存在于 attribution candidates 的任意 element：会允许无贡献切片进入 E4。
+
+### 后续跟进
+
+- P8 如引入独立 traffic signal type，可将 organic traffic evidence 从 campaign signal
+  中拆出，但仍应保持 guard 消费结构化 policy 而非 question keyword parser。
+
+---
+
+## ADL-0015: final token trace 写入只允许 bounded retry，禁止静默丢弃
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-14 |
+| 状态 | accepted |
+| 关联迭代 | P7 eval acceptance hardening |
+| 影响范围 | RunOrchestrator, TraceWriter, eval acceptance |
+
+### 背景与场景
+
+20-case live eval 中出现过完整 E1/E2/E3/E4/E_rank 已持久化、但 agent loop 结束后
+pending token usage trace 写入返回 `SYSTEM_TABLE_WRITE_FAILED`，导致 run 被标 failed。
+失败 trace 后续可用同 schema/payload 在 rollback 事务中写入，说明不是确定性 schema 或
+JSON payload 错误，而是 finalization 阶段的系统表 transient。
+
+### 决策
+
+`RunOrchestrator` 在 flush final pending token usage 时，对 final `llm_call`
+trace_step 的 `SYSTEM_TABLE_WRITE_FAILED` 做小次数 bounded retry。retry 只覆盖这类
+observability finalization 写入；重试耗尽仍然让 run failed，不把缺失 token trace 的 run
+伪装成成功。
+
+### 理由
+
+token trace 是 mandatory observability，不能静默丢弃；同时真实 LLM eval 不应因为
+terminal evidence 已完整后的瞬时 trace 写入抖动而直接损坏结果。bounded retry 保持
+fail-fast 边界：不替换数据、不改 evidence、不跳过 trace，只对同一 typed write 再试。
+
+### 被否决的方案
+
+- 忽略 final token trace 写入失败并继续 succeeded：违反 trace persistence 与 no-fallback。
+- 把所有 `SYSTEM_TABLE_WRITE_FAILED` 在 eval runner 层当作可重跑 case：可能掩盖
+  非 transient 的 schema/duplicate-key 错误。
+- 扩大 repository 对非 transient errno 的 retry：会削弱系统表写入的 fail-fast 契约。
+
+### 后续跟进
+
+- 如再次出现系统表写入抖动，应优先记录原始 MySQL errno/SQLSTATE 到 typed error
+  detail，而不是扩大 retry 范围。
+
+---
+
+## ADL-0014: P7 eval 并发下的 LLM parse retry 与 bounded repository pools
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-14 |
+| 状态 | accepted |
+| 关联迭代 | P7 eval acceptance hardening |
+| 影响范围 | LLMIntentPlanner, MetricRepository, eval runner concurrency |
+
+### 背景与场景
+
+GPT-5 Nano 在 20-case eval 并发运行时会偶发对已支持自然问句返回
+`PARSE_FAILED` 或 malformed structured output；同时每个 eval worker 拥有独立
+repository/trace writer，默认 SQLAlchemy pool 会放大 MySQL 连接和系统表写入压力。
+
+### 决策
+
+Intent planner 对 malformed schema 或 `PARSE_FAILED` 做最多 3 次同模型、同 schema、
+同 metadata 的有界 retry；`METRIC_NOT_FOUND`、`DIMENSION_NOT_ALLOWED`、
+`DATE_RANGE_INVALID` 等 typed semantic errors 不重试。Repository from Settings 使用
+小型有界连接池，并将 SQLAlchemy pool timeout 与明确 MySQL transient errno 纳入有界
+system-table write retry。
+
+### 理由
+
+这不是 fallback：不替换 provider/model，不用关键词 parser，不默认补 intent。retry 只在
+同一个 LLM contract 未能稳定产出结构化结果时重试，最终仍 typed fail-fast。小型连接池
+让 case 级并发保持隔离，同时避免 worker 数量乘以默认 pool 大小压垮本地 MySQL。
+
+### 被否决的方案
+
+- 把 PARSE_FAILED 当作成功并硬编码 intent：违反 LLM-first 与 no-fallback。
+- 在 middleware 中恢复 question keyword parser：违反 ADL-0013。
+- 共享一个全局 repository/engine 给所有 worker：会重新引入并发可变状态污染。
+
+### 后续跟进
+
+- P8 eval HTTP client 应保留 case-level concurrency，但继续保持 per-case repository
+  或 request isolation。
+
+---
+
+## ADL-0013: discovery guard policy 由 ParsedIntent 驱动，middleware 禁止解析 question 文本
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-14 |
+| 状态 | accepted |
+| 关联迭代 | P7 acceptance hardening |
+| 影响范围 | Intent planner, RunOrchestrator, GuardMiddleware, Reflection alias helpers |
+
+### 背景与场景
+
+P7 eval 修复中曾在 `GuardMiddleware` 内加入 question 关键词判断，用于区分 broad
+GMV channel-first 与 merchandise/AOV product-first 路径。这让基础 guard 层耦合到
+自然语言措辞，且英文关键词变化或中文问题会绕过策略；同时 E3→E2 alias mapping 在
+middleware/reflection 两处重复。
+
+### 决策
+
+`parse_question` 的结构化输出新增 `analysis_strategy`：
+`standard`、`channel_first`、`product_first`。LLM intent planner 负责把自然语言问题
+解析为该字段。`RunOrchestrator` 将 `ParsedIntent` 转为 `DiscoveryPolicy` 并注入
+`GuardMiddleware`。RunOrchestrator 的 explicit guard scope 也只能来自
+`ParsedIntent.filters` 或 `ParsedIntent.dimension/element`，不得用 regex/keyword 从
+raw question 文本补猜。middleware 只消费结构化 policy，不读取或关键词匹配原始
+question 文本。E3 维度 token 与 E3→E2 alias 映射集中到
+`agent/evidence_aliases.py`，供 producer、middleware、reflection 共享。
+
+### 理由
+
+自然语言理解属于 intent planner 的职责；guard 层的职责是执行结构化约束并产生
+typed rejection。这样既保留 P7 eval 所需的 channel-first/product-first 强约束，又避免
+在 middleware 中复制 keyword parser 或业务语义判断。
+
+### 被否决的方案
+
+- 继续在 middleware 里扩充关键词列表：不可维护，且不支持多语言措辞。
+- 只靠 prompt 要求 agent 先走某一路径：违反 guard 必须可验证的要求。
+- 让每个 guard 方法自行判断 metric/question family：会继续扩大基础设施层业务耦合。
+
+### 后续跟进
+
+- P8 若扩展更多 discovery 策略，应先扩展 `ParsedIntent.analysis_strategy` 或
+  `DiscoveryPolicy`，再由 middleware 执行结构化 policy。
+
+---
+
 ## ADL-0012: eval 解耦为 HTTP 客户端 + per-request LLM 选择 + GPT-5 Nano 验收策略
 
 | 字段 | 值 |

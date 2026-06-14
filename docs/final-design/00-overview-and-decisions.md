@@ -82,8 +82,10 @@
 | report_traceable_ok / memory_pollution_ok / no_anomaly_correct | 100% |
 | Multi-Agent 开关关闭 | 行为与单 expert 完全一致（差分测试证明） |
 
-eval 不达标时**只允许修系统，不允许降门槛**；LLM 抖动导致的 flaky case 必须
-归因（trace 复盘），不得用重跑刷绿。最终验收要求连续 2 次 `make eval` 全绿。
+eval 不达标时**只允许修系统，不允许降门槛**；LLM/基础设施抖动导致的 flaky case 必须
+归因（trace 复盘）。允许 eval runner 对明确 typed transient 错误做有界自动 retry
+并记录 `eval_attempts`，但不得手工重跑刷绿、不得改题面/真值/阈值掩盖失败。最终验收要求连续
+2 次 `make eval` 全绿。
 
 ## 5. 已知风险与缓解
 
