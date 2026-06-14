@@ -28,10 +28,12 @@ def test_settings_defaults_and_required_dsn_failure(monkeypatch: pytest.MonkeyPa
     assert settings.z_thresh == 2.0
     assert settings.max_steps == 8
     assert settings.max_query == 12
-    assert settings.max_drilldown_depth == 2
+    assert settings.max_drilldown_depth == 3
     assert settings.max_repair == 1
     assert settings.memory_enabled is True
     assert settings.memory_required is False
+    assert settings.eval_concurrency == 1
+    assert settings.eval_llm_max_attempts == 3
     assert settings.llm_enabled is True
     assert settings.llm_required is True
     assert settings.llm_provider is None
@@ -41,6 +43,15 @@ def test_settings_defaults_and_required_dsn_failure(monkeypatch: pytest.MonkeyPa
     assert settings.llm_structured_output_method == "json_schema"
     assert settings.llm_temperature == 0.0
     assert settings.multi_agent_enabled is False
+
+
+def test_eval_llm_max_attempts_must_be_positive() -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
+            readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+            eval_llm_max_attempts=0,
+        )
 
 
 def test_signal_metric_mapping_must_be_complete_and_metric_whitelisted() -> None:

@@ -67,6 +67,13 @@ class SpyRepository:
             "run-1:E3": {"evidence_id": "run-1:E3", "run_id": "run-1", "guard_status": "passed"},
         }
 
+    def seed_e2_family(self, alias: str) -> None:
+        self.persisted_evidence[f"run-1:{alias}"] = {
+            "evidence_id": f"run-1:{alias}",
+            "run_id": "run-1",
+            "guard_status": "passed",
+        }
+
     def get_agent_run(self, run_id: str) -> dict[str, Any] | None:
         return self.runs.get(run_id)
 
@@ -327,6 +334,72 @@ def test_detect_anomaly_no_anomaly_returns_no_anomaly_observation() -> None:
     assert result.evidences[0].result_summary["is_anomaly"] is False
 
 
+def test_detect_anomaly_repeated_same_e1_returns_persisted_result_without_requery() -> None:
+    repo = SpyRepository()
+    persisted_summary = {
+        "metric_id": "gmv",
+        "filters": {"channel": "paid_ads"},
+        "is_anomaly": True,
+        "delta_pct": -0.4,
+    }
+    repo.persisted_evidence["run-1:E1"] = {
+        "evidence_id": "run-1:E1",
+        "run_id": "run-1",
+        "guard_status": "passed",
+        "result_summary": persisted_summary,
+    }
+
+    result = detect_anomaly(
+        DetectAnomalyArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            filters={"channel": "paid_ads"},
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is True
+    assert result.observation.payload == persisted_summary
+    assert result.observation.evidence_ids == ["run-1:E1"]
+    assert result.evidence_alias == "E1"
+    assert result.sql_count == 0
+    assert repo.executed == []
+    assert repo.evidence_rows == []
+
+
+def test_detect_anomaly_existing_e1_for_different_scope_fails_fast_without_requery() -> None:
+    repo = SpyRepository()
+    repo.persisted_evidence["run-1:E1"] = {
+        "evidence_id": "run-1:E1",
+        "run_id": "run-1",
+        "guard_status": "passed",
+        "result_summary": {
+            "metric_id": "gmv",
+            "filters": {"channel": "paid_ads"},
+            "is_anomaly": True,
+        },
+    }
+
+    result = detect_anomaly(
+        DetectAnomalyArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            filters={"channel": "organic"},
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == "E1_ALREADY_EXISTS"
+    assert result.evidences == []
+    assert repo.executed == []
+    assert repo.evidence_rows == []
+
+
 def test_detect_anomaly_sample_n_lt_3_returns_insufficient_baseline_data() -> None:
     repo = SpyRepository()
 
@@ -544,7 +617,7 @@ def test_detect_anomaly_execution_failure_returns_typed_error_without_evidence(
                 signal_type="campaign",
                 dimension="channel",
                 element="paid_ads",
-                evidence_ids=["run-1:E1", "run-1:E2"],
+                evidence_ids=["run-1:E1", "run-1:E2_channel"],
             ),
         ),
         (
@@ -565,6 +638,8 @@ def test_tools_execution_failure_returns_typed_observation_without_evidence(
     args,
 ) -> None:
     repo = FailingExecutionRepository(RuntimeError("SQL_EXECUTION_FAILED"))
+    if tool_name == "signal":
+        repo.seed_e2_family("E2_channel")
     tool = {
         "drilldown": drilldown_dimension,
         "signal": fetch_related_signal,
@@ -605,7 +680,7 @@ def test_tools_execution_failure_returns_typed_observation_without_evidence(
                 signal_type="campaign",
                 dimension="channel",
                 element="paid_ads",
-                evidence_ids=["run-1:E1", "run-1:E2"],
+                evidence_ids=["run-1:E1", "run-1:E2_channel"],
             ),
         ),
         (
@@ -626,6 +701,8 @@ def test_tools_evidence_persistence_failure_returns_typed_observation(
     args,
 ) -> None:
     repo = FailingEvidenceRepository()
+    if tool_name == "signal":
+        repo.seed_e2_family("E2_channel")
     tool = {
         "detect": detect_anomaly,
         "drilldown": drilldown_dimension,
@@ -643,14 +720,19 @@ def test_tools_evidence_persistence_failure_returns_typed_observation(
 def test_fetch_related_signal_covers_campaign_inventory_conversion_refund_quality() -> None:
     repo = SpyRepository()
     scenarios = [
-        ("campaign", "gmv", "channel", "paid_ads", "E3_ch_paid_ads"),
-        ("inventory", "gmv", "category", "electronics", "E3_cat_electronics"),
-        ("conversion", "pay_cvr", "device", "mobile", "E3_dev_mobile"),
-        ("refund_quality", "refund_rate", "product", "1", "E3_prod_1"),
+        ("campaign", "gmv", "channel", "paid_ads", "E2_channel", "E3_ch_paid_ads"),
+        ("inventory", "gmv", "category", "electronics", "E2_category", "E3_cat_electronics"),
+        ("conversion", "pay_cvr", "device", "mobile", "E2_device", "E3_dev_mobile"),
+        ("refund_quality", "refund_rate", "product", "1", "E2_product", "E3_prod_1"),
     ]
 
-    for signal_type, metric_id, dimension, element, expected_alias in scenarios:
+    for signal_type, metric_id, dimension, element, e2_alias, expected_alias in scenarios:
         repo.runs["run-1"]["metric_id"] = metric_id
+        repo.persisted_evidence[f"run-1:{e2_alias}"] = {
+            "evidence_id": f"run-1:{e2_alias}",
+            "run_id": "run-1",
+            "guard_status": "passed",
+        }
         result = fetch_related_signal(
             FetchRelatedSignalArgs(
                 run_id="run-1",
@@ -659,7 +741,7 @@ def test_fetch_related_signal_covers_campaign_inventory_conversion_refund_qualit
                 signal_type=signal_type,
                 dimension=dimension,
                 element=element,
-                evidence_ids=["run-1:E1", "run-1:E2"],
+                evidence_ids=["run-1:E1", f"run-1:{e2_alias}"],
             ),
             repository=repo,
             metric_service=StaticMetricService(),
@@ -673,6 +755,7 @@ def test_fetch_related_signal_covers_campaign_inventory_conversion_refund_qualit
 def test_fetch_related_signal_rejects_signal_type_that_conflicts_with_metric_dimension_policy() -> None:
     repo = SpyRepository()
     repo.runs["run-1"]["metric_id"] = "refund_rate"
+    repo.seed_e2_family("E2_product")
 
     result = fetch_related_signal(
         FetchRelatedSignalArgs(
@@ -682,7 +765,7 @@ def test_fetch_related_signal_rejects_signal_type_that_conflicts_with_metric_dim
             signal_type="inventory",
             dimension="product",
             element="1",
-            evidence_ids=["run-1:E1", "run-1:E2"],
+            evidence_ids=["run-1:E1", "run-1:E2_product"],
         ),
         repository=repo,
         metric_service=StaticMetricService(),
@@ -695,8 +778,156 @@ def test_fetch_related_signal_rejects_signal_type_that_conflicts_with_metric_dim
     assert repo.evidence_rows == []
 
 
+def test_fetch_related_signal_rejects_filters_that_conflict_with_selected_element() -> None:
+    repo = SpyRepository()
+    repo.seed_e2_family("E2_category")
+
+    result = fetch_related_signal(
+        FetchRelatedSignalArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            signal_type="inventory",
+            dimension="category",
+            element="electronics",
+            filters={"category": "fashion"},
+            evidence_ids=["run-1:E1", "run-1:E2_category"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == "QUERY_SPEC_INVALID"
+    assert result.evidences == []
+    assert repo.executed == []
+    assert repo.evidence_rows == []
+
+
+def test_fetch_related_signal_accepts_e2_family_alias_and_hints_missing_e1() -> None:
+    repo = SpyRepository()
+    repo.persisted_evidence.pop("run-1:E2")
+    repo.persisted_evidence["run-1:E2_channel"] = {
+        "evidence_id": "run-1:E2_channel",
+        "run_id": "run-1",
+        "guard_status": "passed",
+    }
+    args = FetchRelatedSignalArgs(
+        run_id="run-1",
+        metric_id="gmv",
+        target_date=date(2026, 6, 5),
+        signal_type="campaign",
+        dimension="channel",
+        element="paid_ads",
+        evidence_ids=["run-1:E2_channel"],
+    )
+
+    missing = fetch_related_signal(args, repository=repo, metric_service=StaticMetricService())
+
+    assert missing.observation.ok is False
+    assert missing.observation.error_code == "EVIDENCE_MISSING"
+    assert "run-1:E1" in (missing.observation.message or "")
+    assert "run-1:E2_channel" in (missing.observation.message or "")
+    assert repo.executed == []
+
+    result = fetch_related_signal(
+        args.model_copy(update={"evidence_ids": ["run-1:E1", "run-1:E2_channel"]}),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is True
+    assert result.evidence_alias == "E3_ch_paid_ads"
+    assert result.evidences[0].result_summary["input_evidence_ids"] == ["run-1:E1", "run-1:E2_channel"]
+
+
+def test_fetch_related_signal_requires_e2_family_matching_requested_dimension() -> None:
+    repo = SpyRepository()
+    repo.persisted_evidence.pop("run-1:E2")
+    repo.persisted_evidence["run-1:E2_category"] = {
+        "evidence_id": "run-1:E2_category",
+        "run_id": "run-1",
+        "guard_status": "passed",
+    }
+    repo.persisted_evidence["run-1:E2_product"] = {
+        "evidence_id": "run-1:E2_product",
+        "run_id": "run-1",
+        "guard_status": "passed",
+    }
+
+    wrong = fetch_related_signal(
+        FetchRelatedSignalArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            signal_type="inventory",
+            dimension="product",
+            element="2",
+            evidence_ids=["run-1:E1", "run-1:E2_category"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+    right = fetch_related_signal(
+        FetchRelatedSignalArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            signal_type="inventory",
+            dimension="product",
+            element="2",
+            evidence_ids=["run-1:E1", "run-1:E2_product"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert wrong.observation.ok is False
+    assert wrong.observation.error_code == "EVIDENCE_MISSING"
+    assert "E2_product" in (wrong.observation.message or "")
+    assert right.observation.ok is True
+    assert right.evidence_alias == "E3_prod_2"
+
+
+def test_calculate_contribution_hints_existing_evidence_family_aliases() -> None:
+    repo = SpyRepository()
+    repo.persisted_evidence.pop("run-1:E2")
+    repo.persisted_evidence.pop("run-1:E3")
+    repo.persisted_evidence["run-1:E2_channel"] = {
+        "evidence_id": "run-1:E2_channel",
+        "run_id": "run-1",
+        "guard_status": "passed",
+    }
+    repo.persisted_evidence["run-1:E3_ch_paid_ads"] = {
+        "evidence_id": "run-1:E3_ch_paid_ads",
+        "run_id": "run-1",
+        "guard_status": "passed",
+    }
+
+    result = calculate_contribution(
+        CalculateContributionArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            dimension="channel",
+            element="paid_ads",
+            evidence_ids=["run-1:E1", "run-1:E2_channel"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == "EVIDENCE_MISSING"
+    assert "run-1:E1" in (result.observation.message or "")
+    assert "run-1:E2_channel" in (result.observation.message or "")
+    assert "run-1:E3_ch_paid_ads" in (result.observation.message or "")
+    assert repo.executed == []
+
+
 def test_fetch_campaign_signal_uses_fact_campaign_for_current_and_baseline() -> None:
     repo = SpyRepository()
+    repo.seed_e2_family("E2_channel")
     result = fetch_related_signal(
         FetchRelatedSignalArgs(
             run_id="run-1",
@@ -705,7 +936,7 @@ def test_fetch_campaign_signal_uses_fact_campaign_for_current_and_baseline() -> 
             signal_type="campaign",
             dimension="channel",
             element="paid_ads",
-            evidence_ids=["run-1:E1", "run-1:E2"],
+            evidence_ids=["run-1:E1", "run-1:E2_channel"],
         ),
         repository=repo,
         metric_service=StaticMetricService(),
@@ -721,6 +952,7 @@ def test_fetch_campaign_signal_uses_fact_campaign_for_current_and_baseline() -> 
 
 def test_fetch_related_signal_uses_configured_signal_metric_override() -> None:
     repo = SpyRepository()
+    repo.seed_e2_family("E2_channel")
     settings = Settings(
         db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
         readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
@@ -743,7 +975,7 @@ def test_fetch_related_signal_uses_configured_signal_metric_override() -> None:
             signal_type="campaign",
             dimension="channel",
             element="paid_ads",
-            evidence_ids=["run-1:E1", "run-1:E2"],
+            evidence_ids=["run-1:E1", "run-1:E2_channel"],
         ),
         repository=repo,
         metric_service=StaticMetricService(),
@@ -791,8 +1023,14 @@ def test_calculate_contribution_emits_e4_from_current_run_evidence() -> None:
     assert any("fact_traffic" in plan.sql for plan in repo.executed)
 
 
-def test_calculate_contribution_rejects_element_that_is_not_top_attributed_candidate() -> None:
+def test_calculate_contribution_accepts_selected_non_top_candidate_with_signal_evidence() -> None:
     repo = SpyRepository()
+    repo.persisted_evidence["run-1:E3"] = {
+        "evidence_id": "run-1:E3",
+        "run_id": "run-1",
+        "guard_status": "passed",
+        "result_summary": {"dimension": "channel", "element": "organic", "delta_pct": -0.82},
+    }
 
     result = calculate_contribution(
         CalculateContributionArgs(
@@ -801,6 +1039,27 @@ def test_calculate_contribution_rejects_element_that_is_not_top_attributed_candi
             target_date=date(2026, 6, 5),
             dimension="channel",
             element="organic",
+            evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is True
+    assert result.evidences[0].result_summary["selected_candidate"]["element"] == "organic"
+    assert result.evidences[0].result_summary["selected_candidate"]["signal_severity"] == 0.82
+
+
+def test_calculate_contribution_rejects_element_that_is_not_attributed_candidate() -> None:
+    repo = SpyRepository()
+
+    result = calculate_contribution(
+        CalculateContributionArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            dimension="channel",
+            element="affiliate",
             evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
         ),
         repository=repo,
@@ -953,6 +1212,42 @@ def test_calculate_contribution_net_gmv_emits_gmv_refund_decomposition() -> None
     assert split["largest_driver"] == "gmv_drop"
     assert set(summary["factor_query_sources"]) == {"gmv", "net_gmv"}
     assert len([plan for plan in repo.executed if plan.params.get("filter_channel") == "paid_ads"]) >= 4
+
+
+def test_calculate_contribution_uses_refund_quality_signal_root_cause_for_net_gmv() -> None:
+    repo = SpyRepository()
+    repo.runs["run-1"]["metric_id"] = "net_gmv"
+    repo.persisted_evidence["run-1:E3"] = {
+        "evidence_id": "run-1:E3",
+        "run_id": "run-1",
+        "guard_status": "passed",
+        "result_summary": {
+            "dimension": "channel",
+            "element": "paid_ads",
+            "signal_type": "refund_quality",
+            "signal_metric_id": "complaint_rate",
+            "delta_pct": 2.5,
+        },
+    }
+
+    result = calculate_contribution(
+        CalculateContributionArgs(
+            run_id="run-1",
+            metric_id="net_gmv",
+            target_date=date(2026, 6, 5),
+            dimension="channel",
+            element="paid_ads",
+            evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is True
+    summary = result.evidences[0].result_summary
+    assert summary["net_gmv_decomposition"]["largest_driver"] == "gmv_drop"
+    assert summary["selected_candidate"]["root_cause_type"] == "complaint_or_quality_issue"
+    assert summary["selected_candidate"]["signal_severity"] == 1.0
 
 
 def test_calculate_contribution_net_gmv_can_identify_refund_increase_driver() -> None:

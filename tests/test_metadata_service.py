@@ -342,7 +342,22 @@ def test_intent_planner_prompt_for_json_mode_disallows_intent_wrapper() -> None:
     )
 
     assert "Do not wrap the fields in an intent object." in prompt
-    assert "error_code, metric_id, target_date, question_family, dimension, element, filters" in prompt
+    assert "error_code, metric_id, target_date, question_family, analysis_strategy" in prompt
+
+
+def test_intent_planner_prompt_includes_net_gmv_slice_examples() -> None:
+    prompt = build_system_prompt(
+        business_today=date(2026, 6, 6),
+        supported_metrics=["net_gmv"],
+        supported_dimensions=["channel", "product"],
+        supported_dimension_values={"channel": ["paid_ads"], "product": ["1"]},
+        supported_families=["net_gmv_drop"],
+    )
+
+    assert "net GMV" in prompt
+    assert "metric_id=net_gmv" in prompt
+    assert "paid ads -> paid_ads" in prompt
+    assert "question_family=net_gmv_drop" in prompt
 
 
 def test_llm_intent_planner_maps_langchain_invocation_error_to_typed_error() -> None:
@@ -377,6 +392,7 @@ def test_openai_compatible_intent_planner_uses_configured_base_url_and_json_mode
                 "metric_id": "net_gmv",
                 "target_date": "2026-06-05",
                 "question_family": "net_gmv_drop",
+                "analysis_strategy": "standard",
                 "dimension": "product",
                 "element": "1",
                 "filters": [{"dimension": "product", "value": "1"}],
@@ -412,9 +428,155 @@ def test_openai_compatible_intent_planner_uses_configured_base_url_and_json_mode
     assert captured["chat_kwargs"]["model"] == "deepseek-chat"
     assert captured["chat_kwargs"]["api_key"] == "deepseek-key"
     assert captured["chat_kwargs"]["base_url"] == "https://api.deepseek.com"
+    assert captured["chat_kwargs"]["max_completion_tokens"] == 3000
     assert captured["method"] == "json_mode"
     assert parsed.metric_id == "net_gmv"
+    assert parsed.analysis_strategy == "standard"
     assert parsed.filters == {"product": "1"}
+
+
+def test_llm_intent_planner_retries_parse_failed_with_same_schema(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {"calls": 0}
+
+    class FakeStructuredModel:
+        def invoke(self, messages):
+            captured["calls"] = int(captured["calls"]) + 1
+            captured["messages"] = messages
+            if captured["calls"] == 1:
+                return {
+                    "error_code": "PARSE_FAILED",
+                    "metric_id": None,
+                    "target_date": None,
+                    "question_family": None,
+                    "analysis_strategy": "standard",
+                    "dimension": None,
+                    "element": None,
+                    "filters": [],
+                }
+            return {
+                "error_code": None,
+                "metric_id": "gmv",
+                "target_date": "2026-06-05",
+                "question_family": "gmv_drop",
+                "analysis_strategy": "channel_first",
+                "dimension": None,
+                "element": None,
+                "filters": [],
+            }
+
+    class FakeChatOpenAI:
+        def __init__(self, **kwargs):
+            captured["chat_kwargs"] = kwargs
+
+        def with_structured_output(self, schema, *, method: str):
+            captured["schema"] = schema
+            captured["method"] = method
+            return FakeStructuredModel()
+
+    monkeypatch.setattr("metric_rca.services.llm_client.ChatOpenAI", FakeChatOpenAI)
+
+    planner = LLMIntentPlanner(provider="openai", model="gpt-5-nano", api_key="test-key")
+    parsed = planner.parse(
+        "Was yesterday's GMV actually abnormal?",
+        business_today=date(2026, 6, 6),
+        supported_metrics=["gmv"],
+        supported_dimensions=["channel"],
+        supported_dimension_values={"channel": ["paid_ads"]},
+        supported_families=["gmv_drop"],
+    )
+
+    assert captured["calls"] == 2
+    assert captured["schema"].__name__ == "_LLMIntentOutput"
+    assert "Previous parser attempt returned PARSE_FAILED" in captured["messages"][1][1]
+    assert parsed.metric_id == "gmv"
+    assert parsed.analysis_strategy == "channel_first"
+
+
+def test_llm_intent_planner_accepts_organic_first_strategy(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeStructuredModel:
+        def invoke(self, messages):
+            captured["messages"] = messages
+            return {
+                "error_code": None,
+                "metric_id": "gmv",
+                "target_date": "2026-06-05",
+                "question_family": "gmv_drop",
+                "analysis_strategy": "organic_first",
+                "dimension": None,
+                "element": None,
+                "filters": [],
+            }
+
+    class FakeChatOpenAI:
+        def __init__(self, **kwargs):
+            pass
+
+        def with_structured_output(self, schema, *, method: str):
+            return FakeStructuredModel()
+
+    monkeypatch.setattr("metric_rca.services.llm_client.ChatOpenAI", FakeChatOpenAI)
+
+    planner = LLMIntentPlanner(provider="openai", model="gpt-5-nano", api_key="test-key")
+    parsed = planner.parse(
+        "Why did yesterday's GMV fall despite stable merchandising?",
+        business_today=date(2026, 6, 6),
+        supported_metrics=["gmv"],
+        supported_dimensions=["channel", "category", "product"],
+        supported_dimension_values={"channel": ["paid_ads", "organic"]},
+        supported_families=["gmv_drop"],
+    )
+
+    system_prompt = captured["messages"][0][1]
+    assert "organic_first" in system_prompt
+    assert parsed.metric_id == "gmv"
+    assert parsed.analysis_strategy == "organic_first"
+    assert parsed.dimension is None
+    assert parsed.element is None
+    assert parsed.filters == {}
+
+
+def test_llm_intent_planner_does_not_retry_typed_semantic_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {"calls": 0}
+
+    class FakeStructuredModel:
+        def invoke(self, messages):
+            captured["calls"] = int(captured["calls"]) + 1
+            return {
+                "error_code": "METRIC_NOT_FOUND",
+                "metric_id": None,
+                "target_date": None,
+                "question_family": None,
+                "analysis_strategy": "standard",
+                "dimension": None,
+                "element": None,
+                "filters": [],
+            }
+
+    class FakeChatOpenAI:
+        def __init__(self, **kwargs):
+            pass
+
+        def with_structured_output(self, schema, *, method: str):
+            return FakeStructuredModel()
+
+    monkeypatch.setattr("metric_rca.services.llm_client.ChatOpenAI", FakeChatOpenAI)
+
+    planner = LLMIntentPlanner(provider="openai", model="gpt-5-nano", api_key="test-key")
+
+    with pytest.raises(MetricServiceError) as exc_info:
+        planner.parse(
+            "Why did an unsupported KPI fall yesterday?",
+            business_today=date(2026, 6, 6),
+            supported_metrics=["gmv"],
+            supported_dimensions=["channel"],
+            supported_dimension_values={"channel": ["paid_ads"]},
+            supported_families=["gmv_drop"],
+        )
+
+    assert captured["calls"] == 1
+    assert exc_info.value.code == "METRIC_NOT_FOUND"
 
 
 def test_openai_compatible_intent_planner_requires_base_url() -> None:

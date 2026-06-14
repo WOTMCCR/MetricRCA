@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, OperationalError, TimeoutError as SQLAlchemyTimeoutError
 
 from metric_rca.config.settings import get_settings
 from metric_rca.domain.models import SQLPlan
@@ -231,6 +231,66 @@ def test_repository_persists_documented_system_tables() -> None:
     repo.close()
 
 
+def test_repository_retries_transient_system_table_write_once() -> None:
+    engine = _FlakyWriteEngine([_operational_error(1213, "Deadlock found")])
+    repo = MetricRepository(
+        readonly_engine=engine,
+        audit_engine=engine,
+        statement_timeout_ms=3000,
+    )
+
+    repo.create_trace_step(_trace_step_row())
+
+    assert engine.attempts == 2
+
+
+def test_repository_retries_repeated_transient_system_table_writes() -> None:
+    engine = _FlakyWriteEngine(
+        [
+            _operational_error(1213, "Deadlock found"),
+            _operational_error(1205, "Lock wait timeout exceeded"),
+            _operational_error(1040, "Too many connections"),
+            _operational_error(2006, "MySQL server has gone away"),
+        ]
+    )
+    repo = MetricRepository(
+        readonly_engine=engine,
+        audit_engine=engine,
+        statement_timeout_ms=3000,
+    )
+
+    repo.create_trace_step(_trace_step_row())
+
+    assert engine.attempts == 5
+
+
+def test_repository_retries_sqlalchemy_pool_timeout_system_table_write() -> None:
+    engine = _FlakyWriteEngine([SQLAlchemyTimeoutError("QueuePool limit reached")])
+    repo = MetricRepository(
+        readonly_engine=engine,
+        audit_engine=engine,
+        statement_timeout_ms=3000,
+    )
+
+    repo.create_trace_step(_trace_step_row())
+
+    assert engine.attempts == 2
+
+
+def test_repository_does_not_retry_non_transient_system_table_write() -> None:
+    engine = _FlakyWriteEngine([_operational_error(1062, "Duplicate entry")])
+    repo = MetricRepository(
+        readonly_engine=engine,
+        audit_engine=engine,
+        statement_timeout_ms=3000,
+    )
+
+    with pytest.raises(RuntimeError, match="SYSTEM_TABLE_WRITE_FAILED"):
+        repo.create_trace_step(_trace_step_row())
+
+    assert engine.attempts == 1
+
+
 def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     repo = MetricRepository(
@@ -419,3 +479,55 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
     }
 
     repo.close()
+
+
+class _FlakyWriteEngine:
+    def __init__(self, failures: list[Exception]) -> None:
+        self.failures = failures
+        self.attempts = 0
+
+    def begin(self) -> _FlakyWriteConnection:
+        return _FlakyWriteConnection(self)
+
+
+class _FlakyWriteConnection:
+    def __init__(self, engine: _FlakyWriteEngine) -> None:
+        self.engine = engine
+
+    def __enter__(self) -> _FlakyWriteConnection:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+    def execute(self, statement, params):
+        self.engine.attempts += 1
+        if self.engine.failures:
+            raise self.engine.failures.pop(0)
+        return None
+
+
+def _operational_error(errno: int, message: str) -> OperationalError:
+    return OperationalError("INSERT INTO trace_step", {}, _MysqlError(errno, message))
+
+
+class _MysqlError(Exception):
+    def __init__(self, errno: int, message: str) -> None:
+        super().__init__(errno, message)
+        self.args = (errno, message)
+
+
+def _trace_step_row() -> dict[str, object]:
+    return {
+        "step_id": "trace-1",
+        "run_id": "run-1",
+        "seq": 1,
+        "node": "tool_call",
+        "action": "detect_anomaly",
+        "input_summary": {},
+        "output_summary": {},
+        "error_code": None,
+        "latency_ms": 0,
+        "token_usage": None,
+        "created_at": datetime(2026, 6, 8, 12, 0, 0),
+    }

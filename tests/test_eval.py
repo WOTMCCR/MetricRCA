@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+import threading
+import time
 from typing import Any
 
 import pytest
@@ -58,6 +60,17 @@ def test_eval_run_ids_leave_room_for_long_evidence_aliases() -> None:
 
     assert len(run_id) <= 42
     assert len(f"{run_id}:E3_cat_electronics") <= 64
+
+
+def test_eval_run_ids_for_long_case_ids_are_collision_resistant() -> None:
+    shared_prefix = "case_" + ("x" * 80)
+    first = _run_id("eval-4787ddf2", f"{shared_prefix}_a")
+    second = _run_id("eval-4787ddf2", f"{shared_prefix}_b")
+
+    assert first != second
+    assert len(first) <= 42
+    assert len(second) <= 42
+    assert len(_attempt_run_id(first, 2)) <= 42
 
 
 def test_eval_missing_ground_truth_returns_EVAL_GROUND_TRUTH_MISSING(tmp_path: Path) -> None:
@@ -164,6 +177,142 @@ def test_eval_writes_eval_run_and_eval_case_result(tmp_path: Path) -> None:
     assert repo.eval_runs[0]["summary"] == output["summary"]
     assert "llm_model" in repo.eval_runs[0]["summary"]
     assert [row["case_id"] for row in repo.case_results] == ["gmv_paid_ads_drop", "gmv_no_anomaly"]
+
+
+def test_eval_parallel_cases_use_worker_repositories_and_preserve_output_order(tmp_path: Path) -> None:
+    main_repo = _EvalRepository()
+    worker_repos: list[_EvalRepository] = []
+    lock = threading.Lock()
+    active = 0
+    max_active = 0
+
+    def repository_factory() -> _EvalRepository:
+        repo = _EvalRepository()
+        worker_repos.append(repo)
+        return repo
+
+    def runner(question: str, **kwargs: Any) -> dict[str, Any]:
+        nonlocal active, max_active
+        repo: _EvalRepository = kwargs["repository"]
+        run_id = kwargs["run_id"]
+        case_id = run_id.split("eval-1-", maxsplit=1)[1]
+        with lock:
+            active += 1
+            max_active = max(max_active, active)
+        time.sleep(0.05)
+        try:
+            repo.persist_case(run_id, case_id)
+            return {"run_id": run_id, "status": repo.agent_runs[run_id]["status"], "error_code": None}
+        finally:
+            with lock:
+                active -= 1
+
+    output = run_eval(
+        repository=main_repo,
+        repository_factory=repository_factory,
+        rca_runner=runner,
+        cases_path=_cases_file(tmp_path),
+        output_dir=tmp_path,
+        eval_id="eval-1",
+        settings=Settings(
+            db_dsn="mysql+pymysql://app:app@localhost/db",
+            readonly_db_dsn="mysql+pymysql://reader:reader@localhost/db",
+            llm_provider="openai",
+            llm_model="gpt-test",
+            llm_api_key="key",
+            eval_concurrency=2,
+        ),
+    )
+
+    assert max_active == 2
+    assert len(worker_repos) == 2
+    assert worker_repos[0] is not worker_repos[1]
+    assert all(repo.closed for repo in worker_repos)
+    assert [row["case_id"] for row in output["cases"]] == ["gmv_paid_ads_drop", "gmv_no_anomaly"]
+    assert [row["case_id"] for row in main_repo.case_results] == ["gmv_paid_ads_drop", "gmv_no_anomaly"]
+    assert len(main_repo.eval_runs) == 1
+
+
+def test_eval_parallel_failure_returns_before_blocked_worker_finishes_and_does_not_submit_remaining_cases(tmp_path: Path) -> None:
+    cases_path = tmp_path / "cases.jsonl"
+    cases_path.write_text(
+        "\n".join(
+            [
+                '{"case_id":"case_1","question":"Why did case 1 move?"}',
+                '{"case_id":"case_2","question":"Why did case 2 move?"}',
+                '{"case_id":"case_3","question":"Why did case 3 move?"}',
+            ]
+        )
+    )
+    main_repo = _EvalRepository()
+    started: list[str] = []
+    started_lock = threading.Lock()
+    release_running = threading.Event()
+
+    def repository_factory() -> _EvalRepository:
+        return _EvalRepository()
+
+    def runner(question: str, **kwargs: Any) -> dict[str, Any]:
+        repo: _EvalRepository = kwargs["repository"]
+        run_id = kwargs["run_id"]
+        case_id = run_id.split("eval-1-", maxsplit=1)[1]
+        with started_lock:
+            started.append(case_id)
+        if case_id == "case_1":
+            raise RuntimeError("case_1 failed")
+        release_running.wait(timeout=1.0)
+        repo.persist_case(run_id, case_id)
+        return {"run_id": run_id, "status": repo.agent_runs[run_id]["status"], "error_code": None}
+
+    start = time.monotonic()
+    try:
+        with pytest.raises(RuntimeError, match="case_1 failed"):
+            run_eval(
+                repository=main_repo,
+                repository_factory=repository_factory,
+                rca_runner=runner,
+                cases_path=cases_path,
+                output_dir=tmp_path,
+                eval_id="eval-1",
+                settings=Settings(
+                    db_dsn="mysql+pymysql://app:app@localhost/db",
+                    readonly_db_dsn="mysql+pymysql://reader:reader@localhost/db",
+                    llm_provider="openai",
+                    llm_model="gpt-test",
+                    llm_api_key="key",
+                    eval_concurrency=2,
+                ),
+            )
+    finally:
+        release_running.set()
+
+    elapsed = time.monotonic() - start
+    assert elapsed < 0.5
+    assert "case_1" in started
+    assert "case_3" not in started
+    assert main_repo.case_results == []
+    assert main_repo.eval_runs == []
+
+
+def test_eval_parallel_requires_worker_repository_factory_for_injected_repository(tmp_path: Path) -> None:
+    with pytest.raises(EvalRuntimeError) as exc_info:
+        run_eval(
+            repository=_EvalRepository(),
+            rca_runner=_fake_runner,
+            cases_path=_cases_file(tmp_path),
+            output_dir=tmp_path,
+            eval_id="eval-1",
+            settings=Settings(
+                db_dsn="mysql+pymysql://app:app@localhost/db",
+                readonly_db_dsn="mysql+pymysql://reader:reader@localhost/db",
+                llm_provider="openai",
+                llm_model="gpt-test",
+                llm_api_key="key",
+                eval_concurrency=2,
+            ),
+        )
+
+    assert exc_info.value.code == "EVAL_CONCURRENCY_REPOSITORY_UNSAFE"
 
 
 def test_eval_scores_intent_anomaly_top1_top3_evidence_sql_reflection() -> None:
@@ -415,6 +564,41 @@ def test_eval_retries_transient_llm_errors_with_same_case(tmp_path: Path) -> Non
     assert output["summary"]["thresholds_met"] is True
 
 
+def test_eval_retries_transient_system_table_write_failure_with_same_case(tmp_path: Path) -> None:
+    repo = _EvalRepository()
+    calls: list[str] = []
+
+    def runner(question: str, **kwargs: Any) -> dict[str, Any]:
+        run_id = kwargs["run_id"]
+        calls.append(run_id)
+        if len(calls) == 1:
+            return {"run_id": run_id, "status": "failed", "error_code": "SYSTEM_TABLE_WRITE_FAILED"}
+        case_id = "gmv_paid_ads_drop" if "gmv_paid_ads_drop" in run_id else "gmv_no_anomaly"
+        repo.persist_case(run_id, case_id)
+        return {"run_id": run_id, "status": repo.agent_runs[run_id]["status"], "error_code": None}
+
+    output = run_eval(
+        repository=repo,
+        rca_runner=runner,
+        cases_path=_cases_file(tmp_path),
+        output_dir=tmp_path,
+        eval_id="eval-1",
+        settings=Settings(
+            db_dsn="mysql+pymysql://app:app@localhost/db",
+            readonly_db_dsn="mysql+pymysql://reader:reader@localhost/db",
+            llm_provider="openai",
+            llm_model="gpt-test",
+            llm_api_key="key",
+            eval_llm_retry_seconds=0,
+        ),
+    )
+
+    assert calls[:2] == ["eval-1-gmv_paid_ads_drop", "eval-1-gmv_paid_ads_drop-r2"]
+    assert repo.get_agent_run("eval-1-gmv_paid_ads_drop") is None
+    assert output["cases"][0]["detail"]["eval_attempts"] == 2
+    assert output["summary"]["thresholds_met"] is True
+
+
 def test_runtime_code_outside_seed_eval_tests_does_not_read_anomaly_ground_truth() -> None:
     root = Path(__file__).resolve().parents[1]
     offenders = []
@@ -616,6 +800,7 @@ class _EvalRepository:
         self.tasks: dict[str, list[dict[str, Any]]] = {}
         self.eval_runs: list[dict[str, Any]] = []
         self.case_results: list[dict[str, Any]] = []
+        self.closed = False
 
     def get_ground_truth_cases(self, case_ids: list[str]) -> dict[str, dict[str, Any]]:
         self.gt_requests.append(case_ids)
@@ -672,3 +857,6 @@ class _EvalRepository:
 
     def create_eval_case_result(self, row: dict[str, Any]) -> None:
         self.case_results.append(row)
+
+    def close(self) -> None:
+        self.closed = True

@@ -69,12 +69,18 @@ def test_budget_exhausted_then_llm_attempts_data_tool_run_failed() -> None:
     writer = _TraceWriter()
     middleware = GuardMiddleware(_context(writer, max_query=0))
 
-    result = middleware.wrap_tool_call(
+    first = middleware.wrap_tool_call(
         _request("detect_anomaly", {"metric_id": "gmv", "target_date": "2026-06-05"}),
         lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E1"]}),
     )
+    second = middleware.wrap_tool_call(
+        _request("drilldown_dimension", {"metric_id": "gmv", "target_date": "2026-06-05", "dimension": "channel", "evidence_ids": ["run-1:E1"]}),
+        lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E2"]}),
+    )
 
-    assert "BUDGET_EXCEEDED" in result.content
+    assert "BUDGET_EXCEEDED" in first.content
+    assert "query budget exhausted; call rank_root_causes or stop" in first.content
+    assert "data tool attempted after budget exhaustion" in second.content
     assert middleware.context.failed is True
 
 

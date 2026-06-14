@@ -127,6 +127,86 @@ def test_reflection_suggests_repair_action_for_missing_e4() -> None:
     assert issue.suggested_action.args["evidence_ids"] == ["run-1:E1", "run-1:E2", "run-1:E3"]
 
 
+def test_reflection_repair_action_inherits_filters_from_persisted_e1() -> None:
+    evidences = [
+        _evidence("run-1:E1", summary={"metric_id": "gmv", "filters": {"category": "fashion"}, "value": 0.90}),
+        _evidence("run-1:E2_category"),
+        _evidence(
+            "run-1:E3_cat_fashion",
+            summary={
+                "signal_type": "inventory",
+                "signal_metric_id": "stockout_rate",
+                "dimension": "category",
+                "element": "fashion",
+                "value": 0.90,
+            },
+        ),
+    ]
+    state = _state(
+        parsed_spec={},
+        candidates=[
+            _candidate(
+                dimension="category",
+                element="fashion",
+                evidence_ids=["run-1:E1", "run-1:E2_category", "run-1:E3_cat_fashion"],
+            )
+        ],
+        evidences=evidences,
+    )
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
+
+    issue = next(issue for issue in result.issues if issue.suggested_action is not None)
+    assert issue.suggested_action.action == "calculate_contribution"
+    assert issue.suggested_action.args["filters"] == {"category": "fashion"}
+
+
+def test_reflection_suggests_signal_repair_when_no_candidates_but_drilldowns_exist() -> None:
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence(
+            "run-1:E2_channel",
+            summary={
+                "metric_id": "gmv",
+                "dimension": "channel",
+                "candidates": [{"dimension": "channel", "element": "paid_ads"}],
+            },
+        ),
+        _evidence(
+            "run-1:E2_category",
+            summary={
+                "metric_id": "gmv",
+                "dimension": "category",
+                "candidates": [{"dimension": "category", "element": "electronics"}],
+            },
+        ),
+        _evidence(
+            "run-1:E2_product",
+            summary={
+                "metric_id": "gmv",
+                "dimension": "product",
+                "candidates": [{"dimension": "product", "element": "2"}],
+            },
+        ),
+    ]
+    state = _state(candidates=[], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
+
+    assert result.passed is False
+    issue = next(issue for issue in result.issues if issue.check == "evidence_coverage")
+    assert issue.suggested_action is not None
+    assert issue.suggested_action.action == "fetch_related_signal"
+    assert issue.suggested_action.args == {
+        "metric_id": "gmv",
+        "target_date": date(2026, 6, 5),
+        "signal_type": "campaign",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "evidence_ids": ["run-1:E1", "run-1:E2_channel"],
+    }
+
+
 def test_reflection_state_only_fabricated_evidence_fails() -> None:
     state = _state()
 
@@ -280,6 +360,85 @@ def test_reflection_checks_signal_consistency_for_aliased_e3_evidence() -> None:
                 },
             ),
             _evidence("run-1:E4"),
+        ],
+    )
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(state["evidences"]))
+
+    assert result.passed is False
+    assert "signal_consistency" in _checks(result)
+
+
+def test_reflection_accepts_aov_drop_when_e4_decomposition_proves_aov_factor() -> None:
+    candidate = _candidate(
+        root_cause_type="aov_drop",
+        dimension="category",
+        element="fashion",
+        evidence_ids=["run-1:E1", "run-1:E2_category", "run-1:E3_cat_fashion", "run-1:E4"],
+    )
+    state = _state(
+        candidates=[candidate],
+        evidences=[
+            _evidence("run-1:E1"),
+            _evidence("run-1:E2_category"),
+            _evidence(
+                "run-1:E3_cat_fashion",
+                metric_id="stockout_rate",
+                summary={
+                    "signal_type": "inventory",
+                    "signal_metric_id": "stockout_rate",
+                    "dimension": "category",
+                    "element": "fashion",
+                    "value": 0.90,
+                },
+            ),
+            _evidence(
+                "run-1:E4",
+                summary={
+                    "selected_candidate": candidate.model_dump(mode="json"),
+                    "decomposition": {"largest_drop_factor": "aov"},
+                    "value": 0.90,
+                },
+            ),
+        ],
+    )
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(state["evidences"]))
+
+    assert result.passed is True
+
+
+def test_reflection_rejects_aov_drop_with_unrelated_e3_even_when_e4_decomposition_is_aov() -> None:
+    candidate = _candidate(
+        root_cause_type="aov_drop",
+        dimension="category",
+        element="fashion",
+        evidence_ids=["run-1:E1", "run-1:E2_category", "run-1:E3_cat_fashion", "run-1:E4"],
+    )
+    state = _state(
+        candidates=[candidate],
+        evidences=[
+            _evidence("run-1:E1"),
+            _evidence("run-1:E2_category"),
+            _evidence(
+                "run-1:E3_cat_fashion",
+                metric_id="stockout_rate",
+                summary={
+                    "signal_type": "inventory",
+                    "signal_metric_id": "stockout_rate",
+                    "dimension": "category",
+                    "element": "electronics",
+                    "value": 0.90,
+                },
+            ),
+            _evidence(
+                "run-1:E4",
+                summary={
+                    "selected_candidate": candidate.model_dump(mode="json"),
+                    "decomposition": {"largest_drop_factor": "aov"},
+                    "value": 0.90,
+                },
+            ),
         ],
     )
 

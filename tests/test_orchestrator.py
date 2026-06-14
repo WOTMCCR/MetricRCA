@@ -5,6 +5,8 @@ import importlib
 from pathlib import Path
 from types import SimpleNamespace
 
+from langchain_core.outputs import LLMResult
+
 from metric_rca.agent.deep_tools import EXPOSED_TOOL_NAMES
 from metric_rca.agent.deep_tools import PLANNING_TOOL_NAME, TOOL_ARG_SCHEMAS
 from metric_rca.agent.factory import create_metric_rca_agent
@@ -111,6 +113,7 @@ def test_orchestrator_injects_run_context_into_agent_message() -> None:
     assert result["status"] == "failed"
     assert "target_date: 2026-06-05" in captured["content"]
     assert "parsed target metric_id: gmv" in captured["content"]
+    assert "Discovery policy is mandatory" in captured["content"]
     assert "allowed metric_id values:" in captured["content"]
     assert "gmv" in captured["content"]
     assert "Every metric_id argument MUST equal the parsed target metric_id" in captured["content"]
@@ -141,12 +144,13 @@ def test_orchestrator_anchors_run_metric_to_parsed_intent_before_agent_loop() ->
     assert "parsed target metric_id: pay_cvr" in captured["content"]
 
 
-def test_orchestrator_seeds_explicit_question_scope_into_guard_context() -> None:
+def test_orchestrator_does_not_parse_literal_question_scope_into_guard_context() -> None:
     repo = _Repo()
     captured = {}
 
     class Agent(_Agent):
-        def invoke(self, *args, **kwargs):
+        def invoke(self, payload, **kwargs):
+            captured["content"] = payload["messages"][0]["content"]
             captured["scope"] = captured["middleware"].context.explicit_filters
             return {}
 
@@ -160,7 +164,8 @@ def test_orchestrator_seeds_explicit_question_scope_into_guard_context() -> None
     )
 
     assert result["status"] == "failed"
-    assert captured["scope"] == {"category": "electronics"}
+    assert captured["scope"] == {}
+    assert "explicit or parsed question filters: none" in captured["content"]
 
 
 def test_orchestrator_seeds_parsed_natural_scope_into_guard_context_and_message() -> None:
@@ -192,6 +197,68 @@ def test_orchestrator_seeds_parsed_natural_scope_into_guard_context_and_message(
     assert result["status"] == "failed"
     assert captured["scope"] == {"category": "electronics"}
     assert "explicit or parsed question filters: category=electronics" in captured["content"]
+
+
+def test_orchestrator_seeds_discovery_policy_from_parsed_intent() -> None:
+    repo = _Repo()
+    captured = {}
+
+    class Agent(_Agent):
+        def invoke(self, payload, **kwargs):
+            context = captured["middleware"].context
+            captured["content"] = payload["messages"][0]["content"]
+            captured["policy"] = context.discovery_policy
+            return {}
+
+    def factory(**kwargs):
+        captured["middleware"] = kwargs["middleware"][0]
+        return Agent()
+
+    result = RunOrchestrator(
+        dependencies=_deps(repo, metric_service=_MetricService(analysis_strategy="product_first")),
+        agent_factory=factory,
+    ).run("Why did yesterday's GMV decline in merchandise sales?", run_id="run-1")
+
+    assert result["status"] == "failed"
+    policy = captured["policy"]
+    assert policy.required_drilldowns == ("channel", "category", "product")
+    assert policy.first_signal_dimension == "product"
+    assert policy.first_signal_type == "inventory"
+    assert policy.enforce_first_signal_top_candidate is True
+    assert "parsed analysis_strategy: product_first" in captured["content"]
+    assert "first_signal=product:inventory" in captured["content"]
+
+
+def test_orchestrator_seeds_first_signal_element_from_parsed_intent() -> None:
+    repo = _Repo()
+    captured = {}
+
+    class Agent(_Agent):
+        def invoke(self, payload, **kwargs):
+            context = captured["middleware"].context
+            captured["content"] = payload["messages"][0]["content"]
+            captured["policy"] = context.discovery_policy
+            return {}
+
+    def factory(**kwargs):
+        captured["middleware"] = kwargs["middleware"][0]
+        return Agent()
+
+    result = RunOrchestrator(
+        dependencies=_deps(repo, metric_service=_MetricService(analysis_strategy="organic_first")),
+        agent_factory=factory,
+    ).run("Why did yesterday's GMV fall despite stable merchandising?", run_id="run-1")
+
+    assert result["status"] == "failed"
+    policy = captured["policy"]
+    assert policy.required_drilldowns == ("channel", "category", "product")
+    assert policy.first_signal_dimension == "channel"
+    assert policy.first_signal_type == "campaign"
+    assert policy.first_signal_element == "organic"
+    assert policy.enforce_first_signal_top_candidate is False
+    assert "parsed analysis_strategy: organic_first" in captured["content"]
+    assert "first_signal=channel:campaign" in captured["content"]
+    assert "first_signal_element=organic" in captured["content"]
 
 
 def test_no_anomaly_with_drilldown_trace_fails() -> None:
@@ -283,6 +350,53 @@ def test_transient_llm_error_without_terminal_evidence_still_fails_fast() -> Non
     assert result["status"] == "failed"
     assert result["error_code"] == "rate_limit_exceeded"
     assert repo.tasks == []
+
+
+def test_reflection_repair_constrains_next_tool_to_suggested_action() -> None:
+    repo = _Repo()
+    captured = {}
+
+    class Agent(_Agent):
+        def __init__(self, middleware):
+            self.middleware = middleware
+            self.calls = 0
+
+        def invoke(self, payload, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                repo.add_valid_evidences("run-1")
+                e4_summary = repo.evidences["run-1:E4"]["result_summary"]
+                e4_summary["selected_candidate"]["contribution_pct"] = 0.4
+                e4_summary["candidates"][0]["contribution_pct"] = 0.4
+                return {}
+            captured["repair_content"] = payload["messages"][0]["content"]
+            captured["required_repair_action"] = self.middleware.context.required_repair_action
+            e4_summary = repo.evidences["run-1:E4"]["result_summary"]
+            e4_summary["selected_candidate"]["contribution_pct"] = 0.9
+            e4_summary["candidates"][0]["contribution_pct"] = 0.9
+            repo.add_evidence(
+                "run-1",
+                "E_rank",
+                {
+                    "metric_id": "gmv",
+                    "ranker": "adtributor_internal",
+                    "selected_candidate": e4_summary["selected_candidate"],
+                    "candidates": e4_summary["candidates"],
+                },
+            )
+            return {}
+
+    def factory(**kwargs):
+        return Agent(kwargs["middleware"][0])
+
+    result = RunOrchestrator(dependencies=_deps(repo), agent_factory=factory).run("why", run_id="run-1")
+
+    assert result["status"] == "succeeded"
+    assert captured["required_repair_action"] == "rank_root_causes"
+    assert "Only call rank_root_causes" in captured["repair_content"]
+    assert "Call exactly this tool with exactly these JSON args: rank_root_causes" in captured["repair_content"]
+    assert "Do not answer in text" in captured["repair_content"]
+    assert "Do not call detect_anomaly" in captured["repair_content"]
 
 
 def test_orchestrator_persists_token_usage_when_llm_makes_no_tool_call() -> None:
@@ -385,6 +499,52 @@ def test_successful_run_creates_operation_task_from_report() -> None:
     assert repo.tasks[0]["root_cause_type"] == "campaign_traffic_drop"
 
 
+def test_final_token_usage_trace_retries_transient_system_write_failure() -> None:
+    repo = _FlakyFinalTokenTraceRepo(failures_before_success=1)
+
+    class Agent(_Agent):
+        def invoke(self, *args, **kwargs):
+            callback = kwargs["config"]["callbacks"][0]
+            callback.on_llm_end(
+                LLMResult(
+                    generations=[],
+                    llm_output={"token_usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}},
+                )
+            )
+            repo.add_valid_evidences("run-1")
+            return {}
+
+    result = RunOrchestrator(dependencies=_deps(repo), agent_factory=lambda **kwargs: Agent()).run("why", run_id="run-1")
+
+    assert result["status"] == "succeeded"
+    assert repo.final_token_trace_failures == 1
+    assert any(row["node"] == "llm_call" and row["token_usage"]["total_tokens"] == 5 for row in repo.trace_steps)
+    assert repo.tasks[0]["root_cause_type"] == "campaign_traffic_drop"
+
+
+def test_final_token_usage_trace_failure_after_retries_fails_run() -> None:
+    repo = _FlakyFinalTokenTraceRepo(failures_before_success=99)
+
+    class Agent(_Agent):
+        def invoke(self, *args, **kwargs):
+            callback = kwargs["config"]["callbacks"][0]
+            callback.on_llm_end(
+                LLMResult(
+                    generations=[],
+                    llm_output={"token_usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}},
+                )
+            )
+            repo.add_valid_evidences("run-1")
+            return {}
+
+    result = RunOrchestrator(dependencies=_deps(repo), agent_factory=lambda **kwargs: Agent()).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "SYSTEM_TABLE_WRITE_FAILED"
+    assert repo.final_token_trace_failures == 3
+    assert repo.tasks == []
+
+
 def _deps(
     repo: "_Repo",
     *,
@@ -461,10 +621,12 @@ class _MetricService:
         metric_id: str = "gmv",
         dimension: str | None = None,
         element: str | None = None,
+        analysis_strategy: str = "standard",
     ) -> None:
         self.metric_id = metric_id
         self.dimension = dimension
         self.element = element
+        self.analysis_strategy = analysis_strategy
 
     def parse_question(self, question: str, *, business_today: date) -> ParsedIntent:
         family = "pay_cvr_drop" if self.metric_id == "pay_cvr" else "gmv_drop"
@@ -473,6 +635,7 @@ class _MetricService:
             metric_id=self.metric_id,
             target_date=date(2026, 6, 5),
             question_family=family,
+            analysis_strategy=self.analysis_strategy,
             dimension=self.dimension,
             element=self.element,
             filters=filters,
@@ -585,3 +748,16 @@ class _Repo:
                 "value": 0.9,
             },
         )
+
+
+class _FlakyFinalTokenTraceRepo(_Repo):
+    def __init__(self, *, failures_before_success: int) -> None:
+        super().__init__()
+        self.failures_before_success = failures_before_success
+        self.final_token_trace_failures = 0
+
+    def create_trace_step(self, row: dict) -> None:
+        if row.get("node") == "llm_call" and self.final_token_trace_failures < self.failures_before_success:
+            self.final_token_trace_failures += 1
+            raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED")
+        super().create_trace_step(row)

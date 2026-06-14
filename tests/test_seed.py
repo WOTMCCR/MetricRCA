@@ -95,8 +95,85 @@ def _content_hash() -> str:
                 payload[table] = [dict(row) for row in rows]
     finally:
         engine.dispose()
-
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def test_seed_makes_aov_cases_decomposition_dominant() -> None:
+    settings = get_settings()
+    engine = create_engine(str(settings.db_dsn), pool_pre_ping=True)
+    try:
+        with engine.connect() as conn:
+            product = _gmv_factor_drop_row(conn, "o.product_id = 2")
+            category = _gmv_factor_drop_row(conn, "p.category = 'fashion'")
+
+            assert product["largest_drop_factor"] == "aov_drop"
+            assert category["largest_drop_factor"] == "aov_drop"
+            assert product["aov_drop"] > product["pay_cvr_drop"]
+            assert category["aov_drop"] > category["pay_cvr_drop"]
+    finally:
+        engine.dispose()
+
+
+def _gmv_factor_drop_row(conn, where_clause: str) -> dict[str, float | str]:
+    row = conn.execute(
+        text(
+            f"""
+            WITH order_daily AS (
+              SELECT
+                o.business_date,
+                SUM(CASE WHEN o.is_paid = 1 THEN o.order_amount ELSE 0 END) AS gmv
+              FROM fact_order o
+              INNER JOIN dim_product p ON o.product_id = p.product_id
+              WHERE {where_clause}
+                AND o.business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29','2026-06-05')
+              GROUP BY o.business_date
+            ), traffic_daily AS (
+              SELECT
+                t.business_date,
+                SUM(t.uv) AS uv,
+                SUM(t.pay_user_cnt) AS pay_user_cnt
+              FROM fact_traffic t
+              INNER JOIN dim_product p ON t.product_id = p.product_id
+              WHERE {where_clause.replace("o.", "t.")}
+                AND t.business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29','2026-06-05')
+              GROUP BY t.business_date
+            ), daily AS (
+              SELECT
+                order_daily.business_date,
+                order_daily.gmv,
+                traffic_daily.uv,
+                traffic_daily.pay_user_cnt
+              FROM order_daily
+              INNER JOIN traffic_daily ON traffic_daily.business_date = order_daily.business_date
+            ), factors AS (
+              SELECT
+                SUM(CASE WHEN business_date = '2026-06-05' THEN uv ELSE 0 END) AS current_uv,
+                AVG(CASE WHEN business_date <> '2026-06-05' THEN uv END) AS baseline_uv,
+                SUM(CASE WHEN business_date = '2026-06-05' THEN pay_user_cnt ELSE 0 END) AS current_pay,
+                AVG(CASE WHEN business_date <> '2026-06-05' THEN pay_user_cnt END) AS baseline_pay,
+                SUM(CASE WHEN business_date = '2026-06-05' THEN gmv ELSE 0 END) AS current_gmv,
+                AVG(CASE WHEN business_date <> '2026-06-05' THEN gmv END) AS baseline_gmv
+              FROM daily
+            )
+            SELECT
+              GREATEST(0, (baseline_uv - current_uv) / baseline_uv) AS uv_drop,
+              GREATEST(
+                0,
+                ((baseline_pay / NULLIF(baseline_uv, 0)) - (current_pay / NULLIF(current_uv, 0)))
+                / (baseline_pay / NULLIF(baseline_uv, 0))
+              ) AS pay_cvr_drop,
+              GREATEST(
+                0,
+                ((baseline_gmv / NULLIF(baseline_pay, 0)) - (current_gmv / NULLIF(current_pay, 0)))
+                / (baseline_gmv / NULLIF(baseline_pay, 0))
+              ) AS aov_drop
+            FROM factors
+            """
+        )
+    ).mappings().one()
+    drops = {key: float(row[key]) for key in ["uv_drop", "pay_cvr_drop", "aov_drop"]}
+    largest = max(drops, key=drops.get)
+    return {**drops, "largest_drop_factor": largest}
 
 
 def test_seed_is_idempotent_and_has_required_calendar() -> None:
@@ -228,6 +305,62 @@ def test_paid_ads_injection_below_same_weekday_baseline() -> None:
                 )
             ).mappings().one()
             assert int(uv["target_uv"]) < float(uv["baseline_uv"]) * 0.6
+    finally:
+        engine.dispose()
+
+
+def test_c09_organic_traffic_signal_is_strongest_channel_drop() -> None:
+    seed_main()
+    settings = get_settings()
+    engine = create_engine(str(settings.db_dsn), pool_pre_ping=True)
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT cur.channel,
+                           (base.avg_clicks - cur.clicks) / base.avg_clicks AS click_drop,
+                           (traffic_base.avg_uv - traffic_cur.uv) / traffic_base.avg_uv AS uv_drop
+                    FROM (
+                      SELECT channel, SUM(clicks) AS clicks
+                      FROM fact_campaign
+                      WHERE business_date = '2026-06-05'
+                      GROUP BY channel
+                    ) AS cur
+                    INNER JOIN (
+                      SELECT channel, AVG(clicks) AS avg_clicks
+                      FROM (
+                        SELECT business_date, channel, SUM(clicks) AS clicks
+                        FROM fact_campaign
+                        WHERE business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29')
+                        GROUP BY business_date, channel
+                      ) AS daily_campaign
+                      GROUP BY channel
+                    ) AS base ON base.channel = cur.channel
+                    INNER JOIN (
+                      SELECT channel, SUM(uv) AS uv
+                      FROM fact_traffic
+                      WHERE business_date = '2026-06-05'
+                      GROUP BY channel
+                    ) AS traffic_cur ON traffic_cur.channel = cur.channel
+                    INNER JOIN (
+                      SELECT channel, AVG(uv) AS avg_uv
+                      FROM (
+                        SELECT business_date, channel, SUM(uv) AS uv
+                        FROM fact_traffic
+                        WHERE business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29')
+                        GROUP BY business_date, channel
+                      ) AS daily_traffic
+                      GROUP BY channel
+                    ) AS traffic_base ON traffic_base.channel = cur.channel
+                    """
+                )
+            ).mappings().all()
+            click_drops = {row["channel"]: float(row["click_drop"]) for row in rows}
+            uv_drops = {row["channel"]: float(row["uv_drop"]) for row in rows}
+
+            assert max(click_drops, key=click_drops.get) == "organic"
+            assert max(uv_drops, key=uv_drops.get) == "organic"
     finally:
         engine.dispose()
 

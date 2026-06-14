@@ -13,7 +13,9 @@ from metric_rca.agent.deep_tools import (
     FetchRelatedSignalIn,
     RankRootCausesIn,
 )
+from metric_rca.agent.discovery_policy import DiscoveryPolicy, discovery_policy_from_intent
 from metric_rca.agent.middleware import GuardMiddleware, MetricRCATokenUsageCallback, RunGuardContext
+from metric_rca.services.metric_contracts import ParsedIntent
 
 
 def test_illegal_tool_args_short_circuit_without_execution() -> None:
@@ -300,20 +302,557 @@ def test_metric_scope_violation_short_circuits_without_budget_or_handler() -> No
     assert writer.steps[-1]["error_code"] == "METRIC_SCOPE_VIOLATION"
 
 
-def test_budget_exhausted_then_data_tool_attempt_fails_run() -> None:
+def test_target_date_scope_violation_short_circuits_without_budget_or_handler() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.target_date = "2026-06-05"
+    middleware = GuardMiddleware(context)
+    called = False
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E1"]})
+
+    result = middleware.wrap_tool_call(
+        _request("detect_anomaly", {"metric_id": "gmv", "target_date": "2026-06-04"}),
+        handler,
+    )
+
+    payload = json.loads(result.content)
+    assert payload["observation"]["error_code"] == "METRIC_SCOPE_VIOLATION"
+    assert "run target_date is 2026-06-05" in payload["observation"]["message"]
+    assert called is False
+    assert context.failed is False
+    assert context.step_count == 0
+    assert context.query_count == 0
+
+
+def test_fetch_related_signal_accepts_matching_filters_without_schema_error() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    middleware = GuardMiddleware(context)
+
+    result = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "inventory",
+            "dimension": "category",
+            "element": "electronics",
+            "filters": {"category": "electronics"},
+            "evidence_ids": ["run-1:E1", "run-1:E2_category"],
+        }),
+        lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_cat_electronics"]}),
+    )
+
+    assert json.loads(result.content)["observation"]["ok"] is True
+    assert context.failed is False
+
+
+def test_fetch_related_signal_rejects_conflicting_filters_before_budget_or_handler() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    middleware = GuardMiddleware(context)
+    called = False
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_cat_electronics"]})
+
+    result = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "inventory",
+            "dimension": "category",
+            "element": "electronics",
+            "filters": {"category": "fashion"},
+            "evidence_ids": ["run-1:E1", "run-1:E2_category"],
+        }),
+        handler,
+    )
+
+    payload = json.loads(result.content)
+    assert payload["observation"]["error_code"] == "ACTION_SCHEMA_INVALID"
+    assert "filters must be empty or exactly match" in payload["observation"]["message"]
+    assert called is False
+    assert context.failed is False
+    assert context.step_count == 0
+    assert context.query_count == 0
+
+
+def test_unscoped_gmv_discovery_requires_channel_category_and_product_drilldowns() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.target_metric_id = "gmv"
+    context.discovery_policy = DiscoveryPolicy(required_drilldowns=("channel", "category", "product"))
+    context.repository = _Repository(
+        [
+            {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_channel", "run_id": "run-1", "guard_status": "passed"},
+        ]
+    )
+    middleware = GuardMiddleware(context)
+    called = False
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_ch_paid_ads"]})
+
+    result = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "campaign",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "evidence_ids": ["run-1:E1", "run-1:E2_channel"],
+        }),
+        handler,
+    )
+
+    payload = json.loads(result.content)
+    assert payload["observation"]["error_code"] == "EVIDENCE_MISSING"
+    assert "E2_category" in payload["observation"]["message"]
+    assert "E2_product" in payload["observation"]["message"]
+    assert called is False
+    assert context.failed is False
+    assert context.step_count == 0
+    assert context.query_count == 0
+
+
+def test_unscoped_gmv_discovery_allows_fetch_after_required_drilldowns() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.target_metric_id = "gmv"
+    context.discovery_policy = DiscoveryPolicy(required_drilldowns=("channel", "category", "product"))
+    context.repository = _Repository(
+        [
+            {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_channel", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_category", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_product", "run_id": "run-1", "guard_status": "passed"},
+        ]
+    )
+    middleware = GuardMiddleware(context)
+
+    result = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "campaign",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "evidence_ids": ["run-1:E1", "run-1:E2_channel"],
+        }),
+        lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_ch_paid_ads"]}),
+    )
+
+    assert json.loads(result.content)["observation"]["ok"] is True
+    assert context.failed is False
+
+
+def test_broad_overall_gmv_discovery_requires_channel_campaign_first_e3() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.target_metric_id = "gmv"
+    context.discovery_policy = DiscoveryPolicy(
+        required_drilldowns=("channel", "category", "product"),
+        first_signal_dimension="channel",
+        first_signal_type="campaign",
+    )
+    middleware = GuardMiddleware(context)
+    called = False
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_cat_electronics"]})
+
+    result = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "inventory",
+            "dimension": "category",
+            "element": "electronics",
+            "evidence_ids": ["run-1:E1", "run-1:E2_category"],
+        }),
+        handler,
+    )
+
+    payload = json.loads(result.content)
+    assert payload["observation"]["error_code"] == "ACTION_SCHEMA_INVALID"
+    assert "dimension=channel" in payload["observation"]["message"]
+    assert "signal_type=campaign" in payload["observation"]["message"]
+    assert called is False
+    assert context.failed is False
+    assert context.step_count == 0
+    assert context.query_count == 0
+
+
+def test_channel_first_policy_allows_non_top_channel_candidate_element() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.discovery_policy = discovery_policy_from_intent(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date="2026-06-05",
+            question_family="gmv_drop",
+            analysis_strategy="channel_first",
+        )
+    )
+    context.repository = _Repository(
+        [
+            {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
+            {
+                "evidence_id": "run-1:E2_channel",
+                "run_id": "run-1",
+                "guard_status": "passed",
+                "result_summary": {
+                    "candidates": [
+                        {"dimension": "channel", "element": "paid_ads"},
+                        {"dimension": "channel", "element": "organic"},
+                    ]
+                },
+            },
+            {"evidence_id": "run-1:E2_category", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_product", "run_id": "run-1", "guard_status": "passed"},
+        ]
+    )
+    middleware = GuardMiddleware(context)
+    called = False
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_ch_organic"]})
+
+    result = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "campaign",
+            "dimension": "channel",
+            "element": "organic",
+            "evidence_ids": ["run-1:E1", "run-1:E2_channel"],
+        }),
+        handler,
+    )
+
+    payload = json.loads(result.content)
+    assert payload["observation"]["ok"] is True
+    assert called is True
+    assert context.failed is False
+
+
+def test_first_signal_policy_enforces_structured_element_without_question_text() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.discovery_policy = discovery_policy_from_intent(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date="2026-06-05",
+            question_family="gmv_drop",
+            analysis_strategy="organic_first",
+        )
+    )
+    context.repository = _Repository(
+        [
+            {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_channel", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_category", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_product", "run_id": "run-1", "guard_status": "passed"},
+        ]
+    )
+    middleware = GuardMiddleware(context)
+    called = False
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_ch_paid_ads"]})
+
+    rejected = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "campaign",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "evidence_ids": ["run-1:E1", "run-1:E2_channel"],
+        }),
+        handler,
+    )
+
+    payload = json.loads(rejected.content)
+    assert payload["observation"]["error_code"] == "ACTION_SCHEMA_INVALID"
+    assert "element=organic" in payload["observation"]["message"]
+    assert called is False
+    assert context.failed is False
+    assert context.step_count == 0
+    assert context.query_count == 0
+
+    accepted = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "campaign",
+            "dimension": "channel",
+            "element": "organic",
+            "evidence_ids": ["run-1:E1", "run-1:E2_channel"],
+        }),
+        lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_ch_organic"]}),
+    )
+
+    assert json.loads(accepted.content)["observation"]["ok"] is True
+    assert context.failed is False
+
+
+def test_repair_action_guard_rejects_drift_without_budget() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.required_repair_action = "rank_root_causes"
+    middleware = GuardMiddleware(context)
+    called = False
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E1"]})
+
+    result = middleware.wrap_tool_call(
+        _request("detect_anomaly", {"metric_id": "gmv", "target_date": "2026-06-05"}),
+        handler,
+    )
+
+    payload = json.loads(result.content)
+    assert payload["observation"]["error_code"] == "ACTION_SCHEMA_INVALID"
+    assert "reflection repair requires rank_root_causes" in payload["observation"]["message"]
+    assert called is False
+    assert context.failed is False
+    assert context.step_count == 0
+    assert context.query_count == 0
+
+
+def test_top_candidate_policy_rejects_malformed_e2_drilldown_summary() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.discovery_policy = DiscoveryPolicy(
+        first_signal_dimension="product",
+        first_signal_type="inventory",
+        enforce_first_signal_top_candidate=True,
+    )
+    context.repository = _Repository(
+        [
+            {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
+            {
+                "evidence_id": "run-1:E2_product",
+                "run_id": "run-1",
+                "guard_status": "passed",
+                "result_summary": {"metric_id": "gmv", "dimension": "product"},
+            },
+        ]
+    )
+    middleware = GuardMiddleware(context)
+    called = False
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_prod_2"]})
+
+    result = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "inventory",
+            "dimension": "product",
+            "element": "2",
+            "evidence_ids": ["run-1:E1", "run-1:E2_product"],
+        }),
+        handler,
+    )
+
+    payload = json.loads(result.content)
+    assert payload["observation"]["error_code"] == "ACTION_SCHEMA_INVALID"
+    assert "structured top-candidate drilldown evidence" in payload["observation"]["message"]
+    assert called is False
+    assert context.failed is False
+
+
+def test_first_signal_policy_does_not_parse_question_text() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.target_metric_id = "gmv"
+    context.question = "Why did overall GMV fall yesterday?"
+    context.repository = _Repository(
+        [
+            {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_channel", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_category", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_product", "run_id": "run-1", "guard_status": "passed"},
+        ]
+    )
+    middleware = GuardMiddleware(context)
+    called = False
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_cat_electronics"]})
+
+    result = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "inventory",
+            "dimension": "category",
+            "element": "electronics",
+            "evidence_ids": ["run-1:E1", "run-1:E2_category"],
+        }),
+        handler,
+    )
+
+    assert json.loads(result.content)["observation"]["ok"] is True
+    assert called is True
+    assert context.failed is False
+
+
+def test_merchandise_gmv_discovery_requires_product_inventory_first_e3() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.target_metric_id = "gmv"
+    context.discovery_policy = DiscoveryPolicy(
+        required_drilldowns=("channel", "category", "product"),
+        first_signal_dimension="product",
+        first_signal_type="inventory",
+    )
+    context.repository = _Repository(
+        [
+            {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_channel", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_category", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_product", "run_id": "run-1", "guard_status": "passed"},
+        ]
+    )
+    middleware = GuardMiddleware(context)
+
+    rejected = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "campaign",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "evidence_ids": ["run-1:E1", "run-1:E2_channel"],
+        }),
+        lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_cat_electronics"]}),
+    )
+
+    payload = json.loads(rejected.content)
+    assert payload["observation"]["error_code"] == "ACTION_SCHEMA_INVALID"
+    assert "dimension=product" in payload["observation"]["message"]
+    assert "signal_type=inventory" in payload["observation"]["message"]
+    assert context.failed is False
+    assert context.step_count == 0
+    assert context.query_count == 0
+
+    accepted = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "inventory",
+            "dimension": "product",
+            "element": "2",
+            "evidence_ids": ["run-1:E1", "run-1:E2_product"],
+        }),
+        lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_prod_2"]}),
+    )
+
+    assert json.loads(accepted.content)["observation"]["ok"] is True
+    assert context.failed is False
+
+
+def test_existing_e3_takes_precedence_over_product_first_retry_hint() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.target_metric_id = "gmv"
+    context.discovery_policy = DiscoveryPolicy(
+        required_drilldowns=("channel", "category", "product"),
+        first_signal_dimension="product",
+        first_signal_type="inventory",
+        enforce_first_signal_top_candidate=True,
+    )
+    context.repository = _Repository(
+        [
+            {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_channel", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_category", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_product", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E3_prod_2", "run_id": "run-1", "guard_status": "passed"},
+        ]
+    )
+    middleware = GuardMiddleware(context)
+    called = False
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_cat_electronics"]})
+
+    result = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "inventory",
+            "dimension": "category",
+            "element": "electronics",
+            "evidence_ids": ["run-1:E1", "run-1:E2_category"],
+        }),
+        handler,
+    )
+
+    payload = json.loads(result.content)
+    assert payload["observation"]["error_code"] == "E3_ALREADY_EXISTS"
+    message = payload["observation"]["message"]
+    assert "run-1:E3_prod_2 already exists" in message
+    assert "calculate_contribution" in message
+    assert "['run-1:E1', 'run-1:E2_product', 'run-1:E3_prod_2']" in message
+    assert "dimension=product" not in message
+    assert called is False
+    assert context.failed is False
+    assert context.step_count == 0
+    assert context.query_count == 0
+
+
+def test_first_budget_exhaustion_is_recoverable_then_next_data_tool_fails_run() -> None:
     writer = _TraceWriter()
     context = _context(writer, max_query=0)
     middleware = GuardMiddleware(context)
 
-    result = middleware.wrap_tool_call(
+    first = middleware.wrap_tool_call(
         _request("drilldown_dimension", {"metric_id": "gmv", "target_date": "2026-06-05", "dimension": "channel", "evidence_ids": ["run-1:E1"]}),
         lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E2"]}),
     )
+    second = middleware.wrap_tool_call(
+        _request("detect_anomaly", {"metric_id": "gmv", "target_date": "2026-06-05"}),
+        lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E1"]}),
+    )
 
-    payload = json.loads(result.content)
-    assert payload["observation"]["error_code"] == "BUDGET_EXCEEDED"
+    first_payload = json.loads(first.content)
+    second_payload = json.loads(second.content)
+    assert first_payload["observation"]["error_code"] == "BUDGET_EXCEEDED"
+    assert first_payload["observation"]["message"] == "query budget exhausted; call rank_root_causes or stop"
+    assert second_payload["observation"]["error_code"] == "BUDGET_EXCEEDED"
+    assert second_payload["observation"]["message"] == "data tool attempted after budget exhaustion"
     assert context.failed is True
     assert context.error_code == "BUDGET_EXCEEDED"
+    assert writer.steps[0]["error_code"] == "BUDGET_EXCEEDED"
+    assert writer.steps[1]["error_code"] == "BUDGET_EXCEEDED"
 
 
 def test_step_budget_allows_finalizer_and_rejects_data_tool() -> None:
@@ -334,12 +873,233 @@ def test_step_budget_allows_finalizer_and_rejects_data_tool() -> None:
         _request("detect_anomaly", {"metric_id": "gmv", "target_date": "2026-06-05"}),
         lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E1"]}),
     )
+    failed = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "campaign",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "evidence_ids": ["run-1:E2"],
+        }),
+        lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3"]}),
+    )
 
     assert json.loads(rank.content)["observation"]["ok"] is True
     assert json.loads(plan.content)["observation"]["ok"] is True
     assert json.loads(rejected.content)["observation"]["error_code"] == "BUDGET_EXCEEDED"
+    assert json.loads(rejected.content)["observation"]["message"] == "step budget exhausted; call rank_root_causes or stop"
+    assert json.loads(failed.content)["observation"]["error_code"] == "BUDGET_EXCEEDED"
+    assert json.loads(failed.content)["observation"]["message"] == "data tool attempted after budget exhaustion"
     assert context.failed is True
     assert context.error_code == "BUDGET_EXCEEDED"
+
+
+def test_drilldown_depth_exhaustion_does_not_block_followup_signal_tool() -> None:
+    writer = _TraceWriter()
+    context = _context(writer, max_drilldown_depth=1)
+    context.drilldown_depth = 1
+    middleware = GuardMiddleware(context)
+    called = False
+
+    exhausted = middleware.wrap_tool_call(
+        _request("drilldown_dimension", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "dimension": "warehouse",
+            "evidence_ids": ["run-1:E1", "run-1:E2_product"],
+        }),
+        lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E2_warehouse"]}),
+    )
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_prod_2"]})
+
+    signal = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "inventory",
+            "dimension": "product",
+            "element": "2",
+            "evidence_ids": ["run-1:E1", "run-1:E2_product"],
+        }),
+        handler,
+    )
+
+    assert json.loads(exhausted.content)["observation"]["error_code"] == "BUDGET_EXCEEDED"
+    assert json.loads(exhausted.content)["observation"]["message"] == "drilldown depth exhausted; call rank_root_causes or stop"
+    assert json.loads(signal.content)["observation"]["ok"] is True
+    assert called is True
+    assert context.budget_exhausted_once is False
+    assert context.failed is False
+
+
+def test_existing_drilldown_reuse_does_not_consume_or_trip_drilldown_depth() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.drilldown_depth = 2
+    context.query_count = 2
+    context.step_count = 2
+    context.repository = _Repository(
+        [
+            {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
+            {
+                "evidence_id": "run-1:E2_category",
+                "run_id": "run-1",
+                "guard_status": "passed",
+                "result_summary": {
+                    "metric_id": "gmv",
+                    "dimension": "category",
+                    "filters": {},
+                    "input_evidence_ids": ["run-1:E1"],
+                },
+            },
+            {
+                "evidence_id": "run-1:E2_channel",
+                "run_id": "run-1",
+                "guard_status": "passed",
+                "result_summary": {
+                    "metric_id": "gmv",
+                    "dimension": "channel",
+                    "filters": {},
+                    "input_evidence_ids": ["run-1:E1"],
+                },
+            },
+        ]
+    )
+    middleware = GuardMiddleware(context)
+    calls = 0
+
+    def handler(request):
+        nonlocal calls
+        calls += 1
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E2_channel"]})
+
+    result = middleware.wrap_tool_call(
+        _request("drilldown_dimension", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "dimension": "channel",
+            "evidence_ids": ["run-1:E1", "run-1:E2_category"],
+        }),
+        handler,
+    )
+
+    assert json.loads(result.content)["observation"]["ok"] is True
+    assert calls == 0
+    assert context.failed is False
+    assert context.budget_exhausted_once is False
+    assert context.step_count == 2
+    assert context.query_count == 2
+    assert context.drilldown_depth == 2
+
+
+def test_budget_exhaustion_allows_matching_e4_contribution_finalizer() -> None:
+    writer = _TraceWriter()
+    context = _context(writer, max_steps=1)
+    context.step_count = 1
+    context.budget_exhausted_once = True
+    context.repository = _Repository(
+        [
+            {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_channel", "run_id": "run-1", "guard_status": "passed"},
+            {
+                "evidence_id": "run-1:E3_ch_organic",
+                "run_id": "run-1",
+                "guard_status": "passed",
+                "result_summary": {"dimension": "channel", "element": "organic"},
+            },
+        ]
+    )
+    middleware = GuardMiddleware(context)
+
+    result = middleware.wrap_tool_call(
+        _request("calculate_contribution", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "dimension": "channel",
+            "element": "organic",
+            "evidence_ids": ["run-1:E1", "run-1:E2_channel", "run-1:E3_ch_organic"],
+        }),
+        lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E4"]}),
+    )
+    rejected = middleware.wrap_tool_call(
+        _request("calculate_contribution", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "evidence_ids": ["run-1:E1", "run-1:E2_channel", "run-1:E3_ch_organic"],
+        }),
+        lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E4"]}),
+    )
+
+    assert json.loads(result.content)["observation"]["ok"] is True
+    assert json.loads(rejected.content)["observation"]["error_code"] == "BUDGET_EXCEEDED"
+    assert json.loads(rejected.content)["observation"]["message"] == "data tool attempted after budget exhaustion"
+    assert context.failed is True
+    assert context.error_code == "BUDGET_EXCEEDED"
+
+
+def test_product_first_requires_strongest_product_candidate_element() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.target_metric_id = "gmv"
+    context.discovery_policy = DiscoveryPolicy(
+        required_drilldowns=("channel", "category", "product"),
+        first_signal_dimension="product",
+        first_signal_type="inventory",
+        enforce_first_signal_top_candidate=True,
+    )
+    context.repository = _Repository(
+        [
+            {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_channel", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_category", "run_id": "run-1", "guard_status": "passed"},
+            {
+                "evidence_id": "run-1:E2_product",
+                "run_id": "run-1",
+                "guard_status": "passed",
+                "result_summary": {
+                    "metric_id": "gmv",
+                    "dimension": "product",
+                    "filters": {},
+                    "input_evidence_ids": ["run-1:E1"],
+                    "candidates": [{"dimension": "product", "element": "2"}],
+                },
+            },
+        ]
+    )
+    middleware = GuardMiddleware(context)
+    called = False
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_prod_electronics"]})
+
+    result = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "inventory",
+            "dimension": "product",
+            "element": "electronics",
+            "evidence_ids": ["run-1:E1", "run-1:E2_product"],
+        }),
+        handler,
+    )
+
+    payload = json.loads(result.content)
+    assert payload["observation"]["error_code"] == "ACTION_SCHEMA_INVALID"
+    assert "element=2" in payload["observation"]["message"]
+    assert called is False
+    assert context.failed is False
+    assert context.step_count == 0
+    assert context.query_count == 0
 
 
 def test_data_tool_missing_evidence_id_is_typed_error() -> None:
@@ -401,6 +1161,8 @@ def test_existing_e3_blocks_additional_signal_fetch_before_e4_without_budget() -
         [
             {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
             {"evidence_id": "run-1:E2_channel", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_category", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_product", "run_id": "run-1", "guard_status": "passed"},
             {"evidence_id": "run-1:E3_ch_paid_ads", "run_id": "run-1", "guard_status": "passed"},
         ]
     )
@@ -426,8 +1188,11 @@ def test_existing_e3_blocks_additional_signal_fetch_before_e4_without_budget() -
 
     payload = json.loads(result.content)
     assert payload["observation"]["error_code"] == "E3_ALREADY_EXISTS"
-    assert "run-1:E3_ch_paid_ads already exists" in payload["observation"]["message"]
-    assert "calculate_contribution" in payload["observation"]["message"]
+    message = payload["observation"]["message"]
+    assert "run-1:E3_ch_paid_ads already exists" in message
+    assert "calculate_contribution" in message
+    assert "['run-1:E1', 'run-1:E2_channel', 'run-1:E3_ch_paid_ads']" in message
+    assert "E2_category" not in message
     assert called is False
     assert context.failed is False
     assert context.step_count == 0
@@ -466,6 +1231,94 @@ def test_placeholder_evidence_ids_do_not_trip_budget_before_typed_precondition_e
     assert context.budget_exhausted_once is False
 
 
+def test_calculate_contribution_rejects_dimension_that_does_not_match_e3() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.repository = _Repository(
+        [
+            {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_category", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_product", "run_id": "run-1", "guard_status": "passed"},
+            {
+                "evidence_id": "run-1:E3_prod_2",
+                "run_id": "run-1",
+                "guard_status": "passed",
+                "result_summary": {"dimension": "product", "element": "2"},
+            },
+        ]
+    )
+    middleware = GuardMiddleware(context)
+    called = False
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E4"]})
+
+    result = middleware.wrap_tool_call(
+        _request("calculate_contribution", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "dimension": "category",
+            "element": "electronics",
+            "evidence_ids": ["run-1:E1", "run-1:E2_category", "run-1:E3_prod_2"],
+        }),
+        handler,
+    )
+
+    payload = json.loads(result.content)
+    assert payload["observation"]["error_code"] == "EVIDENCE_MISSING"
+    assert "dimension=product" in payload["observation"]["message"]
+    assert called is False
+    assert context.failed is False
+    assert context.step_count == 0
+    assert context.query_count == 0
+
+
+def test_calculate_contribution_requires_e2_alias_matching_e3_family() -> None:
+    writer = _TraceWriter()
+    context = _context(writer)
+    context.repository = _Repository(
+        [
+            {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_category", "run_id": "run-1", "guard_status": "passed"},
+            {"evidence_id": "run-1:E2_product", "run_id": "run-1", "guard_status": "passed"},
+            {
+                "evidence_id": "run-1:E3_prod_2",
+                "run_id": "run-1",
+                "guard_status": "passed",
+                "result_summary": {"dimension": "product", "element": "2"},
+            },
+        ]
+    )
+    middleware = GuardMiddleware(context)
+    called = False
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E4"]})
+
+    result = middleware.wrap_tool_call(
+        _request("calculate_contribution", {
+            "metric_id": "gmv",
+            "target_date": "2026-06-05",
+            "dimension": "product",
+            "element": "2",
+            "evidence_ids": ["run-1:E1", "run-1:E2_category", "run-1:E3_prod_2"],
+        }),
+        handler,
+    )
+
+    payload = json.loads(result.content)
+    assert payload["observation"]["error_code"] == "EVIDENCE_MISSING"
+    assert "E2_product" in payload["observation"]["message"]
+    assert called is False
+    assert context.failed is False
+    assert context.step_count == 0
+    assert context.query_count == 0
+
+
 def test_trace_step_persists_token_usage() -> None:
     writer = _TraceWriter()
     context = _context(writer)
@@ -482,10 +1335,20 @@ def test_trace_step_persists_token_usage() -> None:
     assert writer.steps[-1]["token_usage"] == {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}
 
 
-def _context(writer: "_TraceWriter", *, max_query: int = 12, max_steps: int = 8) -> RunGuardContext:
+def _context(
+    writer: "_TraceWriter",
+    *,
+    max_query: int = 12,
+    max_steps: int = 8,
+    max_drilldown_depth: int = 2,
+) -> RunGuardContext:
     return RunGuardContext(
         run_id="run-1",
-        settings=SimpleNamespace(max_steps=max_steps, max_query=max_query, max_drilldown_depth=2),
+        settings=SimpleNamespace(
+            max_steps=max_steps,
+            max_query=max_query,
+            max_drilldown_depth=max_drilldown_depth,
+        ),
         trace_writer=writer,
         tool_arg_schemas={
             "detect_anomaly": DetectAnomalyIn,
