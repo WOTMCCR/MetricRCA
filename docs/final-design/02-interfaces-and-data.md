@@ -128,17 +128,23 @@ adtributor_t_eep: float = 0.10
 > 和 `METRIC_RCA_LLM_STRUCTURED_OUTPUT_METHOD` 完成。兼容 provider 不得静默读取
 > `OPENAI_API_KEY` 作为第三方 key；缺少 key/base_url 必须 typed fail-fast。
 
-> **模型下限（ADL-0009）**：eval 必须用具备稳健指令遵循能力的模型（下限
-> `gpt-4.1` 同级或更强；**不接受 `gpt-4.1-mini` 作为验收模型**——P7 早期 eval 的
-> 指标漂移多源于弱模型）。Makefile `eval` 目标须显式传 `METRIC_RCA_LLM_PROVIDER`
-> / `METRIC_RCA_LLM_MODEL` / `METRIC_RCA_LLM_API_KEY`。验收用的 provider/model 记入
-> eval_run.summary 以便审计。守卫是纵深防御，不得用来补偿弱模型的解析能力。
+> **模型策略（ADL-0009 → ADL-0012 修订）**：eval 必须用具备稳健指令遵循能力的
+> 模型。可接受：GPT-5 家族（含 Nano）、GPT-4.1（非 mini）、DeepSeek-V3 等同级模型。
+> **不接受已知弱模型**（gpt-4.1-mini、gpt-3.5-turbo 等）。不再用硬编码黑名单拦截；
+> 由 eval 结果 + 审查人工判定模型是否足够。Makefile `eval` 目标须显式传
+> `METRIC_RCA_LLM_PROVIDER` / `METRIC_RCA_LLM_MODEL` / `METRIC_RCA_LLM_API_KEY`。
+> 验收用的 provider/model 记入 eval_run.summary 以便审计。守卫是纵深防御，不得用来
+> 补偿弱模型的解析能力。
+>
+> **Per-request LLM 选择（ADL-0012，P8 范围）**：`RunCreateRequest` 将新增可选字段
+> `llm_provider`/`llm_model`/`llm_api_key`，传入时覆盖 Settings 默认值（作用域
+> 仅限该 run）。eval HTTP 客户端利用此机制在同一后端实例上同时对比多 provider 结果。
 
 ## 8. 错误码增量
 
 | 错误码 | 场景 | recoverable |
 |---|---|---|
-| BUDGET_EXCEEDED | middleware 预算硬中断后 LLM 仍越权 | 否（run failed） |
+| BUDGET_EXCEEDED | 首次预算耗尽时提示只能 rank/结束；预算耗尽后再次调用 data-fetching 工具则 run failed | 首次是；重复越权否 |
 | NO_ANOMALY_CONTRACT_VIOLATED | 无异常却出现下钻/rank/任务 | 否 |
 | E3_ALREADY_EXISTS | E4 前已有 E3-family signal，阻止额外 fetch 并引导 calculate_contribution | 是 |
 | E4_ALREADY_EXISTS | 当前 run 已有 E4，阻止不同选择覆盖并引导 rank_root_causes | 是 |

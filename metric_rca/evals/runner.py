@@ -255,9 +255,16 @@ def _thresholds_met(summary: dict[str, Any]) -> bool:
     )
 
 
+_KNOWN_WEAK_MODELS = frozenset({"gpt-4.1-mini", "gpt-4.1-nano", "gpt-3.5-turbo"})
+
+
 def _validate_eval_model(settings: Settings) -> None:
-    if settings.llm_model == "gpt-4.1-mini":
-        raise EvalRuntimeError("EVAL_MODEL_TOO_WEAK", "P7 acceptance requires gpt-4.1 or stronger, not gpt-4.1-mini")
+    model = (settings.llm_model or "").lower()
+    if model in _KNOWN_WEAK_MODELS:
+        raise EvalRuntimeError(
+            "EVAL_MODEL_TOO_WEAK",
+            f"eval requires a capable model (GPT-5 family / GPT-4.1 / DeepSeek-V3), not {settings.llm_model}",
+        )
 
 
 def _run_id(eval_id: str, case_id: str) -> str:

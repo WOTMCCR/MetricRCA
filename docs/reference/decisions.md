@@ -1,3 +1,57 @@
+## ADL-0012: eval 解耦为 HTTP 客户端 + per-request LLM 选择 + GPT-5 Nano 验收策略
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-14 |
+| 状态 | accepted |
+| 关联迭代 | P8 eval-backend decoupling（合并原 P8 memory + observability） |
+| 影响范围 | API RunCreateRequest, eval runner 架构, Settings model floor, phase plan |
+
+### 背景与场景
+
+P7 迭代暴露 eval 架构的两个结构性缺陷：(1) eval runner 直接 `from metric_rca.agent.runner import run_rca`，完全绕过 API 层——FastAPI 路由/schema 校验/错误映射从未被 eval 真正测过；(2) LLM provider/model 是进程级配置（环境变量），不支持同一后端实例在不同请求中使用不同模型。用户需要同时提交 OpenAI (GPT-5 Nano) 和 DeepSeek eval 并对比结果。
+
+另外，ADL-0009 的模型下限 (≥gpt-4.1) 用黑名单 `gpt-4.1-mini` 实现，过于脆弱——GPT-5 Nano 是 GPT-5 家族模型，指令遵循远强于 4.1-mini，应当被允许。
+
+### 决策
+
+#### D1: eval 解耦为 HTTP 客户端（P8 范围）
+
+eval runner 拆分两层：
+- **eval server-side**（保留现有 `POST /api/evals/run`）：仍可在进程内直调，用于 CI 和简单场景。
+- **eval client**（新 `metric_rca/evals/client.py`）：纯 HTTP 客户端，逐 case 发 `POST /api/rca/runs`，通过现有 `GET /runs/{id}/evidence` 等端点读 persisted artifacts，本地评分。ground truth 内嵌 `cases.jsonl`（每行加 `expected_*` 字段），eval client 不需 DB 连接。
+
+`make eval` 默认仍走直调模式（零配置）；`make eval-http BASE_URL=http://localhost:8000` 走 HTTP 客户端模式。
+
+#### D2: per-request LLM provider/model
+
+`RunCreateRequest` 新增可选字段 `llm_provider`/`llm_model`/`llm_api_key`。传入时覆盖 Settings 默认值，作用域仅限该 run。未传则沿用环境变量。这允许同一后端实例在不同请求中用不同模型。
+
+#### D3: 模型门槛策略
+
+删除 `_validate_eval_model` 中的 `gpt-4.1-mini` 硬编码黑名单。改为：
+- eval summary 必须记录 `provider + model`（已实现）。
+- 验收审查时人工判断模型能力是否足够（从 eval 结果倒推）。
+- GPT-5 家族（含 Nano）、GPT-4.1（非 mini）、DeepSeek-V3 均为可接受的验收模型。
+- 若 intent_accuracy < 1.0 且模型为已知弱模型，审查可要求升级模型重跑。
+
+### 理由
+
+eval 测的是"自然问句 → RCA"全链路，理应走 API 层。per-request 模型让对比实验成为配置问题而非部署问题。模型黑名单维护成本高于收益——eval 结果本身就是模型能力的最终判定。
+
+### 被否决的方案
+
+- 为每个 provider 部署独立后端实例：运维复杂度过高。
+- eval 始终走 HTTP（删除直调模式）：增加 CI 复杂度，seed/test 不需要跑真 LLM。
+- 保留 `gpt-4.1-mini` 黑名单并追加更多弱模型：无穷列表问题。
+
+### 后续跟进
+
+- P8 实现 eval client + per-request LLM 覆盖。
+- 考虑 cases.jsonl 支持 per-case `llm_model` 字段（允许单 case 指定模型）。
+
+---
+
 ## ADL-0011: LLM provider 通过 OpenAI-compatible 配置适配，禁止跨 provider key 替换
 
 | 字段 | 值 |

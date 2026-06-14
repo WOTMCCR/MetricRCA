@@ -38,14 +38,24 @@ COMPLIANCE_MATRIX 无红行。
 
 验收：20/20 intent 与 anomaly；top1≥80%、top3≥90%；C19/C20 零误报。
 
-## P8（09）记忆 + 可观测 — codex/p8-memory-observability
+## P8（09）记忆 + 可观测 + eval 解耦 — codex/p8-memory-observability
 
 1. 记忆四层（semantic seed 生成、episodic 写入、reflection 写入、case 冻结）。
 2. memory retrieval eval（带/不带命中对照 + 零污染断言）。
 3. UI 面板：Adtributor 候选、记忆分层、token/latency 看板。
+4. **eval-backend 解耦（ADL-0012）**：
+   a. `RunCreateRequest` 新增可选 `llm_provider`/`llm_model`/`llm_api_key`，
+      per-run 覆盖 Settings 默认值。
+   b. 新 `metric_rca/evals/client.py`（HTTP eval 客户端）：逐 case 发
+      `POST /api/rca/runs`，通过 `GET /runs/{id}/evidence` 等端点读 artifacts，
+      本地评分。ground truth 内嵌 cases.jsonl。
+   c. `make eval-http BASE_URL=... PROVIDER=... MODEL=...` 目标。
+   d. 删除 `_validate_eval_model` 黑名单；模型能力由 eval 结果 + 审查判定。
+5. **per-provider eval 对比**：eval summary 按 provider/model 分组统计
+   token/latency/accuracy。
 
-验收：命中组正确率 ≥ 无命中组；memory_pollution_ok=100%；UI 测试
-（injectable fake client）全绿。
+验收：命中组正确率 ≥ 无命中组；memory_pollution_ok=100%；UI 测试全绿；
+eval-http 模式同一后端 + 两个 provider 各跑 20 case 均 green。
 
 ## P9（10）Multi-Agent + 收尾 — codex/p9-multiagent-final
 
