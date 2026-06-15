@@ -689,7 +689,23 @@ step5 ACTION  finish
 
 记忆表结构见第 9 节 `memory_record`。
 
-**1 个月**：拆 semantic（指标定义 / 字段别名 / 业务规则）、episodic（历史异常案例）、reflection（失败教训）。是否需要向量库：仅当 case / episodic 数量大且需语义检索时引入（如 pgvector / Faiss）；MVP 用 `key` 精确匹配即可，**不为堆概念牺牲稳定性**。
+**P8 active memory v2**：`memory_record` 使用四层语义，不新增表、不引入向量库：
+
+| layer | 写入时机 | 内容 | 读取影响 |
+|---|---|---|---|
+| `semantic` | `make seed` 由 `metric_definition` / schema metadata 派生 | 指标别名、业务规则、维度含义 | 仅进入 intent/expert context |
+| `episodic` | run 终态化成功或 no_anomaly | metric_id、dimension、root_cause_type、verdict、run_id 摘要 | 调整下钻优先级 |
+| `reflection` | run failed 或发生 repair | error_code、Reflection issues、证据缺口 | 调整专家提示 |
+| `case` | legacy / v1 记录冻结只读 | 历史 case | 与 episodic 同样只影响规划 |
+
+Migration/seed 规则：`make seed` 在清空重建时生成 semantic 记录；保留式迁移必须把
+`layer IS NULL` 或不在四层集合内的旧记录更新为 `case`，使旧 memory 仍可读但不再被新 run
+覆盖。semantic 记录不得在运行时代码中硬编码，必须从持久化 metadata/schema 派生。
+
+污染控制继续强制：memory hit 只调 drilldown priority；`reflection_factor <= 1.2`；
+`memory_id` 永远不能进入 `candidate.evidence_ids` 或 report `numeric_claims`。P8 eval 增加
+memory enabled/disabled paired run：同一 case 各跑一次，启用 memory 的正确率不得低于禁用
+memory，且 `memory_pollution_ok=true`。
 
 ---
 
@@ -1159,6 +1175,12 @@ from pydantic import BaseModel
 class RunCreateRequest(BaseModel):
     question: str
     target_date: str | None = None     # 默认 2026-06-05
+    business_today: str | None = None
+    memory_enabled: bool | None = None
+    memory_required: bool | None = None
+    llm_provider: str | None = None     # per-request override, not persisted
+    llm_model: str | None = None        # per-request override, recorded only as provider/model
+    llm_api_key: str | None = None      # per-request secret, never logged/returned/persisted
 
 class RunCreateResponse(BaseModel):
     run_id: str
@@ -1239,8 +1261,10 @@ P3B/P4 约束：`generate_report` 只能做 verified artifact projection，不�
 - **sql_audit 表**：每条 SQL 的 hash / guard_status / guard_errors / row_count / latency。
 - **error event**：trace_step.error_code + agent_run.error_code。
 - **latency 指标**：每 node latency_ms；run 总时长。
-- **token usage（可选）**：1 月接入。
-- **UI 展示 trace**：React/Vite debug UI 通过 FastAPI 按 run_id 读取 trace_step 时序、每步动作 / 观察、evidence、SQL audit、Reflection issues 与 memory status。
+- **token usage（P8 active）**：`trace_step.token_usage` 记录每次 LLM call 的
+  prompt/completion/total token；`agent_run` API 投影提供 `token_summary`（总 token、总
+  latency、按 llm/tool/trace step breakdown），数值只能由 persisted `trace_step` 聚合。
+- **UI 展示 trace**：React/Vite debug UI 通过 FastAPI 按 run_id 读取 trace_step 时序、每步动作 / 观察、evidence、SQL audit、Reflection issues、memory layer records 与 token/latency status。
 - **失败 RCA 复盘**：查 status=failed 的 run，看 error_code 落在哪个 node。
 - **重放 / 重构**：因 QuerySpec / SQL / seed 确定，可用相同 run 输入 + 固定 seed 重构同一 RCA 过程；trace_step 提供完整时序还原。
 
@@ -1251,6 +1275,21 @@ P3B/P4 约束：`generate_report` 只能做 verified artifact projection，不�
 eval case schema 见第 2 节 `EvalCase`；ground truth 存 `anomaly_ground_truth`。
 
 evaluator pipeline（`make eval`）：对每个 case 跑 RCA（case 之间可用 `METRIC_RCA_EVAL_CONCURRENCY` 并发，默认 1；单个 RCA run 内部仍保持 E1 → E2 → E3 → E4 → E_rank 的顺序 evidence loop）→ 从 DB 读取 persisted artifacts（agent_run / evidence / trace_step / sql_audit / operation_task / reconstructed report）→ 比对 anomaly_ground_truth → 打分 → 写 eval_run / eval_case_result → 输出结构化 JSON + Markdown。Eval 不使用 graph 内存态作为评分来源，避免把未持久化输出误判为系统真实能力。Eval runner 仅对明确 typed transient 错误（LLM rate/timeout/unavailable、`SYSTEM_TABLE_WRITE_FAILED`）做有界同 case retry（`eval_llm_max_attempts` 默认 3 且必须 ≥1），并将 `eval_attempts` 记录到 case detail；最终仍只按成功 attempt 的 persisted artifacts 判分，重试耗尽即失败，不放宽 scorer/threshold。
+
+P8 adds an HTTP eval client while preserving direct `make eval`:
+
+- `python -m metric_rca.evals.client --base-url http://localhost:8000 --provider openai --model gpt-5-nano`
+  reads `cases.jsonl`, sends `POST /api/rca/runs` per case with per-request
+  provider/model/API-key overrides, and reads `/runs/{id}`, `/evidence`, `/trace`,
+  `/sql-audit`, and `/tasks` to score locally.
+- The HTTP client must not import `run_rca`, `MetricRepository`, or any DB-backed
+  repository. Local HTTP calls use `httpx.Client(trust_env=False)` so localhost
+  traffic does not leak through proxy environment variables.
+- `cases.jsonl` embeds `expected_metric_id`, `expected_anomaly`,
+  `expected_root_cause_type`, `expected_dimension`, and `expected_element`, so
+  HTTP eval needs no DB ground-truth access.
+- `make eval-http BASE_URL=... PROVIDER=openai MODEL=gpt-5-nano` is additive;
+  `make eval` remains direct-call mode for CI and local DB-backed runs.
 
 并发 eval 约束：每个 worker 必须使用独立 `RunOrchestrator` / `MetricRepository` / `TraceWriter`，不得共享注入的可变 repository；主线程用完成即收集的 future 调度，并按 cases 输入 index 还原最终输出顺序；`eval_run.summary` 只能由主线程最后写入；`make seed` 不并发且只在开跑前执行一次；eval case settings 禁用 memory，避免并发记忆污染。
 
@@ -1330,6 +1369,9 @@ P5 必须额外校验：
 - Reflection issues 与 repair trace
 - Memory hits / memory status
 - Eval summary（eval_run / eval_case_result）
+- Adtributor candidates（EP / surprise sorted from persisted E_rank/E4 candidates）
+- Memory layer viewer（semantic / episodic / reflection / case rows for the run）
+- Token / latency dashboard（per-run total and per-step breakdown）
 
 **安全要求**：
 
@@ -1364,6 +1406,7 @@ seed: python -m metric_rca.data.seed_data
 api:  uvicorn metric_rca.api.main:app --reload
 ui:   npm run dev --prefix frontend
 eval: python -m metric_rca.evals.runner
+eval-http: python -m metric_rca.evals.client --base-url $(BASE_URL) --provider $(PROVIDER) --model $(MODEL)
 test: pytest -q
 ```
 
