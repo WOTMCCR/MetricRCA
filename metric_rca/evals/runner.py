@@ -262,6 +262,8 @@ def _run_memory_cases(
 ) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     for case in cases:
+        # Keep the memory prepass sequential and write-isolated: each case reads
+        # only seed/pre-existing memory, never memory produced by another eval case.
         score = _run_and_score_case(
             case=case,
             ground_truth=ground_truth[case.case_id],

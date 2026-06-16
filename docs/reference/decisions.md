@@ -1,3 +1,43 @@
+## ADL-0030: Production discovery 可读取无 scope 的 run memory
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-16 |
+| 状态 | accepted |
+| 关联迭代 | P8 memory observability eval decoupling |
+| 影响范围 | RunOrchestrator memory read scope, eval memory isolation |
+
+### 背景与场景
+
+P8 修复了 direct eval memory prepass 的 case 间污染：eval memory leg 读取 seed/pre-existing memory，
+但不写 episodic/reflection run memory。对抗审查指出 production discovery run 的 `scope={}` 仍会读取
+`metric|run` 下无 filters 的 episodic/reflection 命中，后续 discovery run 可能看到历史 run context。
+
+### 决策
+
+保留 production 行为：discovery scope 可以读取无 filters 的 trusted run memory；scoped case 只读取
+同 scope 命中。Eval 通过 `memory_write_on_finalize=false` 做读写隔离，避免同一轮 eval case 相互污染。
+
+### 理由
+
+Production memory 是规划输入，用于影响 drilldown priority 和历史 context；无 scope discovery 没有
+更窄过滤条件，读取无 filters 的同 metric run memory 是有意设计。Memory 仍不能成为 final conclusion，
+报告和评分必须依赖当前 run evidence。Eval 的目标是测 memory read influence，不是让 eval case 互相训练，
+所以 eval 采用单独的写隔离。
+
+### 被否决的方案
+
+- 在 production discovery 中丢弃所有无 filters 的 episodic/reflection memory：会让历史 discovery
+  经验无法影响规划优先级，削弱 P8 memory v2 的生产用途。
+- 对 production 使用 eval snapshot 隔离：会把 eval-only 边界带入正常运行，且增加 repository/query 复杂度。
+- 允许 scoped case 读取无 filters run memory：会把宽 scope 历史提示注入明确 slice 问题，边界过宽。
+
+### 后续跟进
+
+P9+ 可评估 confidence decay、TTL、target_date/time-window filtering，避免长期历史过量影响 discovery。
+
+---
+
 ## ADL-0029: Direct eval memory prepass 只读 memory，不写 run memory
 
 | 字段 | 值 |
