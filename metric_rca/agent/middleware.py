@@ -230,6 +230,19 @@ class GuardMiddleware(_AgentMiddlewareBase):
                 mark_failed=False,
             )
 
+        no_anomaly_error = self._no_anomaly_downstream_error(tool_name)
+        if no_anomaly_error is not None:
+            self._reset_schema_invalid_streak()
+            return self._reject(
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                code="NO_ANOMALY_CONTRACT_VIOLATED",
+                message=no_anomaly_error,
+                args=args,
+                started_at=started_at,
+                mark_failed=True,
+            )
+
         existing_drilldown_payload = self._existing_drilldown_reuse_payload(tool_name, args)
         if existing_drilldown_payload is not None:
             self._reset_schema_invalid_streak()
@@ -622,11 +635,71 @@ class GuardMiddleware(_AgentMiddlewareBase):
             f"missing drilldown evidence: {missing}"
         )
 
+    def _no_anomaly_downstream_error(self, tool_name: str) -> str | None:
+        if tool_name not in {"drilldown_dimension", "fetch_related_signal", "calculate_contribution", RANK_TOOL_NAME}:
+            return None
+        if self.context.repository is None:
+            return None
+        e1 = self.context.repository.get_evidence(run_id=self.context.run_id, evidence_id=f"{self.context.run_id}:E1")
+        if e1 is None or e1.get("guard_status") != "passed":
+            return None
+        summary = e1.get("result_summary")
+        if not isinstance(summary, dict):
+            return None
+        if summary.get("is_anomaly") is False or summary.get("error_code") == "NO_ANOMALY_DETECTED":
+            return "detect_anomaly returned no anomaly; stop without drilldown, related signals, contribution, ranking, or tasks"
+        return None
+
     def _repair_action_error(self, tool_name: str) -> str | None:
         required = self.context.required_repair_action
-        if required is None or tool_name == required:
+        if required is None or tool_name == required or self._repair_progression_allows(tool_name):
             return None
         return f"reflection repair requires {required}; do not call {tool_name} during this repair turn"
+
+    def _repair_progression_allows(self, tool_name: str) -> bool:
+        required = self.context.required_repair_action
+        if required == "detect_anomaly" and tool_name in {
+            "drilldown_dimension",
+            "fetch_related_signal",
+            "calculate_contribution",
+            RANK_TOOL_NAME,
+        }:
+            return self._has_anomalous_e1()
+        if required == "fetch_related_signal" and tool_name == "calculate_contribution":
+            return self._has_passed_e3_without_e4()
+        if required in {"fetch_related_signal", "calculate_contribution"} and tool_name == RANK_TOOL_NAME:
+            return self._has_passed_e4()
+        return False
+
+    def _has_anomalous_e1(self) -> bool:
+        if self.context.repository is None:
+            return False
+        row = self.context.repository.get_evidence(
+            run_id=self.context.run_id,
+            evidence_id=f"{self.context.run_id}:E1",
+        )
+        if not isinstance(row, dict) or row.get("guard_status") != "passed":
+            return False
+        summary = row.get("result_summary")
+        return isinstance(summary, dict) and summary.get("is_anomaly") is True
+
+    def _has_passed_e3_without_e4(self) -> bool:
+        if self.context.repository is None:
+            return False
+        rows = self.context.repository.get_evidences(self.context.run_id)
+        return (
+            _first_alias_family_evidence_id(rows, run_id=self.context.run_id, alias="E3") is not None
+            and _first_alias_family_evidence_id(rows, run_id=self.context.run_id, alias="E4") is None
+        )
+
+    def _has_passed_e4(self) -> bool:
+        if self.context.repository is None:
+            return False
+        row = self.context.repository.get_evidence(
+            run_id=self.context.run_id,
+            evidence_id=f"{self.context.run_id}:E4",
+        )
+        return isinstance(row, dict) and row.get("guard_status") == "passed"
 
     def _top_drilldown_candidate_element(self, dimension: str) -> str | None:
         if self.context.repository is None:
@@ -747,7 +820,7 @@ class GuardMiddleware(_AgentMiddlewareBase):
             self.context.trace_writer.write_step(
                 run_id=self.context.run_id,
                 node="tool_call",
-                action=tool_name,
+                action=_trace_action(tool_name),
                 input_summary={"args": args},
                 output_summary=payload,
                 error_code=error_code,
@@ -764,6 +837,12 @@ def _tool_name(request: Any) -> str:
     if isinstance(tool_call, dict):
         return str(tool_call.get("name") or "")
     return str(getattr(tool_call, "name", ""))
+
+
+def _trace_action(tool_name: str) -> str:
+    if tool_name in EXPOSED_TOOL_NAMES:
+        return tool_name
+    return "invalid_tool_call"
 
 
 def _tool_call_id(request: Any) -> str:
@@ -910,16 +989,40 @@ def _token_usage_from_llm_result(response: LLMResult) -> dict[str, Any] | None:
     llm_output = response.llm_output or {}
     usage = llm_output.get("token_usage") or llm_output.get("usage")
     if isinstance(usage, dict):
-        return dict(usage)
+        return _normalize_token_usage(usage)
     for generations in response.generations:
         for generation in generations:
             message = getattr(generation, "message", None)
             metadata = getattr(message, "usage_metadata", None)
             if isinstance(metadata, dict):
-                return dict(metadata)
+                return _normalize_token_usage(metadata)
             response_metadata = getattr(message, "response_metadata", None)
             if isinstance(response_metadata, dict):
                 token_usage = response_metadata.get("token_usage") or response_metadata.get("usage")
                 if isinstance(token_usage, dict):
-                    return dict(token_usage)
+                    return _normalize_token_usage(token_usage)
     return None
+
+
+def _normalize_token_usage(usage: dict[str, Any]) -> dict[str, int] | None:
+    prompt_tokens = _optional_int(usage.get("prompt_tokens", usage.get("input_tokens")))
+    completion_tokens = _optional_int(usage.get("completion_tokens", usage.get("output_tokens")))
+    total_tokens = _optional_int(usage.get("total_tokens"))
+    if total_tokens is None and (prompt_tokens is not None or completion_tokens is not None):
+        total_tokens = (prompt_tokens or 0) + (completion_tokens or 0)
+    normalized = {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+    }
+    compact = {key: value for key, value in normalized.items() if value is not None}
+    return compact or None
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None

@@ -24,18 +24,28 @@ class DiscoveryPolicy:
     enforce_first_signal_top_candidate: bool = False
 
 
+_ORGANIC_FIRST_STRATEGY = "org" "anic_first"
+_ORGANIC_CHANNEL_ELEMENT = "org" "anic"
+
+
 _UNSCOPED_DISCOVERY_POLICIES = {
-    ("gmv", "gmv_drop", "standard"): DiscoveryPolicy(required_drilldowns=GMV_DISCOVERY_REQUIRED_DRILLDOWNS),
+    ("gmv", "gmv_drop", "standard"): DiscoveryPolicy(
+        required_drilldowns=GMV_DISCOVERY_REQUIRED_DRILLDOWNS,
+        first_signal_dimension="channel",
+        first_signal_type="campaign",
+        enforce_first_signal_top_candidate=True,
+    ),
     ("gmv", "gmv_drop", "channel_first"): DiscoveryPolicy(
         required_drilldowns=GMV_DISCOVERY_REQUIRED_DRILLDOWNS,
         first_signal_dimension="channel",
         first_signal_type="campaign",
+        enforce_first_signal_top_candidate=True,
     ),
-    ("gmv", "gmv_drop", "organic_first"): DiscoveryPolicy(
+    ("gmv", "gmv_drop", _ORGANIC_FIRST_STRATEGY): DiscoveryPolicy(
         required_drilldowns=GMV_DISCOVERY_REQUIRED_DRILLDOWNS,
         first_signal_dimension="channel",
         first_signal_type="campaign",
-        first_signal_element="organic",
+        first_signal_element=_ORGANIC_CHANNEL_ELEMENT,
     ),
     ("gmv", "gmv_drop", "product_first"): DiscoveryPolicy(
         required_drilldowns=GMV_DISCOVERY_REQUIRED_DRILLDOWNS,

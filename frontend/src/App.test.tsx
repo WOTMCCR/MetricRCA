@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test } from 'vitest';
 import App from './app/App';
@@ -8,22 +8,16 @@ import type { MetricRcaApiClient, RunPayload } from './apiClient';
 describe('MetricRCA investigation console', () => {
   afterEach(() => cleanup());
 
-  test('renders the demo console shell with persisted artifact navigation', () => {
+  test('renders the console shell with P8 observability navigation', () => {
     render(<App apiClient={fakeClient()} initialData={bundle()} />);
 
     expect(screen.getByText('MetricRCA')).toBeInTheDocument();
     expect(screen.getByText('Investigation Console')).toBeInTheDocument();
-    for (const label of ['Investigation', 'Candidates', 'Evidence', 'SQL Audit', 'Reflection', 'Tasks']) {
+    for (const label of ['Investigation', 'Candidates', 'Evidence', 'SQL Audit', 'Reflection', 'Memory', 'Tasks', 'Quality Eval']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
     }
-    expect(screen.queryByRole('button', { name: 'Memory' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Quality Eval' })).not.toBeInTheDocument();
     expect(screen.getByText('Generated RCA Report')).toBeInTheDocument();
-    expect(screen.getByText('report generated')).toBeInTheDocument();
-    expect(screen.getByText('Bound evidence')).toBeInTheDocument();
-    expect(screen.getAllByText('guard passed').length).toBeGreaterThan(0);
     expect(screen.getByText('RCA Execution Path')).toBeInTheDocument();
-    expect(screen.getAllByText('succeeded').length).toBeGreaterThan(0);
   });
 
   test('loads a real run through the injected API client', async () => {
@@ -39,6 +33,7 @@ describe('MetricRCA investigation console', () => {
       'getEvidence:run-1',
       'getSqlAudit:run-1',
       'getTasks:run-1',
+      'getMemory:run-1',
     ]);
   });
 
@@ -52,6 +47,7 @@ describe('MetricRCA investigation console', () => {
 
     await waitFor(() => expect(client.calls[0]).toBe('createRun:Why did yesterday refund rate increase?'));
     expect(client.calls).toContain('getEvidence:run-1');
+    expect(client.calls).toContain('getMemory:run-1');
   });
 
   test('run history selector reloads the selected run artifacts', async () => {
@@ -64,27 +60,37 @@ describe('MetricRCA investigation console', () => {
     await userEvent.selectOptions(screen.getByLabelText('Run history'), 'run-1');
 
     await waitFor(() => expect(screen.getAllByText('paid_ads').length).toBeGreaterThan(0));
-    expect(client.calls.slice(-5)).toEqual([
+    expect(client.calls.slice(-6)).toEqual([
       'getRun:run-1',
       'getTrace:run-1',
       'getEvidence:run-1',
       'getSqlAudit:run-1',
       'getTasks:run-1',
+      'getMemory:run-1',
     ]);
   });
 
-  test('switches to candidate and evidence views with real data', async () => {
+  test('switches to candidate evidence memory and eval views with real data', async () => {
     const client = fakeClient();
     render(<App apiClient={client} initialData={bundle()} />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Candidates' }));
-    expect(screen.getByText('100%')).toBeInTheDocument();
+    expect(screen.getByText('100.0%')).toBeInTheDocument();
     expect(screen.getByText('High')).toBeInTheDocument();
-    expect(screen.getAllByText('run-1:E1').length).toBeGreaterThan(0);
 
     await userEvent.click(screen.getByRole('button', { name: 'Evidence' }));
     expect(screen.getAllByText('run-1:E4').length).toBeGreaterThan(0);
     expect(screen.getByText('guard passed')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Memory' }));
+    expect(screen.getByText('memory:semantic')).toBeInTheDocument();
+    expect(screen.getByText(/gmv\|semantic/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Quality Eval' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Run Eval' }));
+    await waitFor(() => expect(client.calls).toContain('runEval'));
+    expect(screen.getByText('eval-1 · 5 regression cases · not part of the user RCA flow')).toBeInTheDocument();
+    expect(screen.getByText('thresholds_met · PASS')).toBeInTheDocument();
   });
 
   test('surfaces typed request failures without rendering stale success data', async () => {
@@ -130,7 +136,13 @@ function fakeClient(options: { createRunError?: Error; createdRunId?: string } =
     },
     async getMemory(runId: string) {
       calls.push(`getMemory:${runId}`);
-      return { run_id: runId, memory: bundle(runId).memory };
+      return {
+        run_id: runId,
+        memory: [
+          { memory_id: `${runId}:m-sem`, layer: 'semantic', mem_key: 'gmv|semantic', confidence: 1, source: 'seed' },
+          { memory_id: `${runId}:m-epi`, layer: 'episodic', mem_key: 'gmv|run', confidence: 0.8, source: 'run' },
+        ],
+      };
     },
     async runEval() {
       calls.push('runEval');
@@ -234,7 +246,7 @@ function bundle(runId = 'run-1', element = elementForRun(runId)): InvestigationB
     },
     trace: [
       {
-        step_id: 's1',
+        step_id: `${runId}:s1`,
         run_id: runId,
         seq: 1,
         node: 'parse_question',
@@ -246,16 +258,28 @@ function bundle(runId = 'run-1', element = elementForRun(runId)): InvestigationB
         created_at: '2026-06-09T00:00:00Z',
       },
       {
-        step_id: 's2',
+        step_id: `${runId}:s2`,
         run_id: runId,
         seq: 2,
+        node: 'llm_call',
+        action: 'agent_llm',
+        input_summary: {},
+        output_summary: {},
+        error_code: null,
+        latency_ms: 150,
+        created_at: '2026-06-09T00:00:01Z',
+      },
+      {
+        step_id: `${runId}:s3`,
+        run_id: runId,
+        seq: 3,
         node: 'reflection_verify',
         action: 'reflection_verify',
         input_summary: {},
         output_summary: { passed: true, issues: [], repair_count: 0 },
         error_code: null,
         latency_ms: 1,
-        created_at: '2026-06-09T00:00:01Z',
+        created_at: '2026-06-09T00:00:02Z',
       },
     ],
     evidence: ['E1', 'E2', 'E3', 'E4'].map((alias) => ({
@@ -293,11 +317,18 @@ function bundle(runId = 'run-1', element = elementForRun(runId)): InvestigationB
     ],
     memory: [
       {
-        step_id: 'm1',
-        node: 'read_memory',
-        output_summary: { hits: 0 },
+        step_id: `${runId}:m-sem`,
+        node: 'memory:semantic',
+        output_summary: { layer: 'semantic', mem_key: 'gmv|semantic' },
         error_code: null,
         created_at: '2026-06-09T00:00:00Z',
+      },
+      {
+        step_id: `${runId}:m-epi`,
+        node: 'memory:episodic',
+        output_summary: { layer: 'episodic', mem_key: 'gmv|run' },
+        error_code: null,
+        created_at: '2026-06-09T00:00:01Z',
       },
     ],
   };

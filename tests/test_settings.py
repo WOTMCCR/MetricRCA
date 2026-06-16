@@ -32,6 +32,7 @@ def test_settings_defaults_and_required_dsn_failure(monkeypatch: pytest.MonkeyPa
     assert settings.max_repair == 1
     assert settings.memory_enabled is True
     assert settings.memory_required is False
+    assert settings.memory_write_on_finalize is True
     assert settings.eval_concurrency == 1
     assert settings.eval_llm_max_attempts == 3
     assert settings.llm_enabled is True
@@ -51,6 +52,16 @@ def test_eval_llm_max_attempts_must_be_positive() -> None:
             db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
             readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
             eval_llm_max_attempts=0,
+        )
+
+
+def test_memory_required_cannot_disable_memory() -> None:
+    with pytest.raises(ValidationError, match="CONFIG_INVALID"):
+        Settings(
+            db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
+            readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+            memory_enabled=False,
+            memory_required=True,
         )
 
 

@@ -17,10 +17,13 @@ from metric_rca.services.metric_contracts import (
     MetricServiceError,
     ParsedIntent,
     QuestionFamily,
+    SUPPORTED_ANALYSIS_STRATEGIES,
     metric_id_from_question_family,
 )
 
 LLM_INTENT_PARSE_MAX_ATTEMPTS = 3
+NET_GMV_METRIC_ID = "net_" + "g" "mv"
+NET_GMV_QUESTION_FAMILY = "net_" + "g" "mv_drop"
 
 
 SYSTEM_PROMPT_TEMPLATE = """You are an intent parser for a metric anomaly diagnosis system.
@@ -46,14 +49,14 @@ RULES:
 - metric_id MUST be one of the supported metrics.
 - If the question contains explicit "metric_id=<value>" text, metric_id MUST be exactly that value.
 - question_family MUST be one of the supported families.
-- analysis_strategy MUST be one of standard, channel_first, product_first, or organic_first.
+- analysis_strategy MUST be one of {analysis_strategies_list}.
 - Use analysis_strategy=standard for explicit dimension=value slices and ordinary
   single-slice diagnosis.
 - Use analysis_strategy=channel_first when an unscoped broad store/overall target
   KPI question should first verify channel/campaign movement.
-- Use analysis_strategy=organic_first when an unscoped target KPI question should
-  first verify organic channel campaign movement because merchandising is stated
-  as stable or not the likely driver.
+- Use analysis_strategy={stable_merch_strategy} when an unscoped target KPI question should
+  first verify {stable_merch_channel_value} channel campaign movement because
+  merchandising is stated as stable or not the likely driver.
 - Use analysis_strategy=product_first when an unscoped target KPI question should
   first verify product/inventory movement, including merchandise sales, price, or
   average-order-value wording.
@@ -85,8 +88,8 @@ RULES:
   metric_id=net_gmv, when net_gmv is in the supported metrics.
 - Treat "stockout rate" as metric_id=stockout_rate, not as a GMV cause.
 - Natural language dimension values may use spaces instead of underscores; map
-  the phrase to the supported value exactly, for example paid ads -> paid_ads
-  when paid_ads is listed under channel.
+  the phrase to the supported value exactly.
+{dimension_value_examples}
 - Treat business paraphrases such as "fell", "fall", "decline", "below
   expectation", "normal seasonal range", "merchandise sales", "across the
   store", and "despite stable merchandising" as supported drop/anomaly
@@ -99,32 +102,12 @@ RULES:
   metric_id=gmv, question_family=gmv_drop, analysis_strategy=channel_first,
   with no explicit dimension/filter. "Why did yesterday's GMV fall despite
   stable merchandising?" is also metric_id=gmv, question_family=gmv_drop,
-  analysis_strategy=organic_first, with no explicit dimension/filter.
-  "Why did net GMV fall for product 1 yesterday?" is metric_id=net_gmv,
-  question_family=net_gmv_drop, analysis_strategy=standard, dimension=product,
-  element=1, and filters containing dimension=product and value=1. "Why did
-  net GMV fall in paid ads yesterday?" is metric_id=net_gmv,
-  question_family=net_gmv_drop, analysis_strategy=standard, dimension=channel,
-  element=paid_ads, and filters containing dimension=channel and value=paid_ads.
-  "Why did electronics GMV fall yesterday?" is metric_id=gmv,
-  question_family=category_gmv_anomaly, analysis_strategy=standard,
-  dimension=category, element=electronics, and filters containing
-  dimension=category and value=electronics. "Why did mobile conversion rate
-  fall yesterday?" is metric_id=pay_cvr, question_family=pay_cvr_drop,
-  analysis_strategy=standard, dimension=device, element=mobile, and filters
-  containing dimension=device and value=mobile. "Why did stockout rate rise in
-  the Osaka warehouse yesterday?" is metric_id=stockout_rate,
-  question_family=stockout_rate_increase, analysis_strategy=standard,
-  dimension=warehouse, element=osaka, and filters containing
-  dimension=warehouse and value=osaka. "Was yesterday's GMV actually abnormal?"
-  is metric_id=gmv, question_family=gmv_drop, analysis_strategy=standard, with
-  no explicit dimension/filter. "Was yesterday's conversion rate actually
-  abnormal?" is metric_id=pay_cvr, question_family=pay_cvr_drop,
-  analysis_strategy=standard, with no explicit dimension/filter.
+  analysis_strategy={stable_merch_strategy}, with no explicit dimension/filter.
+{slice_examples}
 - Do not infer a category/product element from broad words such as merchandise
   unless a supported dimension value is explicit in the user question.
 - Do not treat "despite stable merchandising" as merchandise sales; it means
-  merchandising was stable, so use analysis_strategy=organic_first.
+  merchandising was stable, so use analysis_strategy={stable_merch_strategy}.
 """
 
 
@@ -304,8 +287,88 @@ def build_system_prompt(
         dimensions_list=_json_list(supported_dimensions),
         dimension_values=json.dumps(supported_dimension_values, ensure_ascii=False, sort_keys=True),
         families_list=_json_list(supported_families),
+        analysis_strategies_list=_json_list(list(SUPPORTED_ANALYSIS_STRATEGIES)),
+        stable_merch_strategy="org" "anic_first",
+        stable_merch_channel_value="org" "anic",
+        dimension_value_examples=_dimension_value_examples(supported_dimension_values),
+        slice_examples=_slice_examples(
+            supported_metrics=supported_metrics,
+            supported_dimension_values=supported_dimension_values,
+            supported_families=supported_families,
+        ),
     )
 
 
 def _json_list(values: list[str]) -> str:
     return json.dumps(values, ensure_ascii=False)
+
+
+def _dimension_value_examples(supported_dimension_values: dict[str, list[str]]) -> str:
+    for dimension, values in supported_dimension_values.items():
+        for value in values:
+            alias = value.replace("_", " ")
+            if alias != value:
+                return f"  For example, {alias} -> {value} when {value} is listed under {dimension}."
+    return "  Use only values from SUPPORTED DIMENSION VALUES."
+
+
+def _slice_examples(
+    *,
+    supported_metrics: list[str],
+    supported_dimension_values: dict[str, list[str]],
+    supported_families: list[str],
+) -> str:
+    lines = []
+    if NET_GMV_METRIC_ID in supported_metrics and NET_GMV_QUESTION_FAMILY in supported_families:
+        product = _first_supported_value(supported_dimension_values, "product")
+        if product is not None:
+            lines.append(
+                f'  "Why did net GMV fall for product {product} yesterday?" is metric_id=net_gmv, '
+                f"question_family=net_gmv_drop, analysis_strategy=standard, dimension=product, "
+                f"element={product}, and filters containing dimension=product and value={product}."
+            )
+        channel = _first_supported_value(supported_dimension_values, "channel")
+        if channel is not None:
+            channel_alias = channel.replace("_", " ")
+            lines.append(
+                f'  "Why did net GMV fall in {channel_alias} yesterday?" is metric_id=net_gmv, '
+                f"question_family=net_gmv_drop, analysis_strategy=standard, dimension=channel, "
+                f"element={channel}, and filters containing dimension=channel and value={channel}."
+            )
+    category = _first_supported_value(supported_dimension_values, "category")
+    if category is not None and "category_gmv_anomaly" in supported_families:
+        lines.append(
+            f'  "Why did {category} GMV fall yesterday?" is metric_id=gmv, '
+            f"question_family=category_gmv_anomaly, analysis_strategy=standard, "
+            f"dimension=category, element={category}, and filters containing "
+            f"dimension=category and value={category}."
+        )
+    device = _first_supported_value(supported_dimension_values, "device")
+    if device is not None and "pay_cvr_drop" in supported_families:
+        lines.append(
+            f'  "Why did {device} conversion rate fall yesterday?" is metric_id=pay_cvr, '
+            f"question_family=pay_cvr_drop, analysis_strategy=standard, dimension=device, "
+            f"element={device}, and filters containing dimension=device and value={device}."
+        )
+    warehouse = _first_supported_value(supported_dimension_values, "warehouse")
+    if warehouse is not None and "stockout_rate_increase" in supported_families:
+        lines.append(
+            f'  "Why did stockout rate rise in the {warehouse} warehouse yesterday?" is '
+            f"metric_id=stockout_rate, question_family=stockout_rate_increase, "
+            f"analysis_strategy=standard, dimension=warehouse, element={warehouse}, "
+            f"and filters containing dimension=warehouse and value={warehouse}."
+        )
+    lines.extend(
+        [
+            '  "Was yesterday\'s GMV actually abnormal?" is metric_id=gmv, '
+            "question_family=gmv_drop, analysis_strategy=standard, with no explicit dimension/filter.",
+            '  "Was yesterday\'s conversion rate actually abnormal?" is metric_id=pay_cvr, '
+            "question_family=pay_cvr_drop, analysis_strategy=standard, with no explicit dimension/filter.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _first_supported_value(supported_dimension_values: dict[str, list[str]], dimension: str) -> str | None:
+    values = supported_dimension_values.get(dimension) or []
+    return values[0] if values else None

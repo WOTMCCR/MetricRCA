@@ -23,10 +23,11 @@ DiscoveryPolicy 校验 → 预算计数 → 执行 → trace 落库（含 token_
 `fetch_related_signal`/`rank_root_causes` 前必须已有 `E2_channel`、
 `E2_category`、`E2_product`。自然语言 discovery 语义只由 LLM intent planner
 写入 `ParsedIntent.analysis_strategy`，再由 orchestrator 转成 `DiscoveryPolicy`；
-middleware 不重新解析 question 文本。`channel_first` policy 要求首个 E3/E4 chain
-使用 `dimension=channel` 与 `signal_type=campaign`，但不强制 `E2_channel`
-top candidate；`organic_first` policy 使用相同的 channel/campaign first-signal
-约束，并额外要求 `first_signal_element=organic`，该 element 来自结构化
+middleware 不重新解析 question 文本。标准无显式过滤 GMV discovery 与
+`channel_first` policy 要求首个 E3/E4 chain 使用 `dimension=channel`、
+`signal_type=campaign`，并绑定 `E2_channel` top candidate；`organic_first`
+policy 使用相同的 channel/campaign first-signal 约束，并额外要求
+`first_signal_element=organic`，该 element 来自结构化
 `ParsedIntent.analysis_strategy` 而不是 middleware keyword parser；`product_first` policy
 要求首个 E3/E4 chain 选 `E2_product` top candidate 并使用
 `signal_type=inventory`，由 E4 decomposition 验证 `aov_drop`。首个 E3-family signal 成功后必须进入
@@ -51,7 +52,9 @@ Orchestrator 判 `NO_ANOMALY_CONTRACT_VIOLATED` → failed。**宁可 fail 不�
 2. repair_count(0) < max_repair(1) → orchestrator 向同一 thread 注入 repair
    消息（issue + 建议动作 + exact suggested JSON args，并禁止文本回答），并把
    suggested_action.action 注入 `RunGuardContext.required_repair_action`。agent 重入后，
-   新增动作仍经 middleware/预算；非 suggested tool 的调用被 recoverable
+   第一 repair tool 必须是 suggested tool；后续只允许当前 run persisted Evidence 证明的
+   E3→E4→E_rank 续步（如补 E3 后调用 `calculate_contribution`，E4 后调用
+   `rank_root_causes`）。其它非 suggested/非证据续步的调用被 recoverable
    `ACTION_SCHEMA_INVALID` 拒绝且不消耗预算。
 3. 重新校验：passed → 继续投影；仍 error → REFLECTION_REPAIR_FAILED，failed。
 
@@ -114,8 +117,13 @@ artifacts** 判分 → eval_run/eval_case_result 落库 → JSON+Markdown 输出
 `adtributor_used`、`multi_agent_path`（路由 trace 摘要）；汇总新增
 token/latency 统计。并发 worker 使用独立 repository/orchestrator/trace writer；
 主线程按 future 完成顺序收集结果、按 case 输入 index 复原最终输出顺序，并最后写
-`eval_run.summary`；eval settings 禁用 memory。eval runner 只对明确 typed transient
-错误（LLM rate/timeout/unavailable、`SYSTEM_TABLE_WRITE_FAILED`）做有界同 case retry
-（`eval_llm_max_attempts` 默认 3 且必须 ≥1），`eval_attempts` 入 detail，最终仍按
-persisted artifacts 判分且重试耗尽失败。memory retrieval eval
+`eval_run.summary`；baseline eval leg 禁用 memory，P8 memory retrieval leg 成对运行
+memory enabled/disabled。eval runner 只对明确 typed transient
+LLM 错误（rate/timeout/unavailable）做有界同 case retry（`eval_llm_max_attempts`
+默认 3 且必须 ≥1），`eval_attempts` 入 detail。`SYSTEM_TABLE_WRITE_FAILED` 只在
+repository 写入边界做有界 retry；INSERT retry 必须有稳定幂等键并在 duplicate 后确认已提交
+payload，耗尽后在 eval case 层 fail-fast，避免整案重跑掩盖 schema/payload 错误。任何 typed
+failed/missing/unknown-status run 不进入 scorer，避免系统错误或非终态 artifact 被降级为阈值失败；
+最终仍按成功 attempt 的 persisted artifacts 判分。memory retrieval eval
 （P8）：同一 case 带/不带记忆命中各跑一次，命中组正确率不得低于无命中组，且零污染断言。
+HTTP eval 复用相同 typed LLM transient retry 口径，且不对系统表写失败做整案重跑。

@@ -569,12 +569,14 @@ The active v2 ReAct contract is:
   `DiscoveryPolicy` and injects it into `GuardMiddleware`. For unscoped GMV
   discovery, that policy requires guard-passed `E2_channel`, `E2_category`, and
   `E2_product` drilldown evidence before `fetch_related_signal` or
-  `rank_root_causes`; this prevents early single-slice ranking from hiding
-  cross-dimension or AOV candidates. `analysis_strategy=channel_first` requires
-  the first E3/E4 chain to use `dimension=channel` with
-  `signal_type=campaign`, but it does not force the strongest channel
-  drilldown element; the selected channel may be a non-top slice when its
-  related signal evidence is stronger. `analysis_strategy=organic_first`
+  `rank_root_causes`, and the standard first E3/E4 chain must use
+  `dimension=channel` with `signal_type=campaign`; this prevents early
+  single-slice ranking from hiding cross-dimension campaign candidates or AOV
+  candidates. For unscoped standard GMV discovery and
+  `analysis_strategy=channel_first`, the first channel/campaign E3/E4 chain must
+  use the strongest `E2_channel` drilldown element, so later Adtributor ranking
+  cannot select a different top channel while carrying mismatched E3 signal
+  evidence. `analysis_strategy=organic_first`
   carries the same channel/campaign first-signal policy plus
   `first_signal_element=organic`; the LLM intent planner must emit this
   strategy from natural-language semantics, while middleware only enforces the
@@ -595,18 +597,28 @@ The active v2 ReAct contract is:
   re-enters the same deepagents thread once through the normal tool path. The
   Reflection `suggested_action.action` is injected into
   `RunGuardContext.required_repair_action`; the repair prompt includes exact
-  suggested JSON args and forbids text-only repair responses. During that repair
-  turn `GuardMiddleware` rejects any other tool without consuming budget, so the
-  LLM cannot drift into repeated detect/drilldown steps instead of the
+  suggested JSON args after JSON-safe serialization (date/datetime values are ISO
+  strings, never Python repr) and forbids text-only repair responses. During that
+  repair turn `GuardMiddleware` rejects any other tool without consuming budget,
+  so the LLM cannot drift into repeated detect/drilldown steps instead of the
   structured repair action.
 - If a transient LLM provider error occurs after terminal persisted artifacts
   already exist (`no_anomaly` E1 or complete E4+E_rank chain), RunOrchestrator
   may continue to deterministic Reflection/report projection. The same error
   before terminal evidence remains fail-fast.
 - Final pending token-usage trace writes remain mandatory. `RunOrchestrator`
-  may retry `SYSTEM_TABLE_WRITE_FAILED` for those final `llm_call` trace rows
-  with a bounded typed retry; exhausting the retry still fails the run instead
-  of silently dropping observability data.
+  flushes final `llm_call` rows through `TraceWriter` once; write retries live
+  only in `MetricRepository`, so token trace failures cannot be silently dropped
+  or retried with freshly minted trace ids.
+- Repository system-table writes apply bounded retries at the write boundary for
+  typed transient DB conditions, including lock/deadlock, pool timeout,
+  invalidated DBAPI connections, SQLAlchemy Interface/Internal connection
+  errors without a real errno, and connection-loss packet errors. INSERT retries
+  are allowed only for tables with a stable idempotency key; if an ambiguous
+  commit later returns a duplicate key, the repository reads the row back and
+  confirms the persisted payload matches before treating the write as complete.
+  Non-idempotent audit inserts and non-transient integrity/schema errors still
+  fail fast as `SYSTEM_TABLE_WRITE_FAILED`.
 
 ### 6.A v1 ReAct Design（superseded; kept as appendix）
 
@@ -666,7 +678,7 @@ step5 ACTION  finish
 | insufficient_data | baseline sample_n 足够、无空结果 | rule |
 | correlation_vs_causation | 措辞不得把相关写成绝对因果（"导致"需证据等级=confirmed） | rule + llm |
 
-**修复机制**：error 级 issue 若带 `suggested_action`（如补一次 signal 查询），orchestrator 将该 action 作为本轮 `required_repair_action` 注入 GuardMiddleware，并在 repair prompt 中写入 exact suggested JSON args、禁止文本回答；回到 react_step 只允许执行该动作（过守卫，非该动作不消耗预算并返回 recoverable `ACTION_SCHEMA_INVALID`），`repair_count += 1`；`MAX_REPAIR=1`。当 agent 过早停止且没有候选，但当前 run 已有 guard-passed E2 drilldown Evidence 时，Reflection 必须从 persisted E2 top candidate 生成下一步 `fetch_related_signal` repair action；已有 E3 但缺 E4 时生成匹配 E3 链的 `calculate_contribution` action，filters 从 parsed scope 或 persisted E1 summary 继承；coverage 不足且已有 E4 时生成 `rank_root_causes` action。修复后再校验，仍不过 → error_return。
+**修复机制**：error 级 issue 若带 `suggested_action`（如补一次 signal 查询），orchestrator 将该 action 作为本轮 `required_repair_action` 注入 GuardMiddleware，并在 repair prompt 中写入 exact suggested JSON args、禁止文本回答；回到 react_step 的第一步只允许执行该动作（过守卫，非该动作不消耗预算并返回 recoverable `ACTION_SCHEMA_INVALID`），随后仅允许由当前 run guard-passed persisted Evidence 证明的 E3→E4→E_rank 续步（`fetch_related_signal` 后的 `calculate_contribution`、E4 后的 `rank_root_causes`），`repair_count += 1`；`MAX_REPAIR=1`。当 agent 过早停止且没有候选，但当前 run 已有 guard-passed E2 drilldown Evidence 时，Reflection 必须从 persisted E2 top candidate 生成下一步 `fetch_related_signal` repair action；已有 E3 但缺 E4 时生成匹配 E3 链的 `calculate_contribution` action，filters 从 parsed scope 或 persisted E1 summary 继承；coverage 不足且已有 E4 时生成 `rank_root_causes` action。修复后再校验，仍不过 → error_return。
 
 ---
 
@@ -689,7 +701,23 @@ step5 ACTION  finish
 
 记忆表结构见第 9 节 `memory_record`。
 
-**1 个月**：拆 semantic（指标定义 / 字段别名 / 业务规则）、episodic（历史异常案例）、reflection（失败教训）。是否需要向量库：仅当 case / episodic 数量大且需语义检索时引入（如 pgvector / Faiss）；MVP 用 `key` 精确匹配即可，**不为堆概念牺牲稳定性**。
+**P8 active memory v2**：`memory_record` 使用四层语义，不新增表、不引入向量库：
+
+| layer | 写入时机 | 内容 | 读取影响 |
+|---|---|---|---|
+| `semantic` | `make seed` 由 `metric_definition` / schema metadata 派生 | 指标别名、业务规则、维度含义 | 仅进入 intent/expert context |
+| `episodic` | run 终态化成功或 no_anomaly | metric_id、dimension、root_cause_type、verdict、run_id 摘要 | 调整下钻优先级 |
+| `reflection` | run failed 或发生 repair | error_code、Reflection issues、证据缺口 | 调整专家提示 |
+| `case` | legacy / v1 记录冻结只读 | 历史 case | 与 episodic 同样只影响规划 |
+
+Migration/seed 规则：`make seed` 在清空重建时生成 semantic 记录；保留式迁移必须把
+`layer IS NULL` 或不在四层集合内的旧记录更新为 `case`，使旧 memory 仍可读但不再被新 run
+覆盖。semantic 记录不得在运行时代码中硬编码，必须从持久化 metadata/schema 派生。
+
+污染控制继续强制：memory hit 只调 drilldown priority；`reflection_factor <= 1.2`；
+`memory_id` 永远不能进入 `candidate.evidence_ids` 或 report `numeric_claims`。P8 eval 增加
+memory enabled/disabled paired run：同一 case 各跑一次，启用 memory 的正确率不得低于禁用
+memory，且 `memory_pollution_ok=true`。
 
 ---
 
@@ -847,6 +875,7 @@ CREATE TABLE evidence (
 
 CREATE TABLE sql_audit (
   audit_id     BIGINT AUTO_INCREMENT PRIMARY KEY,
+  audit_key    VARCHAR(64),
   run_id       VARCHAR(64) NOT NULL,
   sql_text     TEXT NOT NULL,
   sql_hash     CHAR(64) NOT NULL,
@@ -855,7 +884,8 @@ CREATE TABLE sql_audit (
   row_count    INT,
   latency_ms   INT,
   created_at   DATETIME NOT NULL,
-  KEY idx_run (run_id)
+  KEY idx_run (run_id),
+  UNIQUE KEY uq_audit_key (audit_key)
 ) ENGINE=InnoDB;
 
 CREATE TABLE operation_task (
@@ -897,7 +927,8 @@ CREATE TABLE eval_case_result (
   evidence_coverage DECIMAL(4,3),
   sql_safe   TINYINT, reflection_repair_ok TINYINT,
   detail     JSON,
-  KEY idx_eval (eval_id)
+  KEY idx_eval (eval_id),
+  UNIQUE KEY uq_eval_case (eval_id, case_id)
 ) ENGINE=InnoDB;
 ```
 
@@ -1159,6 +1190,12 @@ from pydantic import BaseModel
 class RunCreateRequest(BaseModel):
     question: str
     target_date: str | None = None     # 默认 2026-06-05
+    business_today: str | None = None
+    memory_enabled: bool | None = None
+    memory_required: bool | None = None
+    llm_provider: str | None = None     # per-request override, not persisted
+    llm_model: str | None = None        # per-request override, recorded only as provider/model
+    llm_api_key: str | None = None      # per-request secret, never logged/returned/persisted
 
 class RunCreateResponse(BaseModel):
     run_id: str
@@ -1223,7 +1260,7 @@ async def health(): return {"status": "ok"}
 | 10 generate_report | passed reflection + persisted E4 | verified report projection | 读 evidence(E4) | report | REFLECTION_REPAIR_FAILED |
 | 11 create_tasks | candidate | task_id | 写 operation_task | — | — |
 | 12 write_memory | report | ok | 写 memory_record | — | MEMORY_WRITE_FAILED→error_return |
-| 13 trace 持久化 | 每步 | TraceStep | 写 trace_step / sql_audit | — | final token trace `SYSTEM_TABLE_WRITE_FAILED` bounded retry; retry exhausted→failed |
+| 13 trace 持久化 | 每步 | TraceStep | 写 trace_step / sql_audit | — | final token trace writes through repository-only idempotent retry; retry exhausted→failed |
 | 14 final response | — | run+report | — | status=succeeded | — |
 
 每步均落 trace_step；每条 SQL 落 sql_audit + evidence。
@@ -1239,8 +1276,10 @@ P3B/P4 约束：`generate_report` 只能做 verified artifact projection，不�
 - **sql_audit 表**：每条 SQL 的 hash / guard_status / guard_errors / row_count / latency。
 - **error event**：trace_step.error_code + agent_run.error_code。
 - **latency 指标**：每 node latency_ms；run 总时长。
-- **token usage（可选）**：1 月接入。
-- **UI 展示 trace**：React/Vite debug UI 通过 FastAPI 按 run_id 读取 trace_step 时序、每步动作 / 观察、evidence、SQL audit、Reflection issues 与 memory status。
+- **token usage（P8 active）**：`trace_step.token_usage` 记录每次 LLM call 的
+  prompt/completion/total token；`agent_run` API 投影提供 `token_summary`（总 token、总
+  latency、按 llm/tool/trace step breakdown），数值只能由 persisted `trace_step` 聚合。
+- **UI 展示 trace**：React/Vite debug UI 通过 FastAPI 按 run_id 读取 trace_step 时序、每步动作 / 观察、evidence、SQL audit、Reflection issues、memory layer records 与 token/latency status。
 - **失败 RCA 复盘**：查 status=failed 的 run，看 error_code 落在哪个 node。
 - **重放 / 重构**：因 QuerySpec / SQL / seed 确定，可用相同 run 输入 + 固定 seed 重构同一 RCA 过程；trace_step 提供完整时序还原。
 
@@ -1250,9 +1289,33 @@ P3B/P4 约束：`generate_report` 只能做 verified artifact projection，不�
 
 eval case schema 见第 2 节 `EvalCase`；ground truth 存 `anomaly_ground_truth`。
 
-evaluator pipeline（`make eval`）：对每个 case 跑 RCA（case 之间可用 `METRIC_RCA_EVAL_CONCURRENCY` 并发，默认 1；单个 RCA run 内部仍保持 E1 → E2 → E3 → E4 → E_rank 的顺序 evidence loop）→ 从 DB 读取 persisted artifacts（agent_run / evidence / trace_step / sql_audit / operation_task / reconstructed report）→ 比对 anomaly_ground_truth → 打分 → 写 eval_run / eval_case_result → 输出结构化 JSON + Markdown。Eval 不使用 graph 内存态作为评分来源，避免把未持久化输出误判为系统真实能力。Eval runner 仅对明确 typed transient 错误（LLM rate/timeout/unavailable、`SYSTEM_TABLE_WRITE_FAILED`）做有界同 case retry（`eval_llm_max_attempts` 默认 3 且必须 ≥1），并将 `eval_attempts` 记录到 case detail；最终仍只按成功 attempt 的 persisted artifacts 判分，重试耗尽即失败，不放宽 scorer/threshold。
+evaluator pipeline（`make eval`）：对每个 case 跑 RCA（case 之间可用 `METRIC_RCA_EVAL_CONCURRENCY` 并发，默认 1；单个 RCA run 内部仍保持 E1 → E2 → E3 → E4 → E_rank 的顺序 evidence loop）→ 成功 run 从 DB 读取 persisted artifacts（agent_run / evidence / trace_step / sql_audit / operation_task / reconstructed report）→ 比对 anomaly_ground_truth → 打分 → 写 eval_run / eval_case_result → 输出结构化 JSON + Markdown。Eval 不使用 graph 内存态作为评分来源，避免把未持久化输出误判为系统真实能力。Eval runner 仅对明确 typed transient LLM 错误（rate/timeout/unavailable）做有界同 case retry（`eval_llm_max_attempts` 默认 3 且必须 ≥1），并将 `eval_attempts` 记录到成功 scored case detail；`SYSTEM_TABLE_WRITE_FAILED` 由 repository 写入边界内部重试，重试耗尽后在 eval 层 fail-fast，不做整案重跑以免掩盖 schema/payload 错误。任何 typed failed run 都不进入 scorer，避免把系统错误降级为 `EVAL_THRESHOLD_NOT_MET`；最终仍只按成功 attempt 的 persisted artifacts 判分，不放宽 scorer/threshold。
 
-并发 eval 约束：每个 worker 必须使用独立 `RunOrchestrator` / `MetricRepository` / `TraceWriter`，不得共享注入的可变 repository；主线程用完成即收集的 future 调度，并按 cases 输入 index 还原最终输出顺序；`eval_run.summary` 只能由主线程最后写入；`make seed` 不并发且只在开跑前执行一次；eval case settings 禁用 memory，避免并发记忆污染。
+P8 adds an HTTP eval client while preserving direct `make eval`:
+
+- `python -m metric_rca.evals.client --base-url http://localhost:8000 --provider openai --model gpt-5-nano`
+  reads `cases.jsonl`, sends `POST /api/rca/runs` per case with per-request
+  provider/model/API-key overrides, and reads `/runs/{id}`, `/evidence`, `/trace`,
+  `/sql-audit`, and `/tasks` to score locally.
+- HTTP eval persists results through API-only eval endpoints: progress/final
+  summary uses `POST /api/evals/{eval_id}/summary` to upsert `eval_run.summary`,
+  and each completed baseline case uses `POST /api/evals/{eval_id}/case-results`
+  to write `eval_case_result`. Local JSON/Markdown artifacts are updated with
+  progress summary before final completion; CLI progress goes to stderr and final
+  machine-readable summary remains on stdout.
+- The HTTP client must not import `run_rca`, `MetricRepository`, or any DB-backed
+  repository. Local HTTP calls use `httpx.Client(trust_env=False)` so localhost
+  traffic does not leak through proxy environment variables.
+- HTTP eval applies the same bounded same-case retry policy for typed LLM
+  transients (`LLM_REQUIRED_UNAVAILABLE`, `RATE_LIMIT_EXCEEDED`,
+  `REQUEST_TIMEOUT`) and still fails fast for `SYSTEM_TABLE_WRITE_FAILED`.
+- `cases.jsonl` embeds `expected_metric_id`, `expected_anomaly`,
+  `expected_root_cause_type`, `expected_dimension`, and `expected_element`, so
+  HTTP eval needs no DB ground-truth access.
+- `make eval-http BASE_URL=... PROVIDER=openai MODEL=gpt-5-nano` is additive;
+  `make eval` remains direct-call mode for CI and local DB-backed runs.
+
+Direct eval 并发约束：每个 worker 必须使用独立 `RunOrchestrator` / `MetricRepository` / `TraceWriter`，不得共享注入的可变 repository；主线程用完成即收集的 future 调度，并按 cases 输入 index 还原最终输出顺序；direct `eval_run.summary` 只能由主线程最后写入；`make seed` 不并发且只在开跑前执行一次；eval case settings 禁用 memory，避免并发记忆污染。
 
 **指标**：
 - intent-parse accuracy（解析对指标）
@@ -1298,7 +1361,7 @@ P5 必须额外校验：
 | E3_ALREADY_EXISTS | 是 | 否 | E4 前已有 E3-family 证据；GuardMiddleware 阻止额外 signal fetch，引导直接 calculate_contribution，不消耗预算 |
 | E4_ALREADY_EXISTS | 是 | 否 | 当前 run 已有 E4；calculate_contribution 不覆盖不同选择，agent 应调用 rank_root_causes 复用既有 E4 |
 | ADTRIBUTOR_NOT_APPLICABLE | 是 | 否 | ranker 内部 Adtributor 不适用于当前 metric/evidence；继续单维排序路径，不伪造 EP/JS |
-| LLM_REQUIRED_UNAVAILABLE | 否 | 否 | error_return |
+| LLM_REQUIRED_UNAVAILABLE | 否 | eval 同 case 有界重试；已有 terminal evidence 时可完成报告 | 缺少 terminal evidence → error_return；不得切换 provider/model |
 | REFLECTION_REPAIR_FAILED | 否 | 否 | error_return（不编造） |
 | MEMORY_READ / WRITE_FAILED | 否 | 否 | error_return（MVP memory 为 required；若配置 memory_enabled=false，则不调用 memory） |
 | EVAL_GROUND_TRUTH_MISSING | 否 | 否 | eval 报错 |
@@ -1330,6 +1393,9 @@ P5 必须额外校验：
 - Reflection issues 与 repair trace
 - Memory hits / memory status
 - Eval summary（eval_run / eval_case_result）
+- Adtributor candidates（EP / surprise sorted from persisted E_rank/E4 candidates）
+- Memory layer viewer（semantic / episodic / reflection / case rows for the run）
+- Token / latency dashboard（per-run total and per-step breakdown）
 
 **安全要求**：
 
@@ -1361,9 +1427,10 @@ metric_rca/
 ```
 up:   docker compose up -d mysql
 seed: python -m metric_rca.data.seed_data
-api:  uvicorn metric_rca.api.main:app --reload
+api:  LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false uvicorn metric_rca.api.main:app --reload
 ui:   npm run dev --prefix frontend
-eval: python -m metric_rca.evals.runner
+eval: LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false python -m metric_rca.evals.runner
+eval-http: LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false python -m metric_rca.evals.client --base-url $(BASE_URL) --provider $(PROVIDER) --model $(MODEL)
 test: pytest -q
 ```
 

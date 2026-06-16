@@ -4,13 +4,14 @@ from datetime import date, datetime
 import importlib
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 from langchain_core.outputs import LLMResult
 
 from metric_rca.agent.deep_tools import EXPOSED_TOOL_NAMES
 from metric_rca.agent.deep_tools import PLANNING_TOOL_NAME, TOOL_ARG_SCHEMAS
 from metric_rca.agent.factory import create_metric_rca_agent
-from metric_rca.agent.runner import AgentDependencies, RunOrchestrator
+from metric_rca.agent.runner import AgentDependencies, RunOrchestrator, run_rca
 from metric_rca.services.metric_contracts import ParsedIntent
 from metric_rca.observability.trace import TraceWriter
 
@@ -99,13 +100,23 @@ def test_llm_unavailable_fails_before_agent_loop() -> None:
     assert repo.runs["run-1"]["status"] == "failed"
 
 
+def test_run_context_write_failure_returns_typed_failed_run() -> None:
+    repo = _ContextFailingRepo()
+
+    result = RunOrchestrator(dependencies=_deps(repo), agent_factory=lambda **kwargs: _Agent()).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "SYSTEM_TABLE_WRITE_FAILED"
+    assert repo.runs["run-1"]["status"] == "failed"
+
+
 def test_orchestrator_injects_run_context_into_agent_message() -> None:
     repo = _Repo()
     captured = {}
 
     class Agent(_Agent):
         def invoke(self, payload, **kwargs):
-            captured["content"] = payload["messages"][0]["content"]
+            captured.setdefault("content", payload["messages"][0]["content"])
             return {}
 
     result = RunOrchestrator(dependencies=_deps(repo), agent_factory=lambda **kwargs: Agent()).run("Why did yesterday GMV drop?", run_id="run-1")
@@ -125,7 +136,7 @@ def test_orchestrator_anchors_run_metric_to_parsed_intent_before_agent_loop() ->
 
     class Agent(_Agent):
         def invoke(self, payload, **kwargs):
-            captured["content"] = payload["messages"][0]["content"]
+            captured.setdefault("content", payload["messages"][0]["content"])
             captured["target_metric_id"] = captured["middleware"].context.target_metric_id
             return {}
 
@@ -150,7 +161,7 @@ def test_orchestrator_does_not_parse_literal_question_scope_into_guard_context()
 
     class Agent(_Agent):
         def invoke(self, payload, **kwargs):
-            captured["content"] = payload["messages"][0]["content"]
+            captured.setdefault("content", payload["messages"][0]["content"])
             captured["scope"] = captured["middleware"].context.explicit_filters
             return {}
 
@@ -174,7 +185,7 @@ def test_orchestrator_seeds_parsed_natural_scope_into_guard_context_and_message(
 
     class Agent(_Agent):
         def invoke(self, payload, **kwargs):
-            captured["content"] = payload["messages"][0]["content"]
+            captured.setdefault("content", payload["messages"][0]["content"])
             captured["scope"] = captured["middleware"].context.explicit_filters
             return {}
 
@@ -206,7 +217,7 @@ def test_orchestrator_seeds_discovery_policy_from_parsed_intent() -> None:
     class Agent(_Agent):
         def invoke(self, payload, **kwargs):
             context = captured["middleware"].context
-            captured["content"] = payload["messages"][0]["content"]
+            captured.setdefault("content", payload["messages"][0]["content"])
             captured["policy"] = context.discovery_policy
             return {}
 
@@ -229,6 +240,36 @@ def test_orchestrator_seeds_discovery_policy_from_parsed_intent() -> None:
     assert "first_signal=product:inventory" in captured["content"]
 
 
+def test_orchestrator_standard_gmv_policy_uses_channel_campaign_first_signal() -> None:
+    repo = _Repo()
+    captured = {}
+
+    class Agent(_Agent):
+        def invoke(self, payload, **kwargs):
+            context = captured["middleware"].context
+            captured.setdefault("content", payload["messages"][0]["content"])
+            captured["policy"] = context.discovery_policy
+            return {}
+
+    def factory(**kwargs):
+        captured["middleware"] = kwargs["middleware"][0]
+        return Agent()
+
+    result = RunOrchestrator(
+        dependencies=_deps(repo, metric_service=_MetricService(analysis_strategy="standard")),
+        agent_factory=factory,
+    ).run("Why did overall GMV fall yesterday?", run_id="run-1")
+
+    assert result["status"] == "failed"
+    policy = captured["policy"]
+    assert policy.required_drilldowns == ("channel", "category", "product")
+    assert policy.first_signal_dimension == "channel"
+    assert policy.first_signal_type == "campaign"
+    assert policy.enforce_first_signal_top_candidate is True
+    assert "parsed analysis_strategy: standard" in captured["content"]
+    assert "first_signal=channel:campaign" in captured["content"]
+
+
 def test_orchestrator_seeds_first_signal_element_from_parsed_intent() -> None:
     repo = _Repo()
     captured = {}
@@ -236,7 +277,7 @@ def test_orchestrator_seeds_first_signal_element_from_parsed_intent() -> None:
     class Agent(_Agent):
         def invoke(self, payload, **kwargs):
             context = captured["middleware"].context
-            captured["content"] = payload["messages"][0]["content"]
+            captured.setdefault("content", payload["messages"][0]["content"])
             captured["policy"] = context.discovery_policy
             return {}
 
@@ -276,6 +317,26 @@ def test_no_anomaly_with_drilldown_trace_fails() -> None:
     assert result["error_code"] == "NO_ANOMALY_CONTRACT_VIOLATED"
 
 
+def test_no_anomaly_without_projected_report_fails_fast() -> None:
+    repo = _Repo()
+
+    class Agent(_Agent):
+        def invoke(self, *args, **kwargs):
+            repo.add_evidence("run-1", "E1", {"is_anomaly": False})
+            return {}
+
+    class NoReportOrchestrator(RunOrchestrator):
+        def _project_report(self, run_id: str, *, status: str) -> dict[str, Any] | None:
+            assert status == "no_anomaly"
+            return None
+
+    result = NoReportOrchestrator(dependencies=_deps(repo), agent_factory=lambda **kwargs: Agent()).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "REPORT_PROJECTION_FAILED"
+    assert repo.runs["run-1"]["status"] == "failed"
+
+
 def test_agent_invoke_unknown_error_is_typed_agent_invoke_failed() -> None:
     repo = _Repo()
 
@@ -287,6 +348,40 @@ def test_agent_invoke_unknown_error_is_typed_agent_invoke_failed() -> None:
 
     assert result["status"] == "failed"
     assert result["error_code"] == "AGENT_INVOKE_FAILED"
+
+
+def test_agent_invoke_provider_rate_limit_is_retryable_typed_error() -> None:
+    repo = _Repo()
+
+    class ProviderRateLimit(RuntimeError):
+        status_code = 429
+
+    class Agent(_Agent):
+        def invoke(self, *args, **kwargs):
+            raise ProviderRateLimit("too many requests")
+
+    result = RunOrchestrator(dependencies=_deps(repo), agent_factory=lambda **kwargs: Agent()).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "RATE_LIMIT_EXCEEDED"
+    assert repo.runs["run-1"]["error_code"] == "RATE_LIMIT_EXCEEDED"
+
+
+def test_agent_invoke_provider_server_code_is_retryable_llm_unavailable() -> None:
+    repo = _Repo()
+
+    class ProviderServerError(RuntimeError):
+        code = "server_error"
+
+    class Agent(_Agent):
+        def invoke(self, *args, **kwargs):
+            raise ProviderServerError("internal server error")
+
+    result = RunOrchestrator(dependencies=_deps(repo), agent_factory=lambda **kwargs: Agent()).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "LLM_REQUIRED_UNAVAILABLE"
+    assert repo.runs["run-1"]["error_code"] == "LLM_REQUIRED_UNAVAILABLE"
 
 
 def test_agent_invoke_coded_error_preserves_code() -> None:
@@ -303,6 +398,68 @@ def test_agent_invoke_coded_error_preserves_code() -> None:
 
     assert result["status"] == "failed"
     assert result["error_code"] == "TRACE_WRITE_FAILED"
+
+
+def test_typed_system_error_with_timeout_text_is_not_reclassified_as_llm_transient() -> None:
+    repo = _Repo()
+
+    class Agent(_Agent):
+        def invoke(self, *args, **kwargs):
+            raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED: TimeoutError: QueuePool limit timeout")
+
+    result = RunOrchestrator(dependencies=_deps(repo), agent_factory=lambda **kwargs: Agent()).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "SYSTEM_TABLE_WRITE_FAILED"
+    assert repo.runs["run-1"]["error_code"] == "SYSTEM_TABLE_WRITE_FAILED"
+
+
+def test_run_rca_closes_owned_memory_repository(monkeypatch) -> None:
+    repo = _Repo()
+    memory_repo = _RecordingMemoryRepo()
+    memory_repo.closed = False
+
+    def close_memory_repo():
+        memory_repo.closed = True
+
+    memory_repo.close = close_memory_repo
+
+    class Agent(_Agent):
+        def invoke(self, *args, **kwargs):
+            repo.add_valid_evidences("run-1")
+            return {}
+
+    settings = SimpleNamespace(
+        llm_provider="openai",
+        llm_model="gpt-test",
+        llm_api_key="key",
+        business_today=date(2026, 6, 6),
+        target_date=date(2026, 6, 5),
+        max_steps=8,
+        max_query=12,
+        max_drilldown_depth=2,
+        max_repair=1,
+        memory_enabled=True,
+        memory_required=False,
+        multi_agent_enabled=False,
+    )
+    monkeypatch.setattr(
+        "metric_rca.agent.runner.MemoryRepository.from_settings",
+        lambda *args, **kwargs: memory_repo,
+    )
+
+    result = run_rca(
+        "why",
+        run_id="run-1",
+        settings=settings,
+        repository=repo,
+        metric_service=_MetricService(),
+        trace_writer=TraceWriter(repo),
+        agent_factory=lambda **kwargs: Agent(),
+    )
+
+    assert result["status"] == "succeeded"
+    assert memory_repo.closed is True
 
 
 def test_terminal_ranked_evidence_allows_transient_llm_error_to_finish_report() -> None:
@@ -348,7 +505,7 @@ def test_transient_llm_error_without_terminal_evidence_still_fails_fast() -> Non
     result = RunOrchestrator(dependencies=_deps(repo), agent_factory=lambda **kwargs: Agent()).run("why", run_id="run-1")
 
     assert result["status"] == "failed"
-    assert result["error_code"] == "rate_limit_exceeded"
+    assert result["error_code"] == "RATE_LIMIT_EXCEEDED"
     assert repo.tasks == []
 
 
@@ -395,8 +552,40 @@ def test_reflection_repair_constrains_next_tool_to_suggested_action() -> None:
     assert captured["required_repair_action"] == "rank_root_causes"
     assert "Only call rank_root_causes" in captured["repair_content"]
     assert "Call exactly this tool with exactly these JSON args: rank_root_causes" in captured["repair_content"]
+    assert '"target_date": "2026-06-05"' in captured["repair_content"]
+    assert "datetime.date(" not in captured["repair_content"]
     assert "Do not answer in text" in captured["repair_content"]
     assert "Do not call detect_anomaly" in captured["repair_content"]
+
+
+def test_reflection_repair_recovers_when_initial_agent_makes_no_tool_calls() -> None:
+    repo = _Repo()
+    captured = {}
+
+    class Agent(_Agent):
+        def __init__(self, middleware):
+            self.middleware = middleware
+            self.calls = 0
+
+        def invoke(self, payload, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return {}
+            captured["repair_content"] = payload["messages"][0]["content"]
+            captured["required_repair_action"] = self.middleware.context.required_repair_action
+            repo.add_valid_evidences("run-1")
+            return {}
+
+    def factory(**kwargs):
+        return Agent(kwargs["middleware"][0])
+
+    result = RunOrchestrator(dependencies=_deps(repo), agent_factory=factory).run("why", run_id="run-1")
+
+    assert result["status"] == "succeeded"
+    assert captured["required_repair_action"] == "detect_anomaly"
+    assert "Only call detect_anomaly" in captured["repair_content"]
+    assert "Call exactly this tool with exactly these JSON args: detect_anomaly" in captured["repair_content"]
+    assert "Do not call detect_anomaly or drilldown_dimension during repair" not in captured["repair_content"]
 
 
 def test_orchestrator_persists_token_usage_when_llm_makes_no_tool_call() -> None:
@@ -468,6 +657,16 @@ def test_memory_read_failure_fails_run_when_required() -> None:
     assert result["error_code"] == "MEMORY_READ_FAILED"
 
 
+def test_memory_repo_without_four_layer_read_interface_fails_no_legacy_fallback() -> None:
+    repo = _Repo()
+    deps = _deps(repo, memory_required=True, memory_repo=_LegacyMemoryRepo())
+
+    result = RunOrchestrator(dependencies=deps, agent_factory=lambda **kwargs: _Agent()).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "MEMORY_READ_FAILED"
+
+
 def test_memory_write_failure_fails_run_when_required() -> None:
     repo = _Repo()
 
@@ -485,6 +684,462 @@ def test_memory_write_failure_fails_run_when_required() -> None:
     assert result["error_code"] == "MEMORY_WRITE_FAILED"
 
 
+def test_memory_write_on_finalize_false_preserves_memory_reads_but_skips_run_writes() -> None:
+    repo = _Repo()
+    memory_repo = _RecordingMemoryRepo()
+
+    class Agent(_Agent):
+        def invoke(self, *args, **kwargs):
+            repo.add_valid_evidences("run-1")
+            return {}
+
+    result = RunOrchestrator(
+        dependencies=_deps(repo, memory_repo=memory_repo, memory_write_on_finalize=False),
+        agent_factory=lambda **kwargs: Agent(),
+    ).run("why", run_id="run-1")
+
+    assert result["status"] == "succeeded"
+    assert {"mem_key": "gmv|semantic", "layers": ("semantic",)} in memory_repo.reads
+    assert {"mem_key": "gmv|run", "layers": ("episodic", "reflection", "case")} in memory_repo.reads
+    assert memory_repo.writes == []
+
+
+def test_memory_write_on_finalize_false_skips_failure_reflection_memory() -> None:
+    repo = _Repo()
+    memory_repo = _RecordingMemoryRepo()
+
+    result = RunOrchestrator(
+        dependencies=_deps(repo, memory_repo=memory_repo, memory_write_on_finalize=False),
+        agent_factory=lambda **kwargs: _Agent(),
+    ).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "REFLECTION_REPAIR_FAILED"
+    assert "secondary_error_code" not in result
+    assert memory_repo.writes == []
+
+
+def test_reflection_memory_write_failure_preserves_primary_failure_code() -> None:
+    repo = _Repo()
+
+    result = RunOrchestrator(
+        dependencies=_deps(repo, memory_required=True, memory_repo=_FailingMemoryWriteRepo()),
+        agent_factory=lambda **kwargs: _Agent(),
+    ).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "REFLECTION_REPAIR_FAILED"
+    assert result["secondary_error_code"] == "MEMORY_WRITE_FAILED"
+    assert repo.runs["run-1"]["error_code"] == "REFLECTION_REPAIR_FAILED"
+
+
+def test_post_parse_failure_uses_parsed_metric_for_reflection_memory_key() -> None:
+    repo = _ContextFailingRepo()
+    memory_repo = _RecordingMemoryRepo()
+
+    result = RunOrchestrator(
+        dependencies=_deps(
+            repo,
+            memory_repo=memory_repo,
+            metric_service=_MetricService(metric_id="net_gmv"),
+        ),
+        agent_factory=lambda **kwargs: _Agent(),
+    ).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "SYSTEM_TABLE_WRITE_FAILED"
+    assert "secondary_error_code" not in result
+    assert memory_repo.writes[0]["layer"] == "reflection"
+    assert memory_repo.writes[0]["mem_key"] == "net_gmv|run"
+    assert memory_repo.writes[0]["payload"]["metric_id"] == "net_gmv"
+
+
+def test_successful_run_writes_episodic_memory_with_verified_root_cause_summary() -> None:
+    repo = _Repo()
+    memory_repo = _RecordingMemoryRepo()
+
+    class Agent(_Agent):
+        def invoke(self, *args, **kwargs):
+            repo.add_valid_evidences("run-1")
+            return {}
+
+    result = RunOrchestrator(
+        dependencies=_deps(repo, memory_repo=memory_repo),
+        agent_factory=lambda **kwargs: Agent(),
+    ).run("why", run_id="run-1")
+
+    episodic_writes = [row for row in memory_repo.writes if row["layer"] == "episodic"]
+    assert result["status"] == "succeeded"
+    assert len(episodic_writes) == 1
+    assert episodic_writes[0]["payload"] == {
+        "run_id": "run-1",
+        "metric_id": "gmv",
+        "dimension": "channel",
+        "root_cause_type": "campaign_traffic_drop",
+        "verdict": "confirmed",
+    }
+
+
+def test_successful_scoped_run_writes_scope_into_episodic_memory() -> None:
+    repo = _Repo()
+    memory_repo = _RecordingMemoryRepo()
+
+    class Agent(_Agent):
+        def invoke(self, *args, **kwargs):
+            repo.add_valid_evidences("run-1")
+            return {}
+
+    result = RunOrchestrator(
+        dependencies=_deps(
+            repo,
+            memory_repo=memory_repo,
+            metric_service=_MetricService(metric_id="gmv", dimension="category", element="electronics"),
+        ),
+        agent_factory=lambda **kwargs: Agent(),
+    ).run("Why did electronics GMV fall yesterday?", run_id="run-1")
+
+    episodic_writes = [row for row in memory_repo.writes if row["layer"] == "episodic"]
+    assert result["status"] == "succeeded"
+    assert episodic_writes[0]["payload"]["filters"] == {"category": "electronics"}
+
+
+def test_episodic_memory_is_written_only_after_run_finishes_successfully() -> None:
+    repo = _Repo()
+    memory_repo = _StatusCheckingMemoryRepo(repo)
+
+    class Agent(_Agent):
+        def invoke(self, *args, **kwargs):
+            repo.add_valid_evidences("run-1")
+            return {}
+
+    result = RunOrchestrator(
+        dependencies=_deps(repo, memory_repo=memory_repo),
+        agent_factory=lambda **kwargs: Agent(),
+    ).run("why", run_id="run-1")
+
+    assert result["status"] == "succeeded"
+    assert memory_repo.writes[0]["layer"] == "episodic"
+    assert memory_repo.statuses_at_write == ["succeeded"]
+
+
+def test_failed_run_writes_reflection_memory_without_episodic_summary() -> None:
+    repo = _Repo()
+    memory_repo = _RecordingMemoryRepo()
+
+    result = RunOrchestrator(
+        dependencies=_deps(repo, memory_repo=memory_repo),
+        agent_factory=lambda **kwargs: _Agent(),
+    ).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert [row["layer"] for row in memory_repo.writes] == ["reflection"]
+    assert memory_repo.writes[0]["payload"]["run_id"] == "run-1"
+    assert memory_repo.writes[0]["payload"]["error_code"] == "REFLECTION_REPAIR_FAILED"
+    assert memory_repo.writes[0]["payload"]["reflection_issues"]
+    assert memory_repo.writes[0]["payload"]["reflection_issues"][0]["check"] == "evidence_coverage"
+
+
+def test_reflection_repair_failure_uses_parsed_metric_for_memory_key() -> None:
+    repo = _RunContextDroppingRepo()
+    memory_repo = _RecordingMemoryRepo()
+
+    result = RunOrchestrator(
+        dependencies=_deps(
+            repo,
+            memory_repo=memory_repo,
+            metric_service=_MetricService(metric_id="net_gmv"),
+        ),
+        agent_factory=lambda **kwargs: _Agent(),
+    ).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "REFLECTION_REPAIR_FAILED"
+    assert "secondary_error_code" not in result
+    assert memory_repo.writes[0]["layer"] == "reflection"
+    assert memory_repo.writes[0]["mem_key"] == "net_gmv|run"
+    assert memory_repo.writes[0]["payload"]["metric_id"] == "net_gmv"
+
+
+def test_agent_invoke_failure_uses_parsed_metric_for_reflection_memory_key() -> None:
+    repo = _RunContextDroppingRepo()
+    memory_repo = _RecordingMemoryRepo()
+
+    class Agent(_Agent):
+        def invoke(self, *args, **kwargs):
+            raise RuntimeError("LLM_REQUIRED_UNAVAILABLE: provider down")
+
+    result = RunOrchestrator(
+        dependencies=_deps(
+            repo,
+            memory_repo=memory_repo,
+            metric_service=_MetricService(metric_id="net_gmv"),
+        ),
+        agent_factory=lambda **kwargs: Agent(),
+    ).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "LLM_REQUIRED_UNAVAILABLE"
+    assert "secondary_error_code" not in result
+    assert memory_repo.writes[0]["layer"] == "reflection"
+    assert memory_repo.writes[0]["mem_key"] == "net_gmv|run"
+    assert memory_repo.writes[0]["payload"]["metric_id"] == "net_gmv"
+
+
+def test_reflection_state_carries_parsed_filters_for_scoped_repair() -> None:
+    repo = _RunContextDroppingRepo()
+    parsed_intent = _MetricService(
+        metric_id="gmv",
+        dimension="category",
+        element="electronics",
+    ).parse_question("why", business_today=date(2026, 6, 6))
+    orchestrator = RunOrchestrator(
+        dependencies=_deps(repo, metric_service=_MetricService(metric_id="gmv")),
+        agent_factory=lambda **kwargs: _Agent(),
+    )
+    repo.create_agent_run(
+        {
+            "run_id": "run-1",
+            "question": "why",
+            "metric_id": None,
+            "target_date": None,
+            "status": "running",
+            "error_code": None,
+            "created_at": datetime(2026, 6, 6),
+            "finished_at": None,
+        }
+    )
+
+    state = orchestrator._reflection_state("run-1", repair_count=0, parsed_intent=parsed_intent)
+
+    assert state["metric_id"] == "gmv"
+    assert state["target_date"] == date(2026, 6, 5)
+    assert state["parsed_spec"]["filters"] == {"category": "electronics"}
+
+
+def test_reflection_memory_uses_metric_run_key_and_is_retrievable() -> None:
+    repo = _Repo()
+    memory_repo = _RecordingMemoryRepo()
+    orchestrator = RunOrchestrator(
+        dependencies=_deps(repo, memory_repo=memory_repo),
+        agent_factory=lambda **kwargs: _Agent(),
+    )
+    repo.create_agent_run(
+        {
+            "run_id": "run-1",
+            "question": "why",
+            "metric_id": "gmv",
+            "target_date": date(2026, 6, 5),
+            "status": "running",
+            "error_code": None,
+            "created_at": datetime(2026, 6, 6),
+            "finished_at": None,
+        }
+    )
+
+    orchestrator._write_reflection_memory("run-1", "RATE_LIMIT_EXCEEDED", {"gap_description": "provider transient"})
+    hits = orchestrator._read_required_memory(
+        "run-1",
+        parsed_intent=_MetricService(metric_id="gmv").parse_question("why", business_today=date(2026, 6, 6)),
+    )
+
+    assert memory_repo.writes[0]["mem_key"] == "gmv|run"
+    assert hits == [memory_repo.writes[0]]
+    assert {"mem_key": "gmv|run", "layers": ("episodic", "reflection", "case")} in memory_repo.reads
+
+
+def test_memory_read_filters_scoped_run_records_by_parsed_scope() -> None:
+    repo = _Repo()
+    memory_repo = _RecordingMemoryRepo()
+    memory_repo.write(
+        {
+            "layer": "episodic",
+            "mem_key": "gmv|run",
+            "payload": {
+                "run_id": "previous-1",
+                "metric_id": "gmv",
+                "filters": {"category": "electronics"},
+            },
+            "confidence": 0.8,
+            "source": "reflection_verified",
+        }
+    )
+    memory_repo.write(
+        {
+            "layer": "episodic",
+            "mem_key": "gmv|run",
+            "payload": {
+                "run_id": "previous-2",
+                "metric_id": "gmv",
+                "filters": {"category": "fashion"},
+            },
+            "confidence": 0.8,
+            "source": "reflection_verified",
+        }
+    )
+    orchestrator = RunOrchestrator(
+        dependencies=_deps(repo, memory_repo=memory_repo),
+        agent_factory=lambda **kwargs: _Agent(),
+    )
+
+    hits = orchestrator._read_required_memory(
+        "run-1",
+        parsed_intent=_MetricService(
+            metric_id="gmv",
+            dimension="category",
+            element="electronics",
+        ).parse_question("why", business_today=date(2026, 6, 6)),
+    )
+
+    assert [hit["payload"]["run_id"] for hit in hits] == ["previous-1"]
+
+
+def test_memory_read_writes_auditable_trace_step() -> None:
+    repo = _Repo()
+    memory_repo = _RecordingMemoryRepo()
+    orchestrator = RunOrchestrator(
+        dependencies=_deps(repo, memory_repo=memory_repo),
+        agent_factory=lambda **kwargs: _Agent(),
+    )
+    repo.create_agent_run(
+        {
+            "run_id": "run-1",
+            "question": "why",
+            "metric_id": "gmv",
+            "target_date": date(2026, 6, 5),
+            "status": "running",
+            "error_code": None,
+            "created_at": datetime(2026, 6, 6),
+            "finished_at": None,
+        }
+    )
+    memory_repo.write(
+        {
+            "memory_id": "mem-semantic",
+            "layer": "semantic",
+            "mem_key": "gmv|semantic",
+            "payload": {"metric_id": "gmv", "dimension": "channel"},
+            "confidence": 0.91,
+            "source": "system_verified",
+        }
+    )
+
+    orchestrator._read_required_memory(
+        "run-1",
+        parsed_intent=_MetricService(metric_id="gmv").parse_question("why", business_today=date(2026, 6, 6)),
+    )
+
+    trace_steps = repo.get_trace_steps("run-1")
+    memory_steps = [row for row in trace_steps if row["node"] == "memory_read"]
+    assert len(memory_steps) == 1
+    assert memory_steps[0]["output_summary"]["hit_count"] == 1
+    assert memory_steps[0]["output_summary"]["hits"] == [
+        {
+                "memory_id": "mem-semantic",
+                "layer": "semantic",
+                "mem_key": "gmv|semantic",
+                "filters": {},
+                "confidence": 0.91,
+                "source": "system_verified",
+            }
+    ]
+
+
+def test_reflection_memory_without_metric_id_fails_instead_of_unretrievable_key() -> None:
+    repo = _Repo()
+    memory_repo = _RecordingMemoryRepo()
+    orchestrator = RunOrchestrator(
+        dependencies=_deps(repo, memory_repo=memory_repo),
+        agent_factory=lambda **kwargs: _Agent(),
+    )
+
+    try:
+        orchestrator._write_reflection_memory("run-1", "LLM_REQUIRED_UNAVAILABLE")
+    except RuntimeError as exc:
+        assert str(exc) == "MEMORY_WRITE_FAILED: reflection memory requires metric_id"
+    else:
+        raise AssertionError("reflection memory write without metric_id should fail")
+
+    assert memory_repo.writes == []
+
+
+def test_memory_context_text_includes_confidence_scores() -> None:
+    from metric_rca.agent.runner import _memory_context_text
+
+    text = _memory_context_text(
+        [
+            {
+                "layer": "semantic",
+                "mem_key": "gmv|semantic",
+                "metric_id": "gmv",
+                "dimension": "channel",
+                "filters": {"channel": "paid_ads"},
+                "confidence": 0.91,
+            }
+        ]
+    )
+
+    assert "confidence" in text
+    assert "0.91" in text
+    assert "filters" in text
+    assert "paid_ads" in text
+
+
+def test_repaired_run_writes_reflection_memory_with_repair_count() -> None:
+    repo = _Repo()
+    memory_repo = _RecordingMemoryRepo()
+
+    class Agent(_Agent):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def invoke(self, *args, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                repo.add_valid_evidences("run-1", missing_e3=True)
+                return {}
+            repo.add_valid_evidences("run-1")
+            return {}
+
+    result = RunOrchestrator(
+        dependencies=_deps(repo, memory_repo=memory_repo),
+        agent_factory=lambda **kwargs: Agent(),
+    ).run("why", run_id="run-1")
+
+    reflection_writes = [row for row in memory_repo.writes if row["layer"] == "reflection"]
+    assert result["status"] == "succeeded"
+    assert len(reflection_writes) == 1
+    assert reflection_writes[0]["payload"]["run_id"] == "run-1"
+    assert reflection_writes[0]["payload"]["repair_count"] == 1
+    assert reflection_writes[0]["payload"]["reflection_issues"]
+    assert reflection_writes[0]["payload"]["reflection_issues"][0]["check"] == "required_evidence_present"
+
+
+def test_repaired_run_does_not_write_episodic_before_reflection_memory() -> None:
+    repo = _Repo()
+    memory_repo = _FailingReflectionMemoryRepo()
+
+    class Agent(_Agent):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def invoke(self, *args, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                repo.add_valid_evidences("run-1", missing_e3=True)
+                return {}
+            repo.add_valid_evidences("run-1")
+            return {}
+
+    result = RunOrchestrator(
+        dependencies=_deps(repo, memory_repo=memory_repo),
+        agent_factory=lambda **kwargs: Agent(),
+    ).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "MEMORY_WRITE_FAILED"
+    assert memory_repo.writes == []
+
+
 def test_successful_run_creates_operation_task_from_report() -> None:
     repo = _Repo()
 
@@ -499,7 +1154,7 @@ def test_successful_run_creates_operation_task_from_report() -> None:
     assert repo.tasks[0]["root_cause_type"] == "campaign_traffic_drop"
 
 
-def test_final_token_usage_trace_retries_transient_system_write_failure() -> None:
+def test_final_token_usage_trace_failure_is_not_retried_outside_repository() -> None:
     repo = _FlakyFinalTokenTraceRepo(failures_before_success=1)
 
     class Agent(_Agent):
@@ -516,13 +1171,13 @@ def test_final_token_usage_trace_retries_transient_system_write_failure() -> Non
 
     result = RunOrchestrator(dependencies=_deps(repo), agent_factory=lambda **kwargs: Agent()).run("why", run_id="run-1")
 
-    assert result["status"] == "succeeded"
+    assert result["status"] == "failed"
+    assert result["error_code"] == "SYSTEM_TABLE_WRITE_FAILED"
     assert repo.final_token_trace_failures == 1
-    assert any(row["node"] == "llm_call" and row["token_usage"]["total_tokens"] == 5 for row in repo.trace_steps)
-    assert repo.tasks[0]["root_cause_type"] == "campaign_traffic_drop"
+    assert repo.tasks == []
 
 
-def test_final_token_usage_trace_failure_after_retries_fails_run() -> None:
+def test_final_token_usage_trace_repeated_failure_still_fails_on_first_write_boundary() -> None:
     repo = _FlakyFinalTokenTraceRepo(failures_before_success=99)
 
     class Agent(_Agent):
@@ -541,7 +1196,7 @@ def test_final_token_usage_trace_failure_after_retries_fails_run() -> None:
 
     assert result["status"] == "failed"
     assert result["error_code"] == "SYSTEM_TABLE_WRITE_FAILED"
-    assert repo.final_token_trace_failures == 3
+    assert repo.final_token_trace_failures == 1
     assert repo.tasks == []
 
 
@@ -552,6 +1207,7 @@ def _deps(
     memory_required: bool = False,
     memory_repo=None,
     metric_service=None,
+    memory_write_on_finalize: bool = True,
 ) -> AgentDependencies:
     settings = SimpleNamespace(
         llm_provider="openai",
@@ -565,6 +1221,7 @@ def _deps(
         max_repair=1,
         memory_enabled=memory_repo is not None,
         memory_required=memory_required,
+        memory_write_on_finalize=memory_write_on_finalize,
         multi_agent_enabled=False,
     )
     return AgentDependencies(
@@ -602,16 +1259,65 @@ def _compiled_tool_names(agent) -> set[str]:
 
 
 class _FailingMemoryRepo:
-    def read(self, *args, **kwargs):
+    def read_layers(self, *args, **kwargs):
         raise RuntimeError("MEMORY_READ_FAILED")
 
 
-class _FailingMemoryWriteRepo:
+class _LegacyMemoryRepo:
     def read(self, *args, **kwargs):
-        return None
+        return []
+
+
+class _FailingMemoryWriteRepo:
+    def read_layers(self, *args, **kwargs):
+        return []
 
     def write(self, *args, **kwargs):
         raise RuntimeError("MEMORY_WRITE_FAILED")
+
+
+class _RecordingMemoryRepo:
+    def __init__(self) -> None:
+        self.reads: list[dict[str, Any]] = []
+        self.writes: list[dict[str, Any]] = []
+
+    def read(self, mem_key: str, *, layer: str = "case") -> list[dict[str, Any]]:
+        self.reads.append({"mem_key": mem_key, "layer": layer})
+        return []
+
+    def read_layers(self, mem_key: str, *, layers: tuple[str, ...] | None = None) -> list[dict[str, Any]]:
+        self.reads.append({"mem_key": mem_key, "layers": layers})
+        allowed_layers = set(layers or ())
+        return [
+            dict(row)
+            for row in self.writes
+            if row.get("mem_key") == mem_key and (not allowed_layers or row.get("layer") in allowed_layers)
+        ]
+
+    def write(self, record: dict[str, Any]) -> None:
+        self.writes.append(dict(record))
+
+
+class _FailingReflectionMemoryRepo(_RecordingMemoryRepo):
+    def write(self, record: dict[str, Any]) -> None:
+        if record.get("layer") == "reflection":
+            raise RuntimeError("MEMORY_WRITE_FAILED")
+        super().write(record)
+
+
+class _StatusCheckingMemoryRepo(_RecordingMemoryRepo):
+    def __init__(self, repo: "_Repo") -> None:
+        super().__init__()
+        self.repo = repo
+        self.statuses_at_write: list[str] = []
+
+    def write(self, record: dict[str, Any]) -> None:
+        if record.get("layer") == "episodic":
+            status = self.repo.runs[record["payload"]["run_id"]]["status"]
+            self.statuses_at_write.append(status)
+            if status != "succeeded":
+                raise RuntimeError("MEMORY_WRITE_FAILED: episodic memory before terminal success")
+        super().write(record)
 
 
 class _MetricService:
@@ -656,10 +1362,23 @@ class _Repo:
         self.runs[run_id]["metric_id"] = metric_id
         self.runs[run_id]["target_date"] = target_date
 
-    def finish_agent_run(self, *, run_id: str, status: str, error_code: str | None, finished_at) -> None:
+    def finish_agent_run(
+        self,
+        *,
+        run_id: str,
+        status: str,
+        error_code: str | None,
+        finished_at,
+        total_tokens=None,
+        total_latency_ms=None,
+        token_breakdown=None,
+    ) -> None:
         self.runs[run_id]["status"] = status
         self.runs[run_id]["error_code"] = error_code
         self.runs[run_id]["finished_at"] = finished_at
+        self.runs[run_id]["total_tokens"] = total_tokens
+        self.runs[run_id]["total_latency_ms"] = total_latency_ms
+        self.runs[run_id]["token_breakdown"] = token_breakdown
 
     def create_trace_step(self, row: dict) -> None:
         self.trace_steps.append(dict(row))
@@ -719,7 +1438,7 @@ class _Repo:
             "verdict": "confirmed",
             "evidence_ids": [f"{run_id}:E1", f"{run_id}:E2", f"{run_id}:E4"]
             if missing_e3
-            else [f"{run_id}:E1", f"{run_id}:E2", f"{run_id}:E3", f"{run_id}:E4"],
+            else [f"{run_id}:E1", f"{run_id}:E2", f"{run_id}:E3", f"{run_id}:E4", f"{run_id}:E_rank"],
         }
         self.add_evidence(run_id, "E1", {"metric_id": "gmv", "target_date": "2026-06-05", "is_anomaly": True, "value": 0.9})
         self.add_evidence(run_id, "E2", {"metric_id": "gmv", "target_date": "2026-06-05", "value": 0.9})
@@ -748,6 +1467,29 @@ class _Repo:
                 "value": 0.9,
             },
         )
+        if not missing_e3:
+            self.add_evidence(
+                run_id,
+                "E_rank",
+                {
+                    "metric_id": "gmv",
+                    "target_date": "2026-06-05",
+                    "ranker": "v1",
+                    "selected_candidate": candidate,
+                    "candidates": [candidate],
+                    "value": 0.9,
+                },
+            )
+
+
+class _ContextFailingRepo(_Repo):
+    def update_agent_run_context(self, *, run_id: str, metric_id: str, target_date) -> None:
+        raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED")
+
+
+class _RunContextDroppingRepo(_Repo):
+    def update_agent_run_context(self, *, run_id: str, metric_id: str, target_date) -> None:
+        self.runs[run_id]["target_date"] = target_date
 
 
 class _FlakyFinalTokenTraceRepo(_Repo):

@@ -22,6 +22,7 @@ HASH_TABLES = [
     "fact_customer_ticket",
     "metric_definition",
     "anomaly_ground_truth",
+    "memory_record",
 ]
 TARGET_DATE = date(2026, 6, 5)
 GMV_NO_ANOMALY_DATE = date(2026, 6, 4)
@@ -264,6 +265,50 @@ def test_seed_metric_definitions_and_ground_truth_cases() -> None:
             assert cases["C20_cvr_no_anomaly_noise"]["business_date"] == GMV_NO_ANOMALY_DATE
             assert cases["gmv_paid_ads_drop"]["business_date"] == TARGET_DATE
             assert cases["gmv_stockout_electronics"]["business_date"] == TARGET_DATE
+    finally:
+        engine.dispose()
+
+
+def test_seed_writes_semantic_memory_from_metric_definitions() -> None:
+    seed_main()
+    settings = get_settings()
+    engine = create_engine(str(settings.db_dsn), pool_pre_ping=True)
+    try:
+        with engine.connect() as conn:
+            metrics = {
+                row.metric_id: dict(row)
+                for row in conn.execute(text("SELECT * FROM metric_definition")).mappings()
+            }
+            semantic_rows = {
+                row.mem_key: json.loads(row.payload)
+                for row in conn.execute(
+                    text(
+                        """
+                        SELECT mem_key, payload
+                        FROM memory_record
+                        WHERE layer = 'semantic'
+                        ORDER BY mem_key
+                        """
+                    )
+                ).mappings()
+            }
+
+            assert set(semantic_rows) == {f"{metric_id}|semantic" for metric_id in metrics}
+            gmv_payload = semantic_rows["gmv|semantic"]
+            assert gmv_payload["metric_id"] == "gmv"
+            assert gmv_payload["display_name"] == metrics["gmv"]["display_name"]
+            assert gmv_payload["formula"] == metrics["gmv"]["formula"]
+            assert {"gmv", metrics["gmv"]["display_name"]} <= set(gmv_payload["aliases"])
+            assert gmv_payload["business_rules"] == {
+                "higher_is_better": bool(metrics["gmv"]["higher_is_better"]),
+                "source_table": metrics["gmv"]["source_table"],
+            }
+            assert set(gmv_payload["allowed_dimensions"]) == set(
+                json.loads(metrics["gmv"]["allowed_dimensions"])
+            )
+            assert {
+                item["dimension"] for item in gmv_payload["dimension_meanings"]
+            } == set(json.loads(metrics["gmv"]["allowed_dimensions"]))
     finally:
         engine.dispose()
 

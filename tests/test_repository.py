@@ -2,12 +2,20 @@ from __future__ import annotations
 
 from datetime import date
 import hashlib
+import json
 from datetime import datetime
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import DBAPIError, OperationalError, TimeoutError as SQLAlchemyTimeoutError
+from sqlalchemy.exc import (
+    DBAPIError,
+    InterfaceError,
+    InternalError,
+    IntegrityError,
+    OperationalError,
+    TimeoutError as SQLAlchemyTimeoutError,
+)
 
 from metric_rca.config.settings import get_settings
 from metric_rca.domain.models import SQLPlan
@@ -231,6 +239,73 @@ def test_repository_persists_documented_system_tables() -> None:
     repo.close()
 
 
+def test_repository_upserts_eval_run_summary() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    _create_eval_run_table(engine)
+    repo = MetricRepository(readonly_engine=engine, audit_engine=engine, statement_timeout_ms=3000)
+    now = datetime(2026, 6, 8, 12, 0, 0)
+
+    repo.upsert_eval_run_summary(
+        {
+            "eval_id": "eval-progress",
+            "created_at": now,
+            "summary": {"complete": False, "case_total": 1},
+        }
+    )
+    repo.upsert_eval_run_summary(
+        {
+            "eval_id": "eval-progress",
+            "created_at": now,
+            "summary": {"complete": True, "case_total": 2},
+        }
+    )
+
+    assert repo.get_eval_run("eval-progress")["summary"] == {"complete": True, "case_total": 2}
+    repo.close()
+
+
+def test_repository_upserts_eval_case_result() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    _create_eval_case_result_table(engine)
+    repo = MetricRepository(readonly_engine=engine, audit_engine=engine, statement_timeout_ms=3000)
+
+    repo.upsert_eval_case_result(
+        {
+            "eval_id": "eval-progress",
+            "case_id": "gmv_paid_ads_drop",
+            "intent_ok": 1,
+            "anomaly_ok": 1,
+            "top1_ok": 0,
+            "top3_ok": 1,
+            "evidence_coverage": 0.5,
+            "sql_safe": 1,
+            "reflection_repair_ok": 1,
+            "detail": {"attempt": 1},
+        }
+    )
+    repo.upsert_eval_case_result(
+        {
+            "eval_id": "eval-progress",
+            "case_id": "gmv_paid_ads_drop",
+            "intent_ok": 1,
+            "anomaly_ok": 1,
+            "top1_ok": 1,
+            "top3_ok": 1,
+            "evidence_coverage": 1.0,
+            "sql_safe": 1,
+            "reflection_repair_ok": 1,
+            "detail": {"attempt": 2},
+        }
+    )
+
+    rows = repo.get_eval_case_results("eval-progress")
+    assert len(rows) == 1
+    assert rows[0]["top1_ok"] == 1
+    assert rows[0]["evidence_coverage"] == 1.0
+    assert rows[0]["detail"] == {"attempt": 2}
+    repo.close()
+
+
 def test_repository_retries_transient_system_table_write_once() -> None:
     engine = _FlakyWriteEngine([_operational_error(1213, "Deadlock found")])
     repo = MetricRepository(
@@ -264,8 +339,206 @@ def test_repository_retries_repeated_transient_system_table_writes() -> None:
     assert engine.attempts == 5
 
 
+def test_repository_confirms_idempotent_insert_after_ambiguous_commit() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    _create_trace_step_table(engine)
+    row = _trace_step_row()
+    seed_repo = MetricRepository(
+        readonly_engine=engine,
+        audit_engine=engine,
+        statement_timeout_ms=3000,
+    )
+    seed_repo.create_trace_step(row)
+    flaky_engine = _FailOnceThenRealEngine(engine, _operational_error(2013, "Lost connection to MySQL server during query"))
+    repo = MetricRepository(
+        readonly_engine=flaky_engine,
+        audit_engine=flaky_engine,
+        statement_timeout_ms=3000,
+    )
+
+    repo.create_trace_step(row)
+
+    assert flaky_engine.begin_attempts == 1
+
+
+def test_repository_rejects_ambiguous_commit_duplicate_when_payload_differs() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    _create_trace_step_table(engine)
+    original = _trace_step_row()
+    seed_repo = MetricRepository(
+        readonly_engine=engine,
+        audit_engine=engine,
+        statement_timeout_ms=3000,
+    )
+    seed_repo.create_trace_step(original)
+    changed = {**original, "output_summary": {"changed": True}}
+    flaky_engine = _FailOnceThenRealEngine(engine, _operational_error(2013, "Lost connection to MySQL server during query"))
+    repo = MetricRepository(
+        readonly_engine=flaky_engine,
+        audit_engine=flaky_engine,
+        statement_timeout_ms=3000,
+    )
+
+    with pytest.raises(RuntimeError, match="SYSTEM_TABLE_WRITE_FAILED"):
+        repo.create_trace_step(changed)
+
+    assert flaky_engine.begin_attempts == 2
+
+
+def test_repository_confirms_agent_run_finish_after_ambiguous_update_commit() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    _create_agent_run_table(engine)
+    run_id = "run-ambiguous-finish"
+    seed_repo = MetricRepository(readonly_engine=engine, audit_engine=engine, statement_timeout_ms=3000)
+    seed_repo.create_agent_run(
+        {
+            "run_id": run_id,
+            "question": "why",
+            "metric_id": "gmv",
+            "target_date": date(2026, 6, 5),
+            "status": "running",
+            "error_code": None,
+            "created_at": datetime(2026, 6, 8, 12, 0, 0),
+            "finished_at": None,
+        }
+    )
+    flaky_engine = _ApplyThenFailEngine(engine, _operational_error(2013, "Lost connection to MySQL server during query"))
+    repo = MetricRepository(readonly_engine=flaky_engine, audit_engine=flaky_engine, statement_timeout_ms=3000)
+
+    repo.finish_agent_run(
+        run_id=run_id,
+        status="succeeded",
+        error_code=None,
+        finished_at=datetime(2026, 6, 8, 12, 1, 0),
+        total_tokens=12,
+        total_latency_ms=34,
+        token_breakdown=[{"seq": 1, "token_usage": {"total_tokens": 12}}],
+    )
+
+    with engine.connect() as conn:
+        row = conn.execute(text("SELECT status, error_code, total_tokens FROM agent_run WHERE run_id = :run_id"), {"run_id": run_id}).one()
+    assert row.status == "succeeded"
+    assert row.error_code is None
+    assert row.total_tokens == 12
+
+
+def test_repository_retries_sql_audit_write_with_stable_audit_key() -> None:
+    engine = _FlakyWriteEngine([_operational_error(1213, "Deadlock found")])
+    repo = MetricRepository(
+        readonly_engine=engine,
+        audit_engine=engine,
+        statement_timeout_ms=3000,
+    )
+    plan = SQLPlan(
+        sql="SELECT 1",
+        sql_hash=hashlib.sha256(b"SELECT 1").hexdigest(),
+        guard_status="passed",
+        guard_errors=[],
+        params={},
+    )
+
+    repo._write_audit(run_id="run-1", plan=plan, row_count=1, latency_ms=1)
+
+    assert engine.attempts == 2
+
+
+def test_repository_confirms_sql_audit_after_ambiguous_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    _create_sql_audit_table(engine)
+    fixed_uuid = type("FixedUUID", (), {"hex": "fixedauditkey"})()
+    monkeypatch.setattr("metric_rca.repositories.metric_repository.uuid4", lambda: fixed_uuid)
+    plan = SQLPlan(
+        sql="SELECT 1",
+        sql_hash=hashlib.sha256(b"SELECT 1").hexdigest(),
+        guard_status="passed",
+        guard_errors=[],
+        params={},
+    )
+    seed_repo = MetricRepository(
+        readonly_engine=engine,
+        audit_engine=engine,
+        statement_timeout_ms=3000,
+    )
+    seed_repo._write_audit(run_id="run-1", plan=plan, row_count=1, latency_ms=1)
+    flaky_engine = _FailOnceThenRealEngine(engine, _operational_error(2013, "Lost connection to MySQL server during query"))
+    repo = MetricRepository(
+        readonly_engine=flaky_engine,
+        audit_engine=flaky_engine,
+        statement_timeout_ms=3000,
+    )
+
+    repo._write_audit(run_id="run-1", plan=plan, row_count=1, latency_ms=1)
+
+    assert flaky_engine.begin_attempts == 1
+
+
 def test_repository_retries_sqlalchemy_pool_timeout_system_table_write() -> None:
     engine = _FlakyWriteEngine([SQLAlchemyTimeoutError("QueuePool limit reached")])
+    repo = MetricRepository(
+        readonly_engine=engine,
+        audit_engine=engine,
+        statement_timeout_ms=3000,
+    )
+
+    repo.create_trace_step(_trace_step_row())
+
+    assert engine.attempts == 2
+
+
+def test_repository_retries_invalidated_system_table_connection() -> None:
+    engine = _FlakyWriteEngine([_connection_invalidated_error()])
+    repo = MetricRepository(
+        readonly_engine=engine,
+        audit_engine=engine,
+        statement_timeout_ms=3000,
+    )
+
+    repo.create_trace_step(_trace_step_row())
+
+    assert engine.attempts == 2
+
+
+def test_repository_retries_system_write_connection_loss_without_errno() -> None:
+    engine = _FlakyWriteEngine([_operational_error(0, "Packet sequence number wrong - got 1 expected 2")])
+    repo = MetricRepository(
+        readonly_engine=engine,
+        audit_engine=engine,
+        statement_timeout_ms=3000,
+    )
+
+    repo.create_trace_step(_trace_step_row())
+
+    assert engine.attempts == 2
+
+
+def test_repository_retries_sqlalchemy_interface_system_write_error_without_errno() -> None:
+    engine = _FlakyWriteEngine([InterfaceError("INSERT INTO trace_step", {}, _MysqlError(0, ""))])
+    repo = MetricRepository(
+        readonly_engine=engine,
+        audit_engine=engine,
+        statement_timeout_ms=3000,
+    )
+
+    repo.create_trace_step(_trace_step_row())
+
+    assert engine.attempts == 2
+
+
+def test_repository_retries_operational_system_write_error_with_errno_zero() -> None:
+    engine = _FlakyWriteEngine([_operational_error(0, "")])
+    repo = MetricRepository(
+        readonly_engine=engine,
+        audit_engine=engine,
+        statement_timeout_ms=3000,
+    )
+
+    repo.create_trace_step(_trace_step_row())
+
+    assert engine.attempts == 2
+
+
+def test_repository_retries_sqlalchemy_internal_system_write_error_without_errno() -> None:
+    engine = _FlakyWriteEngine([InternalError("INSERT INTO trace_step", {}, _MysqlError(0, ""))])
     repo = MetricRepository(
         readonly_engine=engine,
         audit_engine=engine,
@@ -305,7 +578,8 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
                 """
                 CREATE TABLE agent_run (
                   run_id TEXT PRIMARY KEY, question TEXT, metric_id TEXT, target_date TEXT,
-                  status TEXT, error_code TEXT, created_at TEXT, finished_at TEXT
+                  status TEXT, error_code TEXT, total_tokens INTEGER, total_latency_ms INTEGER,
+                  token_breakdown TEXT, created_at TEXT, finished_at TEXT
                 )
                 """
             )
@@ -335,7 +609,7 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
             text(
                 """
                 CREATE TABLE sql_audit (
-                  audit_id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT, sql_text TEXT, sql_hash TEXT,
+                  audit_id INTEGER PRIMARY KEY AUTOINCREMENT, audit_key TEXT UNIQUE, run_id TEXT, sql_text TEXT, sql_hash TEXT,
                   guard_status TEXT, guard_errors TEXT, row_count INTEGER, latency_ms INTEGER, created_at TEXT
                 )
                 """
@@ -385,10 +659,16 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
             text(
                 """
                 INSERT INTO agent_run
-                VALUES ('run-1', 'why', 'gmv', '2026-06-05', 'succeeded', NULL, :now, :now)
+                VALUES (
+                  'run-1', 'why', 'gmv', '2026-06-05', 'succeeded', NULL, 5, 9,
+                  :token_breakdown, :now, :now
+                )
                 """
             ),
-            {"now": now.isoformat()},
+            {
+                "now": now.isoformat(),
+                "token_breakdown": '[{"node":"llm_call","total_tokens":5}]',
+            },
         )
         conn.execute(
             text(
@@ -417,9 +697,9 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
             text(
                 """
                 INSERT INTO sql_audit (
-                  run_id, sql_text, sql_hash, guard_status, guard_errors, row_count, latency_ms, created_at
+                  audit_key, run_id, sql_text, sql_hash, guard_status, guard_errors, row_count, latency_ms, created_at
                 )
-                VALUES ('run-1', 'SELECT 1', :hash, 'passed', '[]', 1, 3, :now)
+                VALUES ('audit-existing', 'run-1', 'SELECT 1', :hash, 'passed', '[]', 1, 3, :now)
                 """
             ),
             {"hash": "0" * 64, "now": now.isoformat()},
@@ -457,7 +737,11 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
             )
         )
 
-    assert repo.get_agent_run("run-1")["status"] == "succeeded"
+    agent_run = repo.get_agent_run("run-1")
+    assert agent_run["status"] == "succeeded"
+    assert agent_run["total_tokens"] == 5
+    assert agent_run["total_latency_ms"] == 9
+    assert agent_run["token_breakdown"] == [{"node": "llm_call", "total_tokens": 5}]
     assert [row["seq"] for row in repo.get_trace_steps("run-1")] == [1, 2]
     assert repo.get_trace_steps("run-1")[0]["input_summary"] == {"a": 1}
     assert repo.get_trace_steps("run-1")[1]["token_usage"] == {"total_tokens": 5}
@@ -466,6 +750,21 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
     assert repo.get_operation_tasks("run-1")[0]["payload"] == {"owner": "ops"}
     assert repo.get_eval_run("eval-1")["summary"] == {"case_total": 1}
     assert repo.get_eval_case_results("eval-1")[0]["detail"] == {"ok": True}
+    repo.upsert_eval_run_summary(
+        {
+            "eval_id": "eval-progress",
+            "created_at": now,
+            "summary": {"complete": False, "case_total": 1},
+        }
+    )
+    repo.upsert_eval_run_summary(
+        {
+            "eval_id": "eval-progress",
+            "created_at": now,
+            "summary": {"complete": True, "case_total": 2},
+        }
+    )
+    assert repo.get_eval_run("eval-progress")["summary"] == {"complete": True, "case_total": 2}
     assert repo.get_ground_truth_cases(["gmv_paid_ads_drop", "missing"]) == {
         "gmv_paid_ads_drop": {
             "case_id": "gmv_paid_ads_drop",
@@ -481,6 +780,155 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
     repo.close()
 
 
+def test_repository_memory_records_for_run_exclude_future_same_metric_records() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    _create_agent_run_table(engine)
+    _create_memory_record_table(engine)
+    repo = MetricRepository(readonly_engine=engine, audit_engine=engine, statement_timeout_ms=3000)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO agent_run (
+                  run_id, question, metric_id, target_date, status, error_code,
+                  total_tokens, total_latency_ms, token_breakdown, created_at, finished_at
+                )
+                VALUES (
+                  'run-1', 'why', 'gmv', '2026-06-05', 'succeeded', NULL,
+                  NULL, NULL, NULL, :created_at, :finished_at
+                )
+                """
+            ),
+            {"created_at": "2026-06-15 12:00:00", "finished_at": "2026-06-15 12:10:00"},
+        )
+        rows = [
+            (
+                "m-sem",
+                "semantic",
+                "gmv|semantic",
+                {"metric_id": "gmv"},
+                "2026-06-15 11:00:00",
+            ),
+            (
+                "m-old",
+                "episodic",
+                "gmv|run",
+                {"metric_id": "gmv", "run_id": "older-run"},
+                "2026-06-15 11:30:00",
+            ),
+            (
+                "m-own",
+                "reflection",
+                "gmv|run",
+                {"metric_id": "gmv", "run_id": "run-1", "error_code": "REFLECTION_REPAIR_FAILED"},
+                "2026-06-15 12:11:00",
+            ),
+            (
+                "m-future",
+                "episodic",
+                "gmv|run",
+                {"metric_id": "gmv", "run_id": "future-run"},
+                "2026-06-15 12:20:00",
+            ),
+            (
+                "m-other-metric",
+                "semantic",
+                "refund_rate|semantic",
+                {"metric_id": "refund_rate"},
+                "2026-06-15 11:00:00",
+            ),
+        ]
+        for memory_id, layer, mem_key, payload, created_at in rows:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO memory_record (
+                      memory_id, layer, mem_key, payload, confidence, source,
+                      version, ttl_days, created_at
+                    )
+                    VALUES (
+                      :memory_id, :layer, :mem_key, :payload, 0.9, 'test',
+                      1, 30, :created_at
+                    )
+                    """
+                ),
+                {
+                    "memory_id": memory_id,
+                    "layer": layer,
+                    "mem_key": mem_key,
+                    "payload": json.dumps(payload),
+                    "created_at": created_at,
+                },
+            )
+
+    records = repo.get_memory_records_for_run("run-1")
+
+    assert [row["memory_id"] for row in records] == ["m-sem", "m-old", "m-own"]
+    repo.close()
+
+
+def test_repository_memory_records_for_run_not_hidden_by_unrelated_history() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    _create_agent_run_table(engine)
+    _create_memory_record_table(engine)
+    repo = MetricRepository(readonly_engine=engine, audit_engine=engine, statement_timeout_ms=3000)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO agent_run (
+                  run_id, question, metric_id, target_date, status, error_code,
+                  total_tokens, total_latency_ms, token_breakdown, created_at, finished_at
+                )
+                VALUES (
+                  'run-1', 'why', 'gmv', '2026-06-05', 'succeeded', NULL,
+                  NULL, NULL, NULL, '2026-06-15 12:00:00', '2026-06-15 12:10:00'
+                )
+                """
+            )
+        )
+        for index in range(501):
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO memory_record (
+                      memory_id, layer, mem_key, payload, confidence, source,
+                      version, ttl_days, created_at
+                    )
+                    VALUES (
+                      :memory_id, 'semantic', 'refund_rate|semantic', :payload,
+                      0.9, 'test', 1, 30, :created_at
+                    )
+                    """
+                ),
+                {
+                    "memory_id": f"unrelated-{index}",
+                    "payload": json.dumps({"metric_id": "refund_rate", "index": index}),
+                    "created_at": f"2026-06-15 10:{index % 60:02d}:00",
+                },
+            )
+        conn.execute(
+            text(
+                """
+                INSERT INTO memory_record (
+                  memory_id, layer, mem_key, payload, confidence, source,
+                  version, ttl_days, created_at
+                )
+                VALUES (
+                  'm-target', 'reflection', 'gmv|run', :payload,
+                  0.8, 'test', 1, 30, '2026-06-15 11:30:00'
+                )
+                """
+            ),
+            {"payload": json.dumps({"metric_id": "gmv", "run_id": "older-run"})},
+        )
+
+    records = repo.get_memory_records_for_run("run-1")
+
+    assert [row["memory_id"] for row in records] == ["m-target"]
+    repo.close()
+
+
 class _FlakyWriteEngine:
     def __init__(self, failures: list[Exception]) -> None:
         self.failures = failures
@@ -488,6 +936,72 @@ class _FlakyWriteEngine:
 
     def begin(self) -> _FlakyWriteConnection:
         return _FlakyWriteConnection(self)
+
+
+class _FailOnceThenRealEngine:
+    def __init__(self, engine, failure: Exception) -> None:
+        self.engine = engine
+        self.failure = failure
+        self.begin_attempts = 0
+
+    def begin(self):
+        self.begin_attempts += 1
+        if self.failure is not None:
+            failure = self.failure
+            self.failure = None
+            return _FailingBeginConnection(failure)
+        return self.engine.begin()
+
+    def connect(self):
+        return self.engine.connect()
+
+
+class _ApplyThenFailEngine:
+    def __init__(self, engine, failure: Exception) -> None:
+        self.engine = engine
+        self.failure = failure
+
+    def begin(self):
+        return _ApplyThenFailConnection(self.engine, self.failure)
+
+    def connect(self):
+        return self.engine.connect()
+
+
+class _FailingBeginConnection:
+    def __init__(self, failure: Exception) -> None:
+        self.failure = failure
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+    def execute(self, statement, params):
+        raise self.failure
+
+
+class _ApplyThenFailConnection:
+    def __init__(self, engine, failure: Exception) -> None:
+        self.engine = engine
+        self.failure = failure
+        self._ctx = None
+        self._conn = None
+
+    def __enter__(self):
+        self._ctx = self.engine.begin()
+        self._conn = self._ctx.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        assert self._ctx is not None
+        return self._ctx.__exit__(None, None, None)
+
+    def execute(self, statement, params):
+        assert self._conn is not None
+        self._conn.execute(statement, params)
+        raise self.failure
 
 
 class _FlakyWriteConnection:
@@ -507,8 +1021,145 @@ class _FlakyWriteConnection:
         return None
 
 
+def _create_trace_step_table(engine) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE trace_step (
+                  step_id TEXT PRIMARY KEY,
+                  run_id TEXT NOT NULL,
+                  seq INTEGER NOT NULL,
+                  node TEXT NOT NULL,
+                  action TEXT,
+                  input_summary TEXT,
+                  output_summary TEXT,
+                  error_code TEXT,
+                  latency_ms INTEGER NOT NULL DEFAULT 0,
+                  token_usage TEXT,
+                  created_at DATETIME NOT NULL
+                )
+                """
+            )
+        )
+
+
+def _create_agent_run_table(engine) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE agent_run (
+                  run_id TEXT PRIMARY KEY,
+                  question TEXT NOT NULL,
+                  metric_id TEXT,
+                  target_date DATE NOT NULL,
+                  status TEXT NOT NULL,
+                  error_code TEXT,
+                  total_tokens INTEGER,
+                  total_latency_ms INTEGER,
+                  token_breakdown TEXT,
+                  created_at DATETIME NOT NULL,
+                  finished_at DATETIME
+                )
+                """
+            )
+        )
+
+
+def _create_eval_run_table(engine) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE eval_run (
+                  eval_id TEXT PRIMARY KEY,
+                  created_at DATETIME NOT NULL,
+                  summary TEXT NOT NULL
+                )
+                """
+            )
+        )
+
+
+def _create_eval_case_result_table(engine) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE eval_case_result (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  eval_id TEXT NOT NULL,
+                  case_id TEXT NOT NULL,
+                  intent_ok INTEGER NOT NULL,
+                  anomaly_ok INTEGER NOT NULL,
+                  top1_ok INTEGER NOT NULL,
+                  top3_ok INTEGER NOT NULL,
+                  evidence_coverage REAL NOT NULL,
+                  sql_safe INTEGER NOT NULL,
+                  reflection_repair_ok INTEGER NOT NULL,
+                  detail TEXT NOT NULL,
+                  UNIQUE(eval_id, case_id)
+                )
+                """
+            )
+        )
+
+
+def _create_sql_audit_table(engine) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE sql_audit (
+                  audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  audit_key TEXT UNIQUE,
+                  run_id TEXT NOT NULL,
+                  sql_text TEXT NOT NULL,
+                  sql_hash TEXT NOT NULL,
+                  guard_status TEXT NOT NULL,
+                  guard_errors TEXT,
+                  row_count INTEGER,
+                  latency_ms INTEGER,
+                  created_at DATETIME NOT NULL
+                )
+                """
+            )
+        )
+
+
+def _create_memory_record_table(engine) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE memory_record (
+                  memory_id TEXT PRIMARY KEY,
+                  layer TEXT NOT NULL,
+                  mem_key TEXT NOT NULL,
+                  payload TEXT NOT NULL,
+                  confidence REAL NOT NULL,
+                  source TEXT NOT NULL,
+                  version INTEGER NOT NULL,
+                  ttl_days INTEGER NOT NULL,
+                  created_at DATETIME NOT NULL
+                )
+                """
+            )
+        )
+
+
 def _operational_error(errno: int, message: str) -> OperationalError:
     return OperationalError("INSERT INTO trace_step", {}, _MysqlError(errno, message))
+
+
+def _connection_invalidated_error() -> DBAPIError:
+    return DBAPIError(
+        "INSERT INTO trace_step",
+        {},
+        _MysqlError(0, "connection already closed"),
+        connection_invalidated=True,
+    )
 
 
 class _MysqlError(Exception):

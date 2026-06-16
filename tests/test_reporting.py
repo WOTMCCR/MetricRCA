@@ -29,7 +29,7 @@ def test_projector_builds_report_from_persisted_e4_selected_candidate() -> None:
             "element": "paid_ads",
             "verdict": "confirmed",
         },
-        "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"],
+        "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4", "run-1:E_rank"],
         "numeric_claims": [
             {"name": "contribution_pct", "value": 0.9, "evidence_id": "run-1:E4"}
         ],
@@ -192,7 +192,7 @@ def test_projector_helpers_are_deterministic_and_alias_scoped() -> None:
     candidate = project_candidate_from_e4({"selected_candidate": _candidate()})
     claims = numeric_claims_from_e4({"selected_candidate": _candidate()}, "run-1:E4")
 
-    assert sorted(by_alias) == ["E1", "E2", "E3", "E4"]
+    assert sorted(by_alias) == ["E1", "E2", "E3", "E4", "E_rank"]
     assert candidate == {
         "root_cause_type": "campaign_traffic_drop",
         "dimension": "channel",
@@ -227,7 +227,7 @@ def test_project_candidates_from_e4_projects_top_k_display_fields() -> None:
             "verdict": "confirmed",
             "contribution_pct": 0.9,
             "eng_confidence": 0.85,
-            "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"],
+                "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4", "run-1:E_rank"],
         },
         {
             "root_cause_type": "campaign_traffic_drop",
@@ -236,7 +236,7 @@ def test_project_candidates_from_e4_projects_top_k_display_fields() -> None:
             "verdict": "likely",
             "contribution_pct": 0.1,
             "eng_confidence": 0.25,
-            "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"],
+                "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4", "run-1:E_rank"],
         },
     ]
 
@@ -275,7 +275,7 @@ def _candidate() -> dict[str, Any]:
         "evidence_support": 1.0,
         "eng_confidence": 0.85,
         "verdict": "confirmed",
-        "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"],
+        "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4", "run-1:E_rank"],
     }
 
 
@@ -296,4 +296,5 @@ def _evidences(
     evidences = [_evidence("run-1:E1"), _evidence("run-1:E2"), _evidence("run-1:E3")]
     if include_e4:
         evidences.append(_evidence("run-1:E4", summary=e4_summary))
+        evidences.append(_evidence("run-1:E_rank", summary=e4_summary))
     return evidences

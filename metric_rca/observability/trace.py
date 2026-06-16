@@ -50,13 +50,25 @@ class TraceWriter:
         except RuntimeError as exc:
             raise _trace_error(exc) from exc
 
-    def finish_run(self, *, run_id: str, status: str, error_code: str | None) -> None:
+    def finish_run(
+        self,
+        *,
+        run_id: str,
+        status: str,
+        error_code: str | None,
+        total_tokens: int | None = None,
+        total_latency_ms: int | None = None,
+        token_breakdown: list[dict[str, Any]] | None = None,
+    ) -> None:
         try:
             self._repository.finish_agent_run(
                 run_id=run_id,
                 status=status,
                 error_code=error_code,
                 finished_at=_now(),
+                total_tokens=total_tokens,
+                total_latency_ms=total_latency_ms,
+                token_breakdown=token_breakdown,
             )
         except RuntimeError as exc:
             raise _trace_error(exc) from exc
@@ -100,8 +112,8 @@ class TraceWriter:
 def _trace_error(exc: RuntimeError) -> TraceWriteError:
     code = str(exc).split(":", maxsplit=1)[0]
     if code == "SYSTEM_TABLE_WRITE_FAILED":
-        return TraceWriteError(code, "system table write failed")
-    return TraceWriteError("SYSTEM_TABLE_WRITE_FAILED", "system table write failed")
+        return TraceWriteError(code, str(exc))
+    return TraceWriteError("SYSTEM_TABLE_WRITE_FAILED", str(exc))
 
 
 def _now() -> datetime:

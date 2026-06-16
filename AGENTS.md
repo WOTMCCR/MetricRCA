@@ -28,13 +28,14 @@ encode the docs, then make the implementation pass those tests.
 
 ## Environment
 
-- Last preflight refresh: 2026-06-09T08:43:00+08:00; see `docs/env-setup.md`.
-- Runtime available: Python 3.12.3, Node v20.19.6.
+- Last preflight refresh: 2026-06-15T17:32:00+08:00; see `docs/env-setup.md`.
+- Runtime available: Python 3.12.3, Node v20.19.6, npm 10.8.2, GNU Make 4.3.
 - Network: GitHub, npm registry, and PyPI reachable through current environment.
 - Proxy: `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and lowercase variants are set to localhost proxy ports; `NO_PROXY` includes localhost loopback addresses.
 - Local service traffic must avoid proxy leakage; for Python `httpx` local calls use `trust_env=False`.
 - Project is in WSL on a native Linux path.
-- Python dependencies are installed in project-local `.venv`; use `PATH=.venv/bin:$PATH make seed` and `PATH=.venv/bin:$PATH make test` so Makefile `python` resolves correctly.
+- Python dependencies are installed in project-local `.venv`; use `PATH=.venv/bin:$PATH make seed`, `PATH=.venv/bin:$PATH make test`, and `PATH=.venv/bin:$PATH python -m pytest ...` so Makefile `python` resolves correctly.
+- Frontend dependencies are installed under `frontend/node_modules`; `npm run test --prefix frontend -- --run --reporter=dot --passWithNoTests` starts successfully.
 
 ## Strict Implementation Contract
 
@@ -84,6 +85,54 @@ Future implementation work must preserve these architecture requirements:
 - Memory constrained to planning influence; it cannot become a final conclusion.
 - FastAPI and React/Vite implemented as real app surfaces, not CLI placeholders.
 - Eval reads `anomaly_ground_truth` and computes real `dangerous_sql_blocked`.
+
+## Predict-Then-Verify Protocol
+
+After code changes pass pytest, use this protocol instead of running eval blindly.
+
+### Phase 1: Predict (main thread, before eval)
+
+Write `eval_out/{eval_id}/predictions.jsonl` with multi-aspect predictions.
+Each line is a `(case_id, aspect)` pair — predict only the aspects you have
+insight into. Available aspects: `intent`, `execution`, `evidence`, `memory`,
+`outcome`.
+
+At minimum predict: `intent` + `outcome` for all 20 cases.
+For high-risk or recently-changed cases, also predict: `execution` + `evidence`
+\+ `memory`.
+
+Each prediction line must include `reasoning` (WHY you expect this behavior)
+and `risks` (what could invalidate the prediction). The reasoning process is
+the primary value — it forces deep analysis of system behavior.
+
+### Phase 2: Parallel Dispatch (subagents)
+
+Dispatch simultaneously:
+- **Eval subagent**: run `make eval-stream`, results write to `eval_out/`
+  as per-case JSONL and individual `cases/{case_id}.json` files
+- **Architecture review subagent**: review middleware guards, discovery policy,
+  evidence chain — check whether they match the assumptions in predictions
+- **Flow review subagent**: review ReAct loop, reflection repair path, budget
+  management — identify structural weaknesses
+
+Main thread: while subagents run, analyze risk factors from predictions and
+prepare fix strategy frameworks for the highest-risk cases.
+
+### Phase 3: Synthesize (after subagents return)
+
+1. Run `make eval-gaps EVAL_ID=xxx`
+2. Read `eval_out/{eval_id}/gap_report.json` — act on findings by priority:
+   - `design_flaw` → fix code immediately (intent parsing, evidence chain, memory)
+   - `complexity_gap` → evaluate if system capability needs enhancement
+   - `overfit` → recalibrate prediction accuracy for next iteration
+3. Cross-reference with architecture/flow review findings
+4. Plan next iteration with updated predictions
+
+### Eval Discipline
+
+Do not run `make eval` or `make eval-http` outside this protocol. Use `pytest`
+for fast iteration during implementation. The predict-then-verify cycle is the
+only sanctioned eval workflow.
 
 ## Required Work Process
 

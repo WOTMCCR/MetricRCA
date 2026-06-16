@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
@@ -39,3 +39,4 @@ class PersistedArtifacts:
     sql_audit: list[dict[str, Any]]
     tasks: list[dict[str, Any]]
     report: dict[str, Any] | None
+    memory_records: list[dict[str, Any]] = field(default_factory=list)

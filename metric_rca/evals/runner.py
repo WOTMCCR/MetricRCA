@@ -14,7 +14,12 @@ from uuid import uuid4
 from metric_rca.agent.runner import run_rca
 from metric_rca.config.settings import Settings, get_settings
 from metric_rca.evals.models import EvalCase, EvalRuntimeError, GroundTruth, PersistedArtifacts
-from metric_rca.evals.scorer import dangerous_sql_blocked, score_case, summarize_scores
+from metric_rca.evals.scorer import (
+    dangerous_sql_blocked,
+    score_case,
+    summarize_memory_retrieval,
+    summarize_scores,
+)
 from metric_rca.reporting.projector import build_report_from_persisted_artifacts
 from metric_rca.repositories.metric_repository import MetricRepository
 
@@ -54,15 +59,73 @@ def run_eval(
     cases_path: Path = DEFAULT_CASES_PATH,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     eval_id: str | None = None,
+    on_case_complete: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     resolved_settings = settings or get_settings()
     resolved_repository = repository or MetricRepository.from_settings(resolved_settings)
     close_repository = repository is None
     resolved_eval_id = eval_id or f"eval-{uuid4().hex[:8]}"
+
     try:
-        _validate_eval_model(resolved_settings)
         cases = load_cases(cases_path)
         ground_truth = _load_ground_truth(resolved_repository, cases)
+        memory_case_scores: list[dict[str, Any]] = []
+        case_scores_progress: list[dict[str, Any]] = []
+
+        def _write_progress(*, complete: bool) -> None:
+            _persist_eval_summary(
+                resolved_repository,
+                eval_id=resolved_eval_id,
+                summary=_eval_summary(
+                    case_scores=case_scores_progress,
+                    memory_case_scores=memory_case_scores,
+                    settings=resolved_settings,
+                    configured_case_total=len(cases),
+                    complete=complete,
+                ),
+            )
+
+        def _notify_memory_case(score: dict[str, Any]) -> None:
+            memory_case_scores.append(score)
+            if on_case_complete is not None:
+                streamed = {"phase": "memory", **score}
+                on_case_complete(streamed)
+                _write_case_artifact(
+                    output_dir=output_dir,
+                    eval_id=resolved_eval_id,
+                    case_id=score["case_id"],
+                    score=streamed,
+                    subdir="memory_cases",
+                )
+            _write_progress(complete=False)
+
+        def _notify_case(score: dict[str, Any]) -> None:
+            case_scores_progress.append(score)
+            try:
+                resolved_repository.upsert_eval_case_result(_case_result_row(resolved_eval_id, score))
+            except RuntimeError as exc:
+                raise EvalRuntimeError(_code_from_runtime_error(exc, "SYSTEM_TABLE_WRITE_FAILED"), str(exc)) from exc
+            if on_case_complete is not None:
+                on_case_complete(score)
+                _write_case_artifact(
+                    output_dir=output_dir,
+                    eval_id=resolved_eval_id,
+                    case_id=score["case_id"],
+                    score=score,
+                    subdir="cases",
+                )
+            _write_progress(complete=False)
+
+        _write_progress(complete=False)
+        memory_case_scores = _run_memory_cases(
+            cases=cases,
+            ground_truth=ground_truth,
+            eval_id=f"{resolved_eval_id}-mem",
+            settings=resolved_settings,
+            rca_runner=rca_runner,
+            repository=resolved_repository,
+            on_case_complete=_notify_memory_case,
+        )
         case_scores = _run_cases(
             cases=cases,
             ground_truth=ground_truth,
@@ -72,25 +135,23 @@ def run_eval(
             repository=resolved_repository,
             repository_factory=repository_factory,
             injected_repository=repository is not None,
+            on_case_complete=_notify_case,
         )
-        for score in case_scores:
-            resolved_repository.create_eval_case_result(_case_result_row(resolved_eval_id, score))
-        summary = summarize_scores(
-            case_scores,
-            dangerous_sql_blocked=dangerous_sql_blocked(),
+        summary = _eval_summary(
+            case_scores=case_scores,
+            memory_case_scores=memory_case_scores,
+            settings=resolved_settings,
+            configured_case_total=len(cases),
+            complete=True,
         )
-        summary["llm_provider"] = resolved_settings.llm_provider
-        summary["llm_model"] = resolved_settings.llm_model
-        thresholds_met = _thresholds_met(summary)
-        summary["thresholds_met"] = thresholds_met
-        resolved_repository.create_eval_run(
-            {
-                "eval_id": resolved_eval_id,
-                "created_at": datetime.now(timezone.utc),
-                "summary": summary,
-            }
-        )
-        output = {"eval_id": resolved_eval_id, "summary": summary, "cases": case_scores}
+        thresholds_met = bool(summary["thresholds_met"])
+        _persist_eval_summary(resolved_repository, eval_id=resolved_eval_id, summary=summary)
+        output = {
+            "eval_id": resolved_eval_id,
+            "summary": summary,
+            "cases": case_scores,
+            "memory_cases": memory_case_scores,
+        }
         _write_outputs(output, output_dir=output_dir)
         if not thresholds_met:
             raise EvalRuntimeError("EVAL_THRESHOLD_NOT_MET", resolved_eval_id)
@@ -110,22 +171,26 @@ def _run_cases(
     repository: Any,
     repository_factory: Callable[[], Any] | None,
     injected_repository: bool,
+    on_case_complete: Callable[[dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
     concurrency = int(getattr(settings, "eval_concurrency", 1))
     if concurrency < 1:
         raise EvalRuntimeError("EVAL_CONCURRENCY_INVALID", "eval_concurrency must be >= 1")
     if concurrency == 1:
-        return [
-            _run_and_score_case(
+        results: list[dict[str, Any]] = []
+        for case in cases:
+            score = _run_and_score_case(
                 case=case,
                 ground_truth=ground_truth[case.case_id],
                 eval_id=eval_id,
-                settings=_settings_for_case(settings, ground_truth[case.case_id]),
+                settings=_settings_for_case(settings, ground_truth[case.case_id], memory_enabled=False),
                 rca_runner=rca_runner,
                 repository=repository,
             )
-            for case in cases
-        ]
+            if on_case_complete is not None:
+                on_case_complete(score)
+            results.append(score)
+        return results
     if injected_repository and repository_factory is None:
         raise EvalRuntimeError(
             "EVAL_CONCURRENCY_REPOSITORY_UNSAFE",
@@ -150,7 +215,7 @@ def _run_cases(
                     case=case,
                     ground_truth=ground_truth[case.case_id],
                     eval_id=eval_id,
-                    settings=_settings_for_case(settings, ground_truth[case.case_id]),
+                    settings=_settings_for_case(settings, ground_truth[case.case_id], memory_enabled=False),
                     rca_runner=rca_runner,
                     repository_factory=worker_repository_factory,
                 )
@@ -162,7 +227,10 @@ def _run_cases(
         while futures:
             for future in as_completed(tuple(futures)):
                 index = futures.pop(future)
-                results[index] = future.result()
+                score = future.result()
+                results[index] = score
+                if on_case_complete is not None:
+                    on_case_complete(score)
                 submit_next()
                 break
         ordered_results: list[dict[str, Any]] = []
@@ -180,6 +248,39 @@ def _run_cases(
     finally:
         if not closed:
             executor.shutdown(wait=True, cancel_futures=False)
+
+
+def _run_memory_cases(
+    *,
+    cases: list[EvalCase],
+    ground_truth: dict[str, GroundTruth],
+    eval_id: str,
+    settings: Settings,
+    rca_runner: Callable[..., dict[str, Any]],
+    repository: Any,
+    on_case_complete: Callable[[dict[str, Any]], None] | None = None,
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    for case in cases:
+        # Keep the memory prepass sequential and write-isolated: each case reads
+        # only seed/pre-existing memory, never memory produced by another eval case.
+        score = _run_and_score_case(
+            case=case,
+            ground_truth=ground_truth[case.case_id],
+            eval_id=eval_id,
+            settings=_settings_for_case(
+                settings,
+                ground_truth[case.case_id],
+                memory_enabled=True,
+                memory_write_on_finalize=False,
+            ),
+            rca_runner=rca_runner,
+            repository=repository,
+        )
+        if on_case_complete is not None:
+            on_case_complete(score)
+        results.append(score)
+    return results
 
 
 def _run_and_score_case_with_factory(
@@ -227,6 +328,8 @@ def _run_and_score_case(
     score = score_case(case_id=case.case_id, ground_truth=ground_truth, artifacts=artifacts)
     score["detail"]["eval_attempts"] = attempts
     score["detail"]["final_run_id"] = run_id
+    score["detail"]["memory_enabled"] = bool(settings.memory_enabled)
+    score["detail"]["trace_step_count"] = len(artifacts.trace_steps)
     return score
 
 
@@ -252,13 +355,87 @@ def _case_result_row(eval_id: str, score: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def main() -> int:
+def _eval_summary(
+    *,
+    case_scores: list[dict[str, Any]],
+    memory_case_scores: list[dict[str, Any]],
+    settings: Settings,
+    configured_case_total: int,
+    complete: bool,
+) -> dict[str, Any]:
+    summary = summarize_scores(
+        case_scores,
+        dangerous_sql_blocked=dangerous_sql_blocked(),
+    )
+    summary.update(summarize_memory_retrieval(memory_case_scores, case_scores))
+    summary["llm_provider"] = settings.llm_provider
+    summary["llm_model"] = settings.llm_model
+    summary["configured_case_total"] = configured_case_total
+    summary["completed_case_total"] = len(case_scores)
+    summary["completed_memory_case_total"] = len(memory_case_scores)
+    summary["complete"] = complete
+    summary["thresholds_met"] = _thresholds_met(summary) if complete else False
+    return summary
+
+
+def _persist_eval_summary(repository: Any, *, eval_id: str, summary: dict[str, Any]) -> None:
+    writer = getattr(repository, "upsert_eval_run_summary", None)
+    if not callable(writer):
+        raise EvalRuntimeError("EVAL_PROGRESS_UNSUPPORTED", "repository lacks eval_run summary upsert")
     try:
-        output = run_eval()
+        writer(
+            {
+                "eval_id": eval_id,
+                "created_at": datetime.now(timezone.utc),
+                "summary": summary,
+            }
+        )
+    except RuntimeError as exc:
+        raise EvalRuntimeError(_code_from_runtime_error(exc, "SYSTEM_TABLE_WRITE_FAILED"), str(exc)) from exc
+
+
+def _code_from_runtime_error(exc: RuntimeError, default: str) -> str:
+    code = str(exc).split(":", maxsplit=1)[0]
+    return code if code.isupper() else default
+
+
+def _write_case_artifact(
+    *,
+    output_dir: Path,
+    eval_id: str,
+    case_id: str,
+    score: dict[str, Any],
+    subdir: str,
+) -> None:
+    cases_dir = output_dir / eval_id / subdir
+    cases_dir.mkdir(parents=True, exist_ok=True)
+    case_path = cases_dir / f"{case_id}.json"
+    case_path.write_text(json.dumps(score, ensure_ascii=False, indent=2, default=str))
+
+
+def main() -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="MetricRCA eval runner")
+    parser.add_argument("--stream", action="store_true", default=False, help="emit per-case JSONL to stdout")
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--eval-id", type=str, default=None)
+    args = parser.parse_args()
+
+    def _stream_callback(score: dict[str, Any]) -> None:
+        print(json.dumps(score, ensure_ascii=False, default=str), flush=True)
+
+    try:
+        output = run_eval(
+            output_dir=args.output_dir,
+            eval_id=args.eval_id,
+            on_case_complete=_stream_callback if args.stream else None,
+        )
     except EvalRuntimeError as exc:
         print(json.dumps({"error_code": exc.code, "message": str(exc)}, ensure_ascii=False))
         return 1
-    print(json.dumps(output["summary"], ensure_ascii=False, sort_keys=True))
+    if not args.stream:
+        print(json.dumps(output["summary"], ensure_ascii=False, sort_keys=True))
     return 0
 
 
@@ -290,12 +467,20 @@ def _ground_truth_from_row(row: dict[str, Any]) -> GroundTruth:
     )
 
 
-def _settings_for_case(settings: Settings, ground_truth: GroundTruth) -> Settings:
+def _settings_for_case(
+    settings: Settings,
+    ground_truth: GroundTruth,
+    *,
+    memory_enabled: bool,
+    memory_write_on_finalize: bool | None = None,
+) -> Settings:
     values = settings.model_dump()
     values["target_date"] = ground_truth.business_date
     values["business_today"] = ground_truth.business_date + timedelta(days=1)
-    values["memory_enabled"] = False
+    values["memory_enabled"] = memory_enabled
     values["memory_required"] = False
+    if memory_write_on_finalize is not None:
+        values["memory_write_on_finalize"] = memory_write_on_finalize
     return Settings(**values)
 
 
@@ -322,17 +507,32 @@ def _run_case_with_retries(
             memory_repo=None,
         )
         error_code = str(result.get("error_code") or "")
+        status = str(result.get("status") or "")
+        if not error_code:
+            if status in {"succeeded", "no_anomaly"}:
+                return run_id, attempt
+            if status == "failed":
+                raise EvalRuntimeError("EVAL_RCA_RUN_FAILED", run_id)
+            raise EvalRuntimeError("EVAL_RCA_RUN_STATUS_INVALID", run_id)
         if not _is_transient_eval_error(error_code) or attempt == max_attempts:
-            return run_id, attempt
+            raise EvalRuntimeError(error_code, run_id)
         if retry_seconds > 0:
             time.sleep(retry_seconds)
-    return last_run_id, max_attempts
+    raise EvalRuntimeError("EVAL_ATTEMPTS_EXHAUSTED", last_run_id)
 
 
 def _read_artifacts(repository: Any, run_id: str) -> PersistedArtifacts:
     agent_run = repository.get_agent_run(run_id)
+    _require_terminal_persisted_run(agent_run, run_id=run_id)
     evidences = repository.get_evidences(run_id)
     tasks = repository.get_operation_tasks(run_id)
+    memory_reader = getattr(repository, "get_memory_records_for_run", None)
+    if not callable(memory_reader):
+        raise EvalRuntimeError("EVAL_MEMORY_ARTIFACT_UNSUPPORTED", "repository lacks memory artifact reader")
+    try:
+        memory_records = memory_reader(run_id)
+    except RuntimeError as exc:
+        raise EvalRuntimeError(_code_from_runtime_error(exc, "SYSTEM_TABLE_READ_FAILED"), str(exc)) from exc
     return PersistedArtifacts(
         agent_run=agent_run,
         evidences=evidences,
@@ -344,7 +544,19 @@ def _read_artifacts(repository: Any, run_id: str) -> PersistedArtifacts:
             evidences=evidences,
             tasks=tasks,
         ),
+        memory_records=memory_records,
     )
+
+
+def _require_terminal_persisted_run(agent_run: dict[str, Any] | None, *, run_id: str) -> None:
+    if agent_run is None:
+        raise EvalRuntimeError("EVAL_RCA_RUN_MISSING", run_id)
+    status = str(agent_run.get("status") or "")
+    if status in {"succeeded", "no_anomaly"}:
+        return
+    if status == "failed":
+        raise EvalRuntimeError(str(agent_run.get("error_code") or "EVAL_RCA_RUN_FAILED"), run_id)
+    raise EvalRuntimeError("EVAL_RCA_RUN_STATUS_INVALID", run_id)
 
 
 def _write_outputs(output: dict[str, Any], *, output_dir: Path) -> None:
@@ -382,21 +594,10 @@ def _thresholds_met(summary: dict[str, Any]) -> bool:
         and summary.get("report_traceable_rate") == 1.0
         and summary.get("reflection_repair_ok") is True
         and summary.get("memory_pollution_ok") is True
+        and summary.get("memory_hit_improvement", -1.0) >= 0.0
         and summary.get("dangerous_sql_blocked") is True
         and summary.get("no_anomaly_correct") is True
     )
-
-
-_KNOWN_WEAK_MODELS = frozenset({"gpt-4.1-mini", "gpt-4.1-nano", "gpt-3.5-turbo"})
-
-
-def _validate_eval_model(settings: Settings) -> None:
-    model = (settings.llm_model or "").lower()
-    if model in _KNOWN_WEAK_MODELS:
-        raise EvalRuntimeError(
-            "EVAL_MODEL_TOO_WEAK",
-            f"eval requires a capable model (GPT-5 family / GPT-4.1 / DeepSeek-V3), not {settings.llm_model}",
-        )
 
 
 def _run_id(eval_id: str, case_id: str) -> str:
@@ -422,7 +623,6 @@ def _is_transient_eval_error(error_code: str) -> bool:
         "rate_limit_exceeded",
         "request_timeout",
         "timeout",
-        "system_table_write_failed",
     }
 
 

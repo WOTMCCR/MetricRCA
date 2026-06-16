@@ -1,24 +1,25 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Activity, FolderTree, FileCheck, ShieldCheck, ScanSearch, ListTodo,
-  RefreshCw, X, AlertTriangle, RotateCcw, Search, Copy, Check,
+  RefreshCw, X, AlertTriangle, RotateCcw, Search, Copy, Check, Brain, FlaskConical,
 } from "lucide-react";
 import { HttpMetricRcaApiClient, type MetricRcaApiClient, type RunPayload } from "../apiClient";
-import type { RunResponse } from "./components/mockData";
+import type { EvalSummary, RunResponse } from "./components/mockData";
 import { NodeGraph, type GraphSelection } from "./components/NodeGraph";
 import {
   VerdictBar, CandidatesView, EvidenceView, SQLAuditView, ReflectionView, TasksView,
-  StepDrawer, LoopDrawer, ConclusionCard,
+  StepDrawer, LoopDrawer, ConclusionCard, MemoryView, EvalBoard,
 } from "./components/Views";
 import { StatusPill, Card, CopyableId } from "./components/ui-bits";
 import {
   buildLoadingRun,
   toInvestigationBundle,
+  toEvalSummary,
   type InvestigationBundle,
   type RunRequestContext,
 } from "./apiAdapter";
 
-type ViewKey = "investigation" | "candidates" | "evidence" | "sql_audit" | "reflection" | "tasks";
+type ViewKey = "investigation" | "candidates" | "evidence" | "sql_audit" | "reflection" | "memory" | "tasks" | "eval";
 
 const NAV: Array<{ key: ViewKey; label: string; icon: any }> = [
   { key: "investigation", label: "Investigation", icon: Activity },
@@ -26,7 +27,9 @@ const NAV: Array<{ key: ViewKey; label: string; icon: any }> = [
   { key: "evidence", label: "Evidence", icon: FileCheck },
   { key: "sql_audit", label: "SQL Audit", icon: ShieldCheck },
   { key: "reflection", label: "Reflection", icon: ScanSearch },
+  { key: "memory", label: "Memory", icon: Brain },
   { key: "tasks", label: "Tasks", icon: ListTodo },
+  { key: "eval", label: "Quality Eval", icon: FlaskConical },
 ];
 
 const DEFAULT_QUESTION = "Why did yesterday GMV drop?";
@@ -52,6 +55,8 @@ export default function App({
   const [rerunOpen, setRerunOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRunSwitching, setIsRunSwitching] = useState(false);
+  const [evalSummary, setEvalSummary] = useState<EvalSummary | null>(null);
+  const [evalRunning, setEvalRunning] = useState(false);
 
   const run = current?.run ?? buildLoadingRun(DEFAULT_QUESTION);
   const trace = current?.trace ?? [];
@@ -95,12 +100,13 @@ export default function App({
     setHighlightEvidence(null);
     try {
       const created = await apiClient.createRun(payload);
-      const [latestRun, traceRes, evidenceRes, sqlAuditRes, tasksRes] = await Promise.all([
+      const [latestRun, traceRes, evidenceRes, sqlAuditRes, tasksRes, memoryRes] = await Promise.all([
         apiClient.getRun(created.run_id),
         apiClient.getTrace(created.run_id),
         apiClient.getEvidence(created.run_id),
         apiClient.getSqlAudit(created.run_id),
         apiClient.getTasks(created.run_id),
+        apiClient.getMemory(created.run_id),
       ]);
       const loaded = toInvestigationBundle(
         latestRun,
@@ -108,7 +114,7 @@ export default function App({
         evidenceRes,
         sqlAuditRes,
         tasksRes,
-        { run_id: created.run_id, memory: [] },
+        memoryRes,
         context,
       );
       setCurrent(loaded);
@@ -149,12 +155,13 @@ export default function App({
     setSelection(null);
     setHighlightEvidence(null);
     try {
-      const [latestRun, traceRes, evidenceRes, sqlAuditRes, tasksRes] = await Promise.all([
+      const [latestRun, traceRes, evidenceRes, sqlAuditRes, tasksRes, memoryRes] = await Promise.all([
         apiClient.getRun(runId),
         apiClient.getTrace(runId),
         apiClient.getEvidence(runId),
         apiClient.getSqlAudit(runId),
         apiClient.getTasks(runId),
+        apiClient.getMemory(runId),
       ]);
       const loaded = toInvestigationBundle(
         latestRun,
@@ -162,7 +169,7 @@ export default function App({
         evidenceRes,
         sqlAuditRes,
         tasksRes,
-        { run_id: runId, memory: [] },
+        memoryRes,
         context,
       );
       setCurrent(loaded);
@@ -195,6 +202,19 @@ export default function App({
     setView(next);
     setSelection(null);
   };
+
+  async function runQualityEval() {
+    setEvalRunning(true);
+    setError(null);
+    try {
+      const response = await apiClient.runEval();
+      setEvalSummary(toEvalSummary(response));
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : "UI_EVAL_REQUEST_FAILED");
+    } finally {
+      setEvalRunning(false);
+    }
+  }
 
   return (
     <div
@@ -255,7 +275,15 @@ export default function App({
             )}
             {view === "sql_audit" && <SQLAuditView items={current?.sqlAudit ?? []} />}
             {view === "reflection" && <ReflectionView trace={trace} />}
+            {view === "memory" && <MemoryView items={current?.memory ?? []} />}
             {view === "tasks" && <TasksView items={current?.tasks ?? []} run={run} />}
+            {view === "eval" && (
+              <QualityEvalView
+                data={evalSummary}
+                running={evalRunning}
+                onRun={() => void runQualityEval()}
+              />
+            )}
           </div>
         </main>
       </div>
@@ -272,6 +300,42 @@ export default function App({
             void dispatchRun(payload);
           }}
         />
+      )}
+    </div>
+  );
+}
+
+function QualityEvalView({
+  data,
+  running,
+  onRun,
+}: {
+  data: EvalSummary | null;
+  running: boolean;
+  onRun: () => void;
+}) {
+  return (
+    <div className="space-y-4 min-w-0">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-[18px] font-semibold text-slate-900">Quality Eval</div>
+          <div className="mt-1 text-[13px] text-slate-500">Run the persisted eval suite and inspect gate results.</div>
+        </div>
+        <button
+          type="button"
+          disabled={running}
+          onClick={onRun}
+          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-[13px] font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <FlaskConical size={14} /> {running ? "Running..." : "Run Eval"}
+        </button>
+      </div>
+      {data ? (
+        <EvalBoard data={data} />
+      ) : (
+        <Card className="p-8">
+          <EmptyMsg text="Eval status not loaded." />
+        </Card>
       )}
     </div>
   );

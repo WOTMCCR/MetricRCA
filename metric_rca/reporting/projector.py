@@ -183,7 +183,7 @@ def _candidate_evidence_ids_are_current_run_passed(
     evidences: list[dict[str, Any]],
     run_id: str,
 ) -> bool:
-    required_aliases = {"E1", "E2", "E3", "E4"}
+    required_aliases = {"E1", "E2", "E3", "E4", "E_rank"}
     actual = set(evidence_ids)
     if not all(
         any(_evidence_id_matches_alias(evidence_id, run_id=run_id, alias=alias) for evidence_id in actual)

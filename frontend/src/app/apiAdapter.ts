@@ -250,10 +250,20 @@ function toTask(row: Record<string, unknown>): TaskRec {
 }
 
 function toMemory(row: Record<string, unknown>): MemoryRec {
+  const layer = stringValue(row.layer, 'memory');
+  const outputSummary = isObject(row.output_summary)
+    ? row.output_summary
+    : {
+        layer,
+        mem_key: stringValue(row.mem_key, ''),
+        confidence: row.confidence,
+        source: row.source,
+        payload: isObject(row.payload) ? row.payload : {},
+      };
   return {
-    step_id: stringValue(row.step_id, ''),
-    node: stringValue(row.node, 'memory'),
-    output_summary: isObject(row.output_summary) ? row.output_summary : {},
+    step_id: stringValue(row.step_id, stringValue(row.memory_id, 'memory')),
+    node: stringValue(row.node, layer === 'memory' ? 'memory' : `memory:${layer}`),
+    output_summary: outputSummary,
     error_code: typeof row.error_code === 'string' ? row.error_code : null,
     created_at: stringValue(row.created_at, ''),
   };
