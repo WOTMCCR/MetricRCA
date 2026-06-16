@@ -1,3 +1,37 @@
+## ADL-0035: Phase B eval-driven PTV optimization loop
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-16 |
+| 状态 | accepted |
+| 关联迭代 | Phase B eval optimization |
+| 影响范围 | intent prompt, anomaly detection direction, expert prompt guidance |
+
+### 背景与场景
+
+28-case eval harness（ADL-0034）已构建完成，预期 8 个新 case 中约 4-6 个会失败。
+阶段 B 使用 PTV（Predict-Then-Verify）自动循环修复系统能力缺口。
+
+### 决策
+
+采用 PTV 自动循环模式（最多 6 轮），每轮：predict → eval → gap analysis → minimal fix。
+修复类型分为 FIX-I（intent prompt）、FIX-T（tool/service）、FIX-P（expert prompt）、
+FIX-G（guard logic），按 gap_report divergence 类型驱动。
+
+架构红线：eval harness 不可改（cases/scorer/injection/ground_truth）；自然语言语义解析
+只走 LLM intent prompt（禁止 Python keyword/regex parser）；数据/元数据路径不变；
+原 20 case 每轮零回归。
+
+验收门槛：28/28 连续 2 次 green；intent/anomaly 28/28；top1≥85% top3≥93%。
+
+### 被否决的方案
+
+- 手动逐 case 修复（无 PTV 预测对照）：失去科学实验的预测-验证结构。
+- 分多个 prompt 手动迭代：Codex 可自主循环，减少人工干预延迟。
+- 降低门槛适配新 case：违反 eval integrity 原则。
+
+---
+
 ## ADL-0034: Eval harness expansion from 20 to 28 cases
 
 | 字段 | 值 |

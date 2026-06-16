@@ -67,6 +67,24 @@ eval-http 模式同一后端 + 两个 provider 各跑 20 case 均 green。
 
 验收：00-overview §4 全表门槛；连续 2 次 `make eval` 全绿。
 
+## Eval Harness Expansion（阶段 A）— codex/eval-harness-28cases
+
+1. 8 个新 eval case（C21–C28），覆盖 rate discovery、uv 指标、borderline、
+   正向异常、模糊意图、composite 主因、multi-day drift。
+2. anomaly_injection 新增 BORDERLINE_DATE (06-03)、SPIKE_DATE (06-02)、
+   organic drift (06-03/06-04)。
+3. scorer 扩展 C22 no-anomaly trap + C27 dimension_elements。
+4. 不修 agent/service/API 代码；预期部分新 case 失败。
+
+验收：28 case + 28 ground_truth 正确；make test 全绿；不跑 eval。
+
+## Phase B（05）Eval-Driven Optimization — codex/b{N}-*
+
+PTV 自动循环：PREDICT → EXECUTE → VERIFY → DIAGNOSE → FIX。
+详见 `05-phase-b-eval-optimization.md`。
+
+验收：28/28 eval green 连续 2 次；原 20 case 零回归；top1≥85% top3≥93%。
+
 ## 测试迁移清单（P6 作废/重写）
 
 | v1 测试 | 处置 |
