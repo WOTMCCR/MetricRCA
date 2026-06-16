@@ -63,6 +63,17 @@ flowchart LR
 - Memory can only influence planning priority. It cannot become evidence or a
   final conclusion.
 
+### Multi-Agent Operational Boundary
+
+When `METRIC_RCA_MULTI_AGENT_ENABLED=true`, routing is intentionally strict.
+Only Phase 1 metrics with an explicit expert family are accepted. Unknown
+metrics, or metrics not assigned to `gmv_family` / `rate_family`, fail with
+`METRIC_NOT_FOUND`; the system does not fall back to a generic or single-agent
+path. Likewise, if either expert cannot be constructed or exposes a mismatched
+tool set, factory construction fails with a typed error instead of downgrading
+to the P8 single-agent path. This preserves the zero-fallback contract and makes
+metric-family rollout/configuration mistakes visible.
+
 ## Zero Silent Fallback
 
 The project fails fast with typed errors. It forbids broad exception swallowing,

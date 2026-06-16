@@ -44,7 +44,7 @@ def route_metric_family(metric_id: str) -> str:
 
 
 def build_subagents(*, settings: Any, tools: list[Any], middleware: list[Any]) -> list[dict[str, Any]]:
-    if not getattr(settings, "multi_agent_enabled", False):
+    if not settings.multi_agent_enabled:
         return []
     if not tools:
         raise SubagentScopeError("AGENT_INVOKE_FAILED", "multi-agent experts require shared tools")

@@ -1,3 +1,53 @@
+## ADL-0033: P9 multi-agent unknown metric and expert factory failures fail fast
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-16 |
+| 状态 | accepted |
+| 关联迭代 | P9 multi-agent final |
+| 影响范围 | multi-agent routing, agent factory, operations docs |
+
+### 背景与场景
+
+P9 对抗审查指出 multi-agent triage 使用固定 Phase 1 family 集合：
+`gmv/net_gmv/uv/aov` 路由到 `gmv_family`，`pay_cvr/refund_rate/stockout_rate/complaint_rate`
+路由到 `rate_family`。如果未来 intent planner 解析出尚未纳入 Phase 1 或尚未分配 expert family 的
+metric_id，multi-agent path 会返回 `METRIC_NOT_FOUND`。审查还指出当 `multi_agent_enabled=true`
+且某个 expert 构建失败时，factory 会让整个 bundle 构建失败，而不是退回 single-agent。
+
+### 决策
+
+保留 fail-fast 行为，不引入 generic expert 或 single-agent downgrade：
+
+- triage 只接受 `PHASE1_METRICS` 且已显式分配 family 的 metric_id；未知 metric 或未分配 family 的
+  metric 失败为 `METRIC_NOT_FOUND`。
+- `multi_agent_enabled=true` 时，GMV/rate experts 必须全部构建成功、暴露同一工具集、共享同一
+  middleware/context；任一 expert 构建或工具集校验失败，run 失败为 typed factory error，不降级为
+  P8 single-agent path。
+- HTTP eval 的并行 worker 使用 per-thread `httpx.Client(trust_env=False)`；这是本地 HTTP 隔离和线程边界，
+  不是 provider 或 API fallback。
+
+### 理由
+
+本项目的 P0 规则禁止 silent fallback。未知 metric 或 expert 构建失败时退回 generic/single-agent 会让
+配置错误在生产中变成“看似成功但 topology 不符合配置”的运行结果，并可能绕过 P9 的路由/共享预算证明。
+新增 metric 必须先进入 metadata/intent/eval 约束，再被显式分配到 expert family。Multi-agent 配置失败
+应在请求路径上以 typed error 暴露，便于运维发现并修复配置，而不是自动降级。
+
+### 被否决的方案
+
+- 未知 metric 自动调用 generic agent：会把未设计的 metric family 当作已支持能力。
+- multi-agent expert 构建失败时退回 single-agent：违反 `multi_agent_enabled=true` 的显式配置语义和
+  zero-fallback 规则。
+- 在 triage 中用 LLM 猜测未知 metric 的 family：重复 intent parsing 边界，并引入不可审计路由。
+
+### 后续跟进
+
+新增 metric（例如 `cart_abandon_rate`）时必须更新 metric metadata、intent/eval case、family routing
+测试和本文档/合规矩阵。若未来需要第三个 family，应新增显式 expert，而不是复用 fallback path。
+
+---
+
 ## ADL-0032: P9 RunOutcome advisory validation and parallel memory prepass
 
 | 字段 | 值 |

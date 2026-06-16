@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from metric_rca.agent.deep_tools import EXPOSED_TOOL_NAMES
+from metric_rca.agent.factory import create_metric_rca_agent
 from metric_rca.agent.runner import AgentDependencies, RunOrchestrator
 from metric_rca.agent.subagents import RunOutcome, route_metric_family
 from metric_rca.evals.models import GroundTruth, PersistedArtifacts
@@ -29,6 +30,21 @@ def test_single_agent_and_multi_agent_produce_same_score_fields() -> None:
     assert set(single) == set(multi)
     assert single["multi_agent_path"] == "single_agent"
     assert multi["multi_agent_path"] == "multi_agent:gmv_family"
+
+
+def test_single_agent_mode_does_not_create_expert_agents() -> None:
+    repo = _Repo()
+    factory = _Factory(repo)
+
+    bundle = create_metric_rca_agent(
+        dependencies=_deps(repo, metric_id="gmv", multi_agent_enabled=False),
+        run_id="run-single-factory",
+        agent_factory=factory,
+    )
+
+    assert bundle.expert_agents == {}
+    assert factory.created_names == ["single_agent"]
+    assert bundle.agent_for_family(None) is bundle.agent
 
 
 def test_multi_agent_triage_routes_gmv_family() -> None:
@@ -145,6 +161,7 @@ class _Factory:
     def __init__(self, repo: "_Repo", terminal: str = "success") -> None:
         self.repo = repo
         self.terminal = terminal
+        self.created_names: list[str] = []
         self.invoked: list[str] = []
         self.middleware_ids: list[int] = []
         self.guard_context_ids: list[int] = []
@@ -154,6 +171,7 @@ class _Factory:
         self.middleware_ids.append(id(middleware))
         self.guard_context_ids.append(id(middleware.context))
         name = str(kwargs.get("name") or "")
+        self.created_names.append(name)
         family = "rate_family" if "rate_family" in name else "gmv_family"
         return _Agent(self.repo, family=family, terminal=self.terminal, invocations=self.invoked)
 

@@ -113,7 +113,7 @@ class RunOrchestrator:
             bundle.guard_context.discovery_policy = discovery_policy_from_intent(parsed_intent)
             expert_family: str | None = None
             selected_agent = bundle.agent
-            if getattr(self.dependencies.settings, "multi_agent_enabled", False):
+            if self.dependencies.settings.multi_agent_enabled:
                 expert_family = route_metric_family(parsed_intent.metric_id)
                 self._write_triage_route(resolved_run_id, parsed_intent=parsed_intent, family=expert_family)
                 selected_agent = bundle.agent_for_family(expert_family)
