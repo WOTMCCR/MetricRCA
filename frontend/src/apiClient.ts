@@ -26,6 +26,7 @@ export type ApiError = {
 export type RunPayload = {
   question: string;
   target_date?: string;
+  business_today?: string;
   memory_enabled?: boolean;
   memory_required?: boolean;
 };

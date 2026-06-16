@@ -1,0 +1,160 @@
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 14px;
+
+  /* CRT / amber */
+  --bg:        #0E0B08;
+  --surface:   #16110B;
+  --elevated:  #1F1813;
+  --border-c:  #2C2318;
+
+  --accent:        #FFB000;
+  --accent-dim:    #C8862B;
+  --data:          #4FD6E8;
+
+  --ok:        #7BC47F;
+  --warn:      #F4A82C;
+  --error:     #FF5C4D;
+  --muted-st:  #6B5F4E;
+
+  --text:      #F3E9D8;
+  --text-mut:  #9A8C76;
+  --text-faint:#6B5F4E;
+
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "Inter", "IBM Plex Sans", system-ui, sans-serif;
+
+  /* shadcn shims (kept dark amber) */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--elevated);
+  --popover-foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: #0E0B08;
+  --secondary: var(--elevated);
+  --secondary-foreground: var(--text);
+  --muted: var(--elevated);
+  --muted-foreground: var(--text-mut);
+  --accent-foreground: #0E0B08;
+  --destructive: var(--error);
+  --destructive-foreground: #0E0B08;
+  --border: var(--border-c);
+  --input: var(--border-c);
+  --input-background: var(--surface);
+  --switch-background: var(--border-c);
+  --ring: var(--accent);
+  --radius: 0.25rem;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius));
+  --radius-md: calc(var(--radius));
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-amber-accent: var(--accent);
+  --color-amber-dim: var(--accent-dim);
+  --color-data: var(--data);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-err: var(--error);
+  --color-muted-st: var(--muted-st);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-text-mut: var(--text-mut);
+  --color-text-faint: var(--text-faint);
+
+  --font-mono: var(--font-mono);
+  --font-sans: var(--font-sans);
+}
+
+@layer base {
+  * {
+    border-color: var(--border-c);
+  }
+  html {
+    font-size: var(--font-size);
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+  }
+  /* subtle scanline overlay */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    background-image: repeating-linear-gradient(
+      0deg,
+      rgba(255, 176, 0, 0.025) 0px,
+      rgba(255, 176, 0, 0.025) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    mix-blend-mode: screen;
+  }
+}
+
+/* Utility classes */
+.mono { font-family: var(--font-mono); }
+.label-lbl {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-mut);
+}
+.crt-glow {
+  box-shadow: 0 0 0 1px var(--border-c), inset 0 0 24px rgba(255,176,0,0.04);
+}
+.crt-glow-strong {
+  box-shadow: 0 0 0 1px var(--accent), 0 0 18px rgba(255,176,0,0.35), inset 0 0 24px rgba(255,176,0,0.08);
+}
+
+/* React Flow theming overrides */
+.react-flow__background { background: var(--bg) !important; }
+.react-flow__controls { background: var(--elevated) !important; border: 1px solid var(--border-c) !important; }
+.react-flow__controls-button {
+  background: var(--elevated) !important;
+  color: var(--text) !important;
+  border-bottom: 1px solid var(--border-c) !important;
+  fill: var(--text-mut) !important;
+}
+.react-flow__controls-button:hover { background: var(--surface) !important; }
+.react-flow__edge-path { stroke: var(--accent-dim); }
+.react-flow__edge.selected .react-flow__edge-path { stroke: var(--accent); }
+.react-flow__attribution { background: transparent !important; color: var(--text-faint) !important; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border-c); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }

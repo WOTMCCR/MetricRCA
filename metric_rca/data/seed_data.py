@@ -1,7 +1,7 @@
-"""种子数据生成器：固定种子 + 固定业务日，幂等重建 60 天确定性数据 + 5 个 ground truth。
+"""种子数据生成器：可配置种子 + 固定业务日，幂等重建 60 天确定性数据 + 5 个 ground truth。
 
 设计要点：
-  - 完全可复现：固定 SEED 与业务日，`make seed` 可幂等重建（先 DELETE 全表再插入）。
+  - 完全可复现：默认 seed 与业务日固定，`make seed SEED=...` 可切换确定性数据版本。
   - 真实感：周内效应 + 季节性 + 渠道/类目/设备分布，叠加投放/库存/投诉退款的异常注入。
   - 可评估：写入 anomaly_ground_truth（4 个异常 case 在 TARGET_DATE，1 个无异常 case 在另一天），
     使后续 eval 能用"真因"逐 case 打分，而非靠人读。
@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import os
 import random
 import time
 from datetime import date, timedelta
@@ -33,7 +34,7 @@ from metric_rca.data.anomaly_injection import (
 )
 
 
-SEED = 20260606  # 固定随机种子：保证可复现
+DEFAULT_SEED = 20260606  # 默认随机种子：保证无参数时可复现
 BUSINESS_TODAY = date(2026, 6, 6)
 HISTORY_DAYS = 60
 # 无异常 case 放在 TARGET_DATE 之外的另一天，避免与"目标日异常"在同指标同日冲突。
@@ -82,7 +83,7 @@ def main() -> None:
     settings = get_settings()
     engine = create_engine(str(settings.db_dsn), pool_pre_ping=True)
     _wait_for_mysql(engine)  # 容器刚起时 MySQL 可能尚未就绪，重试等待
-    rng = random.Random(SEED)  # 局部 RNG，确定性来源
+    rng = random.Random(_resolve_seed())  # 局部 RNG，确定性来源
     try:
         with engine.begin() as conn:  # 单事务：要么全部重建成功，要么回滚
             _ensure_p6_schema(conn)
@@ -94,6 +95,17 @@ def main() -> None:
             _insert_ground_truth(conn)
     finally:
         engine.dispose()  # 释放连接池
+
+
+def _resolve_seed() -> int:
+    """读取 seed override；非法值显式失败，避免悄悄回落到默认数据。"""
+    raw = os.getenv("METRIC_RCA_DATA_SEED")
+    if raw is None or raw == "":
+        return DEFAULT_SEED
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError("SEED_INVALID: METRIC_RCA_DATA_SEED must be an integer") from exc
 
 
 def _wait_for_mysql(engine) -> None:
