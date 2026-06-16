@@ -1,9 +1,513 @@
+## ADL-0029: Direct eval memory prepass 只读 memory，不写 run memory
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-16 |
+| 状态 | accepted |
+| 关联迭代 | P8 memory observability eval decoupling |
+| 影响范围 | Settings, direct eval runner, RunOrchestrator memory writes |
+
+### 背景与场景
+
+Direct eval 的 memory-enabled prepass 会顺序运行全部 case。每个成功 case 若写入 episodic memory，
+后续无显式 scope 的 discovery case 会读取前序 case 的 `metric|run` memory，导致 LLM  shortcut
+当前 evidence discovery，失败重试还会继续追加 reflection/episodic 污染。
+
+### 决策
+
+新增 `memory_write_on_finalize` 配置，默认开启。Direct eval 的 memory prepass 使用
+`memory_enabled=true` 读取 seed semantic memory，但设置 `memory_write_on_finalize=false`，
+RunOrchestrator 在该模式下跳过 episodic 与 reflection finalize memory 写入。
+
+### 理由
+
+P8 eval 要验证 memory context 对当前 run 的读取影响，而不是让同一轮 eval case 之间相互训练。
+读写隔离避免复杂 snapshot tracking，同时保持正常产品运行的 memory 写入语义不变。
+
+### 被否决的方案
+
+- 在 memory read 时维护 eval 开始前的 memory id snapshot：更精确但增加 runner/repository 耦合。
+- 每个 memory case 后清理新增 memory：需要 destructive cleanup 语义，且容易误删非 eval 记录。
+- 关闭 `memory_enabled`：会绕过 P8 memory retrieval，不能验证 semantic memory 注入。
+
+### 后续跟进
+
+Direct eval 完成前先 `make seed`，确保 pre-existing memory 只包含 seed semantic records。
+
+---
+
+## ADL-0028: Reflection no-evidence repair 与 no-anomaly pre-handler gate
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-16 |
+| 状态 | accepted |
+| 关联迭代 | P8 memory observability eval decoupling |
+| 影响范围 | reflection verifier, GuardMiddleware, RunOrchestrator, eval scorer |
+
+### 背景与场景
+
+Predict-Then-Verify `ptv3` 在 memory-enabled C06 暴露了一个 flow 缺口：agent 读取 memory 后只产生
+`llm_call`，没有任何 E1-E4 evidence，reflection 报 `no root cause candidates` 但没有 repair action。
+Subagent review 还指出 no-anomaly 后 downstream tool 只在事后失败，可能已经写入 E2/E3/E4 evidence；
+episodic memory 在 run finish 前写入，也可能让未成功终结的 run 被未来读取。
+
+### 决策
+
+Reflection 在没有任何当前 evidence 时建议 `detect_anomaly` repair；repair prompt 要求 detect 为第一步，
+若 E1 为 anomaly 才继续正常 RCA path。GuardMiddleware 在 guard-passed E1 表示 no anomaly 后，
+对 drilldown、related signal、contribution、ranking 做 pre-handler hard reject，避免落 downstream evidence。
+成功路径先持久化 terminal run status，再写 episodic/reflection memory。
+
+### 理由
+
+无 evidence 的 repair 应回到 RCA 起点，而不是静默失败或依赖 LLM 自行重试。No-anomaly 是硬边界，
+必须在工具 handler 前拦截，不能等事后 reflection 才发现污染。Episodic memory 是未来规划输入，
+只能来自已经 durably succeeded 的 run。
+
+### 被否决的方案
+
+- 让 C06 直接失败并靠下一轮 eval 重试：会把 LLM 无工具输出当成不可修复错误。
+- 只在 orchestrator 事后检查 no-anomaly downstream trace：能阻止最终报告，但不能阻止已持久化 evidence。
+- 在 memory write 后再 finish run：如果 finalization 失败，未来会读到未成功 run 的 memory。
+
+### 后续跟进
+
+用 fresh Predict-Then-Verify 轮次验证 C06/C07、C19/C20 和 memory paired cases；更新 predictions
+把 memory influence 表述为“context present, final evidence influence forbidden”。
+
+---
+
+## ADL-0027: Eval case result 使用幂等 upsert 支持中断重试
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-16 |
+| 状态 | accepted |
+| 关联迭代 | P8 memory observability eval decoupling |
+| 影响范围 | MetricRepository, API eval routes, direct eval runner, HTTP eval client |
+
+### 背景与场景
+
+长时间 `eval-stream` 和 HTTP eval 可能在 case 已写入后中断或重跑同一个 `EVAL_ID`。
+原 `eval_case_result` 只有 insert/idempotency 校验，若第二次运行的 detail 中 token、latency、
+run id 等字段不同，会撞 `(eval_id, case_id)` 唯一键并报 `SYSTEM_TABLE_WRITE_FAILED`。
+
+### 决策
+
+保留 `create_eval_case_result` 供严格创建语义使用，新增 `upsert_eval_case_result`。
+Direct eval runner 和 HTTP API 的 case-result endpoint 统一调用 upsert，SQLite 使用
+`ON CONFLICT(eval_id, case_id)`，MySQL 使用 `ON DUPLICATE KEY UPDATE` 覆盖评分字段与 detail。
+
+### 理由
+
+eval progress 是可重放的观测结果，不是不可变审计事件；同一个 eval/case 的最新结果应覆盖旧进度。
+这样可以从根本上降低重复 eval id 或中断恢复导致的系统表写失败，同时仍然 fail-fast 暴露真实数据库写入错误。
+
+### 被否决的方案
+
+- 每次失败后手动换新的 `EVAL_ID`：绕开了重复键问题，但没有解决恢复和 HTTP 客户端重试语义。
+- 在 client 侧先查再决定 insert/update：会引入竞态，并把持久化规则分散到 API 客户端。
+- 吞掉 duplicate key：会造成 summary 与 case result 不一致，违反 P8 observability 要求。
+
+### 后续跟进
+
+在最终 P8 eval 前复跑 full pytest、frontend tests，并用 fresh `EVAL_ID` 验证 summary 与 case result
+增量写入。
+
+---
+
+## ADL-0026: Direct eval 增量 summary，memory discovery 使用最强候选并审计 memory read
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-16 |
+| 状态 | accepted |
+| 关联迭代 | P8 memory observability eval decoupling |
+| 影响范围 | evals/runner, discovery_policy, RunOrchestrator, MemoryRepository, eval scorer |
+
+### 背景与场景
+
+Predict-Then-Verify 的首轮 GPT-5 Nano `eval-stream` 在 memory-enabled C07 失败：
+`fetch_related_signal` 选择了合法但非最强的 `affiliate`，随后 Adtributor/rank 将 `paid_ads`
+提为 top1，造成 E3 与 top candidate 不一致并触发 `REFLECTION_REPAIR_FAILED`。同时 direct eval
+在 memory pre-pass 失败时没有写任何 case artifact 或 progress summary，subagent review 还指出
+memory required 配置、memory read 审计、reflection payload 与 pollution scoring 覆盖不足。
+
+### 决策
+
+无显式 filter 的 GMV `standard` / `channel_first` discovery 必须让首个 campaign E3 绑定
+`E2_channel` 的最强候选，避免 memory 或 LLM 选择另一个合法 channel 后污染后续 rank 结构。
+Direct eval 与 HTTP eval 一样使用 `eval_run.summary` upsert 写 `complete=false` 进度，每个 memory
+case 和 baseline case 完成后更新 summary；baseline case 立即写 `eval_case_result`。RunOrchestrator
+写 `memory_read` trace step 记录本 run 读到的 memory id/layer/key/confidence/source；reflection
+memory payload 保存 verifier issues；`memory_required=true` 且 `memory_enabled=false` 在配置层失败。
+
+### 理由
+
+首个 E3 与最终 top candidate 的一致性必须由确定性 policy/guard 保证，不能靠 repair 或 LLM 自我纠偏。
+Direct eval 进度持久化让长 eval 和 memory pre-pass 失败可观察，避免把静默等待误判为死循环。Memory
+read 审计和 reflection issues 使 P8 memory influence 可追溯，但仍不把 memory payload 变成 evidence。
+Pollution scoring 必须校验 current-run evidence id，不能只检查字符串里是否包含 `:E`。
+
+### 被否决的方案
+
+- 给 `signal_consistency` 增加宽松 repair 或忽略 E3/top1 不一致：会掩盖工具链结构缺陷。
+- 禁用 episodic/reflection memory prompt：会绕过 P8 memory retrieval，而不是约束其影响边界。
+- 只在最终 direct eval 写 summary：memory pre-pass 或早期 baseline 失败时仍不可观察。
+- 只检查 memory id 前缀：cross-run evidence id 仍可能通过污染检查。
+
+### 后续跟进
+
+复跑 full pytest、frontend tests，并按 Predict-Then-Verify 写第二轮 predictions 后运行
+`make eval-stream EVAL_ID=...` 与 `make eval-gaps`。
+
+---
+
+## ADL-0025: HTTP eval 通过 API 持久化结果并增量发布 summary
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-16 |
+| 状态 | accepted |
+| 关联迭代 | P8 memory observability eval decoupling |
+| 影响范围 | evals/client, api/routes, api/schemas, MetricRepository, eval artifacts |
+
+### 背景与场景
+
+P8 要求 HTTP eval 与 backend runner 解耦，并使用 API surface 验收 RCA 运行。但 HTTP eval 只写本地
+artifact，没有写 `eval_run` / `eval_case_result`，且 CLI 在全部 case 完成前没有中间 summary，
+长时间 GPT-5 Nano eval 容易被误判为死循环。
+
+### 决策
+
+HTTP eval client 继续只通过 HTTP API 与 backend 交互，不直接 import repository。API 新增
+`POST /api/evals/{eval_id}/summary` 与 `POST /api/evals/{eval_id}/case-results`：summary endpoint
+对 `eval_run.summary` 做显式 upsert，case-result endpoint 写 `eval_case_result`。HTTP eval 启动时
+先写 progress summary；每完成 memory case 或 baseline case 都更新本地 artifact、写 progress summary，
+每完成 baseline case 立即写一条 case result；最终 summary 覆盖 progress summary 并保留完整阈值结果。
+CLI progress summary 输出到 stderr，最终 summary 仍输出到 stdout。
+
+### 理由
+
+这样保持了 ADL-0012/P8 的 API-only eval 边界，同时让 `/api/evals/{eval_id}` 在运行中可观察进度，
+避免只有最终 artifact 才能看到 summary。case result 增量写入能在长 eval 中保留已完成 case 的证据，
+summary upsert 是显式进度状态更新；任何 persistence API 失败都会 typed fail-fast，不被吞掉或降级。
+
+### 被否决的方案
+
+- 让 HTTP client 直接 import `MetricRepository`：会破坏 eval-backend decoupling，并把 API 验收路径变回
+  本地 DB 混合路径。
+- 只在本地 artifact 写增量 summary：不能满足 eval system table observability。
+- 只在最终写 `eval_run` 和 `eval_case_result`：长 eval 期间不可观察，且中途失败时丢失已完成 case 评分。
+
+### 后续跟进
+
+Docker Desktop / MySQL 恢复后复跑 `make seed`、full pytest、HTTP eval，并确认 DB 中
+`eval_run` / `eval_case_result` 对最新 HTTP eval 非空。
+
+---
+
+## ADL-0023: Reflection repair guard 支持证据驱动续步，eval 评分前验证持久化终态
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-15 |
+| 状态 | accepted |
+| 关联迭代 | P8 memory observability eval decoupling |
+| 影响范围 | GuardMiddleware, RunOrchestrator repair prompt, evals runner/client, memory observability |
+
+### 背景与场景
+
+GPT-5 Nano eval 的 C08 baseline leg 没有复现 `SYSTEM_TABLE_WRITE_FAILED`，但在 Reflection repair
+中先按建议补 `fetch_related_signal` 生成 E3 后，正确的下一步 `calculate_contribution` 被
+`required_repair_action=fetch_related_signal` 拦截，最终变成 `REFLECTION_REPAIR_FAILED`。子代理
+review 同时指出 eval HTTP/direct scorer 仍可能在持久化 run 缺失或非终态时读取 artifacts 评分，
+memory prompt 未展示 confidence，`/memory` 可能展示同 metric 的未来 memory。
+
+### 决策
+
+Repair guard 仍要求第一步严格执行 Reflection suggested action，但当 required action 是
+`fetch_related_signal` 且当前 run 已有 guard-passed E3、尚无 E4 时，允许同一 repair turn 的
+`calculate_contribution`；当 required action 是 `fetch_related_signal` 或 `calculate_contribution`
+且当前 run 已有 guard-passed E4 时，允许 `rank_root_causes`。Direct eval 和 HTTP eval 在评分前
+必须验证持久化 run 为 `succeeded` 或 `no_anomaly`；missing/running/failed 均 typed fail-fast，
+failed run 保留原始 error_code。Memory prompt context 展示 confidence，`/memory` 只返回 run
+自己写入的记录、run 开始前可读的 `metric_id|run` 记录，以及 run 开始前可读的 semantic memory。
+memory observability 的读取必须先按 run/metric key 收窄，再做 payload/time 过滤；无关历史记录不能
+通过固定 LIMIT 挤掉目标 run 可读记录。
+
+### 理由
+
+Reflection repair 的 suggested action 可能只补齐缺失链条的第一段；E3 成功后仍必须完成 E4/E_rank，
+否则 C08 这类 AOV decomposition 无法通过反思。允许续步必须由当前 run 已持久化证据决定，不能把
+repair turn 放宽成任意工具调用。Eval scorer 的输入必须是终态 persisted artifacts；否则系统/运行时
+失败会被阈值或 scoring 结果掩盖。Memory observability 应反映 run 可用或自身产生的 memory，而不是
+同 metric 的未来记录。
+E4 的续步放行必须检查 `guard_status=passed`，不能把 failed/corrupt E4 当成 repair 已完成证据。
+
+### 被否决的方案
+
+- 移除 repair guard：会重新允许 repair turn 漂移到任意工具，违反 ADL-0009/0010 的结构化 repair。
+- 把 `max_repair` 增大：只是给 LLM 多次尝试机会，不能解决 guard 阻断正确续步的根因。
+- 让 eval scorer 继续处理 missing/running artifacts：会把基础设施失败伪装成业务指标失败。
+- `/memory` 按 metric_id 全局扫描：会把其它 run 或未来 run 的 memory 误显示为当前 run 上下文。
+- `/memory` 先取固定数量全表记录再过滤：会在长期 eval/生产历史累积后静默漏掉当前 run 可读 memory。
+
+### 后续跟进
+
+复跑 full pytest、frontend tests、GPT-5 Nano direct eval；在长 eval 期间继续用 subagent 预测与真实
+结果偏差，重点观察 C08/C09 和 `SYSTEM_TABLE_WRITE_FAILED` 是否复现。
+
+---
+
+## ADL-0024: HTTP eval timeout 覆盖同步 RCA 运行窗口，仍保持 typed fail-fast
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-15 |
+| 状态 | accepted |
+| 关联迭代 | P8 memory observability eval decoupling |
+| 影响范围 | evals/client, Makefile |
+
+### 背景与场景
+
+`make eval-http` 通过 HTTP POST `/api/rca/runs` 触发同步 RCA。GPT-5 Nano 的部分 case 会超过
+120 秒客户端默认 timeout；API 服务端随后仍能完成并返回 200，但 HTTP eval client 已先失败为
+`EVAL_HTTP_REQUEST_TIMEOUT`。这不是系统表写入失败，也不是 scorer 输入错误，而是 eval 客户端等待窗口
+短于真实同步 LLM run。
+
+### 决策
+
+HTTP eval request timeout 变成显式配置：CLI 支持 `--timeout`，Makefile 通过 `HTTP_TIMEOUT` 传入，
+默认 600 秒。timeout 仍然是 typed fail-fast `EVAL_HTTP_REQUEST_TIMEOUT`，不纳入 LLM transient
+case retry，不读取半成品 artifacts，不把失败降级为 threshold miss。
+
+### 理由
+
+HTTP eval 的职责是验证 API surface，而当前 API run endpoint 是同步运行模型与工具链。等待窗口应覆盖
+合法同步运行耗时；否则会把一个仍会成功的 API run 误判成 transport failure。提高显式 timeout 不改变
+业务逻辑、不引入 fallback，也不隐藏真正的超时：超过配置窗口仍会立即失败并报告 typed error。
+
+### 被否决的方案
+
+- 把 POST timeout 作为 LLM transient 自动重试：server 端原请求可能仍在运行，会制造重复 run 并掩盖
+  HTTP transport 边界。
+- 改成忽略 timeout 后轮询同一个 run：client timeout 时通常拿不到 run_id，无法可靠绑定原 run。
+- 降低 eval scope 或只跑少量 HTTP cases：不能验证 P8 HTTP eval decoupling。
+
+### 后续跟进
+
+复跑 `make eval-http BASE_URL=http://127.0.0.1:8000 PROVIDER=openai MODEL=gpt-5-nano`，确认 API 路径
+在默认 600 秒 request timeout 下完成 20-case paired scoring。
+
+---
+
+## ADL-0022: Eval 不评分 typed run failure，memory_record 复用系统表幂等写边界
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-15 |
+| 状态 | accepted |
+| 关联迭代 | P8 memory observability eval decoupling |
+| 影响范围 | evals/runner, memory_repo, RunOrchestrator, MetricRepository |
+
+### 背景与场景
+
+子代理 review 发现 `SYSTEM_TABLE_WRITE_FAILED` 的根因修复仍有两个架构边界漏洞：direct eval 会把
+非 transient 的 failed run 继续交给 persisted-artifact scorer，最后只暴露
+`EVAL_THRESHOLD_NOT_MET`；`MemoryRepository.write` 直接写 `memory_record`，没有复用
+`MetricRepository` 的幂等 retry/ambiguous commit 确认。
+
+### 决策
+
+Direct eval 的 `_run_case_with_retries` 只有在 RCA result 没有 `error_code` 时才返回 run_id 并进入
+artifact scorer，且成功状态必须是 `succeeded` 或 `no_anomaly`；typed LLM transient 仍按同 case retry 预算重试，重试耗尽或任何非 transient
+typed failure 都直接抛原始 `EvalRuntimeError(code=error_code)`。生产默认的
+`MemoryRepository` 由 orchestrator 注入当前 `MetricRepository.create_memory_record`，使
+`memory_record` 与 trace/evidence/sql_audit/eval rows 共用同一套系统表幂等写边界；低层 memory
+unit tests 仍可不注入 writer 以验证读写规则。项目 typed uppercase error 前缀优先于 provider
+transient 文本分类，避免 `SYSTEM_TABLE_WRITE_FAILED: ... timeout ...` 被重标为可重试的
+`REQUEST_TIMEOUT`；显式传入不兼容的 `system_repository` 必须 fail-fast，不允许静默退回直接写。
+`run_rca` 对自己创建的 `MemoryRepository` 负责 close，避免长 eval 的 memory-enabled leg 累积
+独立 MySQL engine/pool；调用方显式注入的 dependencies/memory_repo 仍由调用方管理生命周期。
+`finish_agent_run` 这种 terminal UPDATE 也声明幂等读回条件；transient/duplicate ambiguous write
+后若 agent_run 已经持久化为目标 status/error/tokens，则确认成功，不再把已成功的 RCA 覆盖为 failed。
+
+### 理由
+
+Eval scorer 只能评估成功落库的 RCA artifacts，不能把系统写失败降级成业务阈值失败。memory 是 P8
+核心写路径，若绕开统一 repository retry，就会把同类连接 transient 重新暴露为
+`MEMORY_WRITE_FAILED`，并削弱 `SYSTEM_TABLE_WRITE_FAILED` 根因修复的一致性。
+
+### 被否决的方案
+
+- 继续让 scorer 读取 failed run artifacts：会隐藏 primary error code，导致 eval 反馈不可诊断。
+- 只看 `error_code` 是否为空来判定 eval attempt 成功：malformed/failed result 会被 scorer 吸收。
+- 在 eval runner 里对 `SYSTEM_TABLE_WRITE_FAILED` 做整案重跑：会掩盖 schema/payload 错误。
+- 在 `MemoryRepository` 里复制一套 retry 逻辑：会产生第二个系统表写策略，长期更难审计。
+- 把带 `timeout` 文本的 typed 系统错误归类成 LLM transient：会让 eval 层错误重试边界失真。
+- 长 eval 后只增加系统写 retry budget：不能解决每个 memory run 创建独立 engine 后未释放的资源压力。
+- 只给 INSERT 做 ambiguous commit 确认：terminal UPDATE 同样可能已提交但客户端收到 lost connection。
+
+### 后续跟进
+
+复跑 full pytest、frontend tests、GPT-5 Nano direct eval 与 HTTP eval，确认失败边界和 memory 写入
+均不再出现 P0 fallback/shortcut。
+
+---
+
+## ADL-0021: GMV 标准发现优先验证 channel/campaign，SQL audit 用 audit_key 幂等重试
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-15 |
+| 状态 | accepted |
+| 关联迭代 | P8 memory observability eval decoupling |
+| 影响范围 | DiscoveryPolicy, GuardMiddleware, MetricRepository, schema.sql, seed_data |
+
+### 背景与场景
+
+最终 eval 反馈显示两类残余风险：C06 memory leg 在标准 unscoped GMV 问题上，可能受历史
+stockout episodic 与强 E2 category 信号影响，先验证 category/inventory 并选出 stockout；
+C09 memory leg 已有完整 E_rank，但 finalization 前后仍可能遇到 `SYSTEM_TABLE_WRITE_FAILED`。
+ADL-0020 禁止 `sql_audit` retry 虽然保守，但会让 audit 写入 transient 直接污染 eval。
+
+### 决策
+
+标准 unscoped GMV discovery policy 仍要求先完成 `E2_channel`、`E2_category`、`E2_product`，
+但首个 E3/E4 必须验证 `dimension=channel` + `signal_type=campaign`，不强制 channel top element。
+`sql_audit` 增加 `audit_key` 唯一键；每次 audit 写入生成一次稳定 key，repository retry 复用该
+key，ambiguous commit 后通过读回 payload 匹配来确认已提交。
+
+### 理由
+
+C06 是多渠道 campaign 发现场景；标准 GMV discovery 若允许首个 E3 任意选择 category/product，
+LLM 会在当前证据完成前过早固化局部库存解释。把首个相关信号约束为 channel/campaign 是结构化
+policy，不依赖 prompt keyword。`sql_audit` 仍保持每次 SQL 执行一条审计；`audit_key` 只用于同一次
+write 的幂等 retry，不合并不同 SQL 执行。
+
+### 被否决的方案
+
+- 在 memory prompt 中隐藏所有 episodic memory：会绕开 P8 memory retrieval，而不是解决 discovery policy。
+- 继续禁止 `sql_audit` retry：会把连接级 transient 暴露成 RCA case 失败。
+- 用 `(run_id, sql_hash)` 作为 audit 幂等键：会错误合并同一 run 中合法重复执行的同一 SQL。
+
+### 后续跟进
+
+复跑 GPT-5 Nano eval，确认 C06 memory top1 不低于 baseline 且 `SYSTEM_TABLE_WRITE_FAILED`
+不再出现在完整 evidence 后的 finalization 路径。
+
+---
+
+## ADL-0020: Reflection repair 使用 JSON contract，系统写入 retry 必须幂等
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-15 |
+| 状态 | superseded by ADL-0021 |
+| 关联迭代 | P8 memory observability eval decoupling |
+| 影响范围 | RunOrchestrator, GuardMiddleware, MetricRepository |
+
+### 背景与场景
+
+P8 live eval 中 `SYSTEM_TABLE_WRITE_FAILED` 前的失败 run 已经产出完整 E1/E2/E3/E4/E_rank，
+但 repair turn 又连续调用 `rank_root_causes`，且 `target_date` 被写成
+`datetime.date(2026, 6, 5)`。根因不是 scorer 或业务归因，而是 repair instruction 把
+`suggested_action.args` 用 Python dict repr 拼入 prompt，破坏了工具 JSON schema。复核还发现
+runner-level final token retry 会为每次重试生成新的 `step_id`，而非幂等 `sql_audit`/旧
+`eval_case_result` insert 在 ambiguous commit 后重试可能重复写入。
+
+### 决策
+
+Reflection repair payload 与 exact tool args 一律通过 JSON-safe serialization 下发，date/datetime
+值转成 ISO 字符串。系统表 retry 只存在于 `MetricRepository` 写入边界：INSERT 必须声明稳定
+幂等键，ambiguous commit 后若遇到 duplicate key，必须读回已提交行并确认 payload 匹配才算完成。
+`sql_audit` 不具备稳定幂等键，因此不做 retry；`eval_case_result` 增加 `(eval_id, case_id)`
+唯一键后可幂等确认。transient 判定覆盖 SQLAlchemy `InterfaceError`/`InternalError` 中无 errno
+或 errno=0 的连接层错误；重复键 payload 不匹配等非 transient 写失败仍 fail-fast 为
+`SYSTEM_TABLE_WRITE_FAILED`。
+
+### 理由
+
+Repair turn 是工具调用 contract，不能依赖模型从 Python repr 推断 JSON。先消除无效工具调用循环，
+再在 repository 写入边界吸收连接层 transient，能够减少额外 trace 写入压力。幂等确认防止
+ambiguous commit 被二次写入放大，同时不放宽非 transient schema/payload 错误。
+
+### 被否决的方案
+
+- 在 eval 层重跑 `SYSTEM_TABLE_WRITE_FAILED`：会掩盖 repair prompt contract 破损。
+- 在 middleware 中把 `datetime.date(...)` 自动改写成 ISO：这会把非法工具参数变成隐式 fallback。
+- 对所有 SQLAlchemyError 无条件重试：会延迟并掩盖重复键、列长度、JSON payload 等确定性错误。
+- 在 runner 层重试 final token trace：会用新 `step_id` 写出重复 observability rows。
+- 对 `sql_audit` 这类非幂等 auto-increment insert 做 retry：ambiguous commit 后无法证明是否重复。
+
+### 后续跟进
+
+继续用 live eval 验证 repair loop 是否消失；如再次出现系统写失败，优先比对最后一条 trace、
+幂等确认结果与底层 SQLAlchemy 错误类别。
+
+---
+
+## ADL-0019: 系统表写失败在写入边界解决，eval 不做整案重跑
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-15 |
+| 状态 | accepted |
+| 关联迭代 | P8 memory observability eval decoupling |
+| 影响范围 | GuardMiddleware, TraceWriter, RunOrchestrator, evals/runner.py, evals/client.py, Makefile |
+
+### 背景与场景
+
+P8 paired eval 复现了 P7 里的 `SYSTEM_TABLE_WRITE_FAILED`。排查发现失败 run 已有完整
+tool trace/evidence，final token trace 也能写入；后续 dry-run operation_task 与 memory_record
+均可写入。剩余高风险入口是模型幻觉的未注册 tool name 直接写入 `trace_step.action VARCHAR(48)`，
+以及本地 eval 受 `LANGSMITH_TRACING=true` 外部上报失败污染。后续复跑还暴露出另一类不相关
+问题：provider rate/timeout/5xx 在 agent invoke 边界被折叠为非重试的 `AGENT_INVOKE_FAILED`，
+导致 eval 无法区分真实编排 bug 与 typed LLM transient。
+
+### 决策
+
+模型 tool-call 边界写入 `trace_step.action` 时只保存注册工具名或固定 `invalid_tool_call`；未注册/超长 tool name 仍返回
+`ACTION_SCHEMA_INVALID`，但不再把 untrusted model 字符串写入受限 action 列。token usage 只持久化
+prompt/completion/total 三个稳定字段。`make api`、`make eval`、`make eval-http` 显式关闭
+LangSmith 外部 tracing。Direct eval 与 HTTP eval 不再对 `SYSTEM_TABLE_WRITE_FAILED` 做整 case retry；系统表
+写入的 transient retry 保留在 repository 写入边界，并覆盖 invalidated DBAPI connection、
+connection-loss/packet-sequence 等连接级写入抖动；ADL-0020 进一步要求 INSERT retry 必须幂等确认。
+`RunOrchestrator` 在捕获 provider
+异常时将 429、timeout、connection、5xx/server_error 显式映射到 `RATE_LIMIT_EXCEEDED`、
+`REQUEST_TIMEOUT` 或 `LLM_REQUIRED_UNAVAILABLE`；未知 invoke 错误仍保留为
+`AGENT_INVOKE_FAILED`。Direct eval 与 HTTP eval 只对这些 typed LLM transient 做有界同 case retry。
+
+### 理由
+
+系统表写失败是持久化契约问题，应在写入边界和 schema-safe trace 表达上解决。Eval 层重跑整案会
+掩盖非 transient schema/payload 错误，并产生重复 partial runs。关闭本地外部 tracing 不影响项目
+内部 persisted observability，可避免网络上报失败改变验收结果。
+Typed provider transient 保持 fail-fast：run 仍失败并落明确 error_code；eval 只对这些
+明确 transient 做有界重试，不会把 schema/action/persistence bug 伪装成可重试抖动。
+
+### 被否决的方案
+
+- 继续把 `SYSTEM_TABLE_WRITE_FAILED` 当作 eval transient 重跑：会掩盖 schema/action 长度问题。
+- 扩大 DB column 或无条件截断 action：放大 schema 而不约束 untrusted model 输出。
+- 忽略 trace 写失败并把 run 标成功：违反 fail-fast observability contract。
+- 将所有 `AGENT_INVOKE_FAILED` 都纳入 eval retry：会掩盖真实编排 bug。
+
+### 后续跟进
+
+如再次出现系统表写失败，优先查看 `TraceWriteError.message` 中保留的底层 SQLAlchemy/MySQL 错误，
+再决定是否需要 schema 迁移或更细 typed error。
+
+---
+
 ## ADL-0018: Eval runner 对 typed transient case failure 做有界重试
 
 | 字段 | 值 |
 |------|------|
 | 日期 | 2026-06-14 |
-| 状态 | accepted |
+| 状态 | superseded by ADL-0019 |
 | 关联迭代 | P7 eval acceptance hardening |
 | 影响范围 | evals/runner.py, MetricRCA §17, final-design/03 |
 
@@ -140,7 +644,7 @@ keyword parser。
 | 字段 | 值 |
 |------|------|
 | 日期 | 2026-06-14 |
-| 状态 | accepted |
+| 状态 | superseded by ADL-0020 |
 | 关联迭代 | P7 eval acceptance hardening |
 | 影响范围 | RunOrchestrator, TraceWriter, eval acceptance |
 
