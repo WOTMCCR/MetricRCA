@@ -1,3 +1,51 @@
+## ADL-0031: P9 multi-agent 只按 ParsedIntent 路由并共享 run 级 guard budget
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-16 |
+| 状态 | accepted |
+| 关联迭代 | P9 multi-agent final |
+| 影响范围 | RunOrchestrator, agent factory/subagents, eval scorer, trace observability |
+
+### 背景与场景
+
+最终版要求在保持 P8 单 expert 行为不变的前提下，新增开关式 multi-agent topology：
+triage 负责把已解析 intent 路由给 GMV family 或 rate family expert，expert 继续通过同一套
+受 GuardMiddleware 约束的工具链完成 evidence loop。风险在于 triage 若重新解析自然语言、
+subagent 若复制 guard/middleware/budget，都会引入与 P6-P8 决策冲突的第二套规划或预算边界。
+
+### 决策
+
+`multi_agent_enabled=false` 时继续使用 P8 single-agent path。开启时，RunOrchestrator 在
+LLM intent planner 产生 `ParsedIntent` 后执行确定性 triage：只读取 `ParsedIntent.metric_id`
+并按 Phase 1 metric family 映射到 `gmv_family` 或 `rate_family`；未知指标 fail-fast 为
+`METRIC_NOT_FOUND`。Triage 写 trace step（node=`triage`, action=`route_{family}`），不消耗
+data-tool step/query/drilldown budget。Expert subagents 共享同一个 tool set、同一个
+GuardMiddleware、同一个 `RunGuardContext`，因此预算与 repair guard 均为 run 级。Expert 完成后
+必须返回结构化 `RunOutcome`；malformed outcome 统一失败为 `AGENT_INVOKE_FAILED`。Eval scorer
+记录 `multi_agent_path`，取值为 `single_agent` 或 `multi_agent:{family}`，summary 统计路径分布。
+
+### 理由
+
+Intent planner 已经是自然语言解析边界，triage 重新解析 question 会违反 ADL-0013 并可能造成
+target metric drift。Guard budget 是 run 级安全约束，不能因进入另一个 expert 而重置。结构化
+RunOutcome 让 expert 输出只表达状态与 evidence 引用，最终事实仍来自 persisted Evidence、
+Reflection 和 deterministic projector。
+
+### 被否决的方案
+
+- 让 triage LLM 从原始 question 重新判断 family：重复自然语言语义边界，且会绕过 ParsedIntent。
+- 为每个 expert 创建独立 GuardMiddleware/context：会重置预算并允许跨 expert 放大 tool calls。
+- 让 expert 返回自由文本结论：会绕过 ADL-0006 的 persisted artifact projection。
+- multi-agent 默认开启：会破坏 P8 acceptance 的 single-agent baseline 与差分测试基线。
+
+### 后续跟进
+
+P9 differential tests 必须证明 on/off score 字段一致、GMV/rate 路由正确、预算共享、
+no_anomaly contract 与 Reflection repair 在 multi-agent 模式下保留。
+
+---
+
 ## ADL-0030: Production discovery 可读取无 scope 的 run memory
 
 | 字段 | 值 |
