@@ -15,6 +15,7 @@ from openai import OpenAIError
 from metric_rca.agent.discovery_policy import DiscoveryPolicy, discovery_policy_from_intent
 from metric_rca.agent.factory import AgentFactoryError, create_metric_rca_agent
 from metric_rca.agent.reflection import verify_reflection
+from metric_rca.agent.subagents import RunOutcome, route_metric_family
 from metric_rca.config.settings import Settings, get_settings
 from metric_rca.domain.models import Evidence, PHASE1_METRICS, QuerySpec, RootCauseCandidate
 from metric_rca.guardrails.renderer import SQLRenderer
@@ -110,6 +111,12 @@ class RunOrchestrator:
             bundle.guard_context.target_metric_id = parsed_intent.metric_id
             bundle.guard_context.target_date = parsed_intent.target_date
             bundle.guard_context.discovery_policy = discovery_policy_from_intent(parsed_intent)
+            expert_family: str | None = None
+            selected_agent = bundle.agent
+            if getattr(self.dependencies.settings, "multi_agent_enabled", False):
+                expert_family = route_metric_family(parsed_intent.metric_id)
+                self._write_triage_route(resolved_run_id, parsed_intent=parsed_intent, family=expert_family)
+                selected_agent = bundle.agent_for_family(expert_family)
             memory_hits = self._read_required_memory(resolved_run_id, parsed_intent=parsed_intent)
         except (AgentFactoryError, TraceWriteError, RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
             code = _code_from_exception(exc, "LLM_REQUIRED_UNAVAILABLE")
@@ -117,7 +124,7 @@ class RunOrchestrator:
             return self._fail(resolved_run_id, question, code, extra_payload=extra_payload)
 
         try:
-            bundle.agent.invoke(
+            agent_result = selected_agent.invoke(
                 {
                     "messages": [
                         {
@@ -136,6 +143,8 @@ class RunOrchestrator:
                     "callbacks": [bundle.token_usage_callback],
                 },
             )
+            if expert_family is not None:
+                _warn_on_run_outcome(agent_result, parsed_intent=parsed_intent)
         except (RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
             code = _code_from_exception(exc, "AGENT_INVOKE_FAILED")
             if not self._can_continue_after_terminal_agent_error(resolved_run_id, code):
@@ -164,7 +173,7 @@ class RunOrchestrator:
                 repair_action = _first_repair_action(reflection)
                 try:
                     bundle.guard_context.required_repair_action = repair_action
-                    bundle.agent.invoke(
+                    repair_result = selected_agent.invoke(
                         {
                             "messages": [
                                 {
@@ -178,6 +187,8 @@ class RunOrchestrator:
                             "callbacks": [bundle.token_usage_callback],
                         },
                     )
+                    if expert_family is not None:
+                        _warn_on_run_outcome(repair_result, parsed_intent=parsed_intent)
                 except (RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
                     code = _code_from_exception(exc, "REFLECTION_REPAIR_FAILED")
                     return self._fail(
@@ -384,6 +395,16 @@ class RunOrchestrator:
             return hits
         except RuntimeError as exc:
             raise RuntimeError("MEMORY_READ_FAILED: memory read failed") from exc
+
+    def _write_triage_route(self, run_id: str, *, parsed_intent: ParsedIntent, family: str) -> None:
+        self.dependencies.trace_writer.write_step(
+            run_id=run_id,
+            node="triage",
+            action=f"route_{family}",
+            input_summary={"metric_id": parsed_intent.metric_id},
+            output_summary={"family": family, "metric_id": parsed_intent.metric_id},
+            error_code=None,
+        )
 
     def _flush_pending_token_usage(self, guard_context: Any) -> None:
         for usage in guard_context.drain_pending_token_usage():
@@ -608,6 +629,30 @@ def run_rca(
 
 def _has_repair_action(reflection: Any) -> bool:
     return any(getattr(issue, "suggested_action", None) is not None for issue in getattr(reflection, "issues", []))
+
+
+def _warn_on_run_outcome(result: Any, *, parsed_intent: ParsedIntent) -> RunOutcome | None:
+    raw: Any = None
+    if isinstance(result, dict):
+        raw = result.get("structured_response")
+    else:
+        raw = getattr(result, "structured_response", None)
+    if raw is None:
+        LOGGER.warning("expert did not return structured RunOutcome; continuing from persisted artifacts")
+        return None
+    try:
+        outcome = raw if isinstance(raw, RunOutcome) else RunOutcome.model_validate(raw)
+    except (TypeError, ValueError) as exc:
+        LOGGER.warning("malformed RunOutcome ignored; continuing from persisted artifacts: %s", exc)
+        return None
+    if outcome.metric_id != parsed_intent.metric_id:
+        LOGGER.warning(
+            "RunOutcome metric_id=%s does not match ParsedIntent metric_id=%s; continuing from persisted artifacts",
+            outcome.metric_id,
+            parsed_intent.metric_id,
+        )
+        return None
+    return outcome
 
 
 def _first_repair_action(reflection: Any) -> str | None:

@@ -124,6 +124,8 @@ def run_eval(
             settings=resolved_settings,
             rca_runner=rca_runner,
             repository=resolved_repository,
+            repository_factory=repository_factory,
+            injected_repository=repository is not None,
             on_case_complete=_notify_memory_case,
         )
         case_scores = _run_cases(
@@ -135,6 +137,7 @@ def run_eval(
             repository=resolved_repository,
             repository_factory=repository_factory,
             injected_repository=repository is not None,
+            memory_enabled=False,
             on_case_complete=_notify_case,
         )
         summary = _eval_summary(
@@ -171,6 +174,8 @@ def _run_cases(
     repository: Any,
     repository_factory: Callable[[], Any] | None,
     injected_repository: bool,
+    memory_enabled: bool,
+    memory_write_on_finalize: bool | None = None,
     on_case_complete: Callable[[dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
     concurrency = int(getattr(settings, "eval_concurrency", 1))
@@ -183,7 +188,12 @@ def _run_cases(
                 case=case,
                 ground_truth=ground_truth[case.case_id],
                 eval_id=eval_id,
-                settings=_settings_for_case(settings, ground_truth[case.case_id], memory_enabled=False),
+                settings=_settings_for_case(
+                    settings,
+                    ground_truth[case.case_id],
+                    memory_enabled=memory_enabled,
+                    memory_write_on_finalize=memory_write_on_finalize,
+                ),
                 rca_runner=rca_runner,
                 repository=repository,
             )
@@ -215,7 +225,12 @@ def _run_cases(
                     case=case,
                     ground_truth=ground_truth[case.case_id],
                     eval_id=eval_id,
-                    settings=_settings_for_case(settings, ground_truth[case.case_id], memory_enabled=False),
+                    settings=_settings_for_case(
+                        settings,
+                        ground_truth[case.case_id],
+                        memory_enabled=memory_enabled,
+                        memory_write_on_finalize=memory_write_on_finalize,
+                    ),
                     rca_runner=rca_runner,
                     repository_factory=worker_repository_factory,
                 )
@@ -258,29 +273,25 @@ def _run_memory_cases(
     settings: Settings,
     rca_runner: Callable[..., dict[str, Any]],
     repository: Any,
+    repository_factory: Callable[[], Any] | None,
+    injected_repository: bool,
     on_case_complete: Callable[[dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
-    for case in cases:
-        # Keep the memory prepass sequential and write-isolated: each case reads
-        # only seed/pre-existing memory, never memory produced by another eval case.
-        score = _run_and_score_case(
-            case=case,
-            ground_truth=ground_truth[case.case_id],
-            eval_id=eval_id,
-            settings=_settings_for_case(
-                settings,
-                ground_truth[case.case_id],
-                memory_enabled=True,
-                memory_write_on_finalize=False,
-            ),
-            rca_runner=rca_runner,
-            repository=repository,
-        )
-        if on_case_complete is not None:
-            on_case_complete(score)
-        results.append(score)
-    return results
+    # Memory writes are disabled for eval prepass, so cases are independent and
+    # can use the same concurrency controls as the baseline eval phase.
+    return _run_cases(
+        cases=cases,
+        ground_truth=ground_truth,
+        eval_id=eval_id,
+        settings=settings,
+        rca_runner=rca_runner,
+        repository=repository,
+        repository_factory=repository_factory,
+        injected_repository=injected_repository,
+        memory_enabled=True,
+        memory_write_on_finalize=False,
+        on_case_complete=on_case_complete,
+    )
 
 
 def _run_and_score_case_with_factory(

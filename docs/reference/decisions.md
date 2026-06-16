@@ -1,3 +1,60 @@
+## ADL-0032: P9 RunOutcome advisory validation and parallel memory prepass
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-16 |
+| 状态 | accepted |
+| 关联迭代 | P9 multi-agent final |
+| 影响范围 | RunOrchestrator, eval runner, multi-agent tests |
+
+### 背景与场景
+
+P9 初版把 expert `RunOutcome` 作为强校验：malformed outcome 直接使 run 失败。但 P6-P8 的
+核心事实状态一直由 persisted Evidence、Reflection 与 deterministic projector 决定；如果让
+RunOutcome 驱动失败，就会把一个 eval/trace 辅助结构提升为生产事实来源。同时 P8 已通过
+`memory_write_on_finalize=false` 隔离 eval memory prepass 的 case 间写污染，memory leg 不再有
+顺序执行依赖。
+
+### 决策
+
+`RunOutcome` 只作为 advisory structured output：RunOrchestrator 可记录 malformed/mismatched
+outcome warning，但不得用它投影报告、替代 Reflection、或覆盖 persisted artifact flow。缺失或
+malformed RunOutcome 不再使 run 失败；真实终态仍由当前 run 的 persisted Evidence、Reflection
+结果、no-anomaly contract 与 report projector 决定。Multi-agent path 继续由 triage trace
+`node=triage/action=route_{family}` 推导。
+
+Direct eval 的 memory prepass 复用 `_run_cases` 的 `ThreadPoolExecutor` 路径；新增
+`memory_enabled` 与 `memory_write_on_finalize` 参数，使 `METRIC_RCA_EVAL_CONCURRENCY`
+同时控制 memory-enabled prepass 与 baseline phase。Memory prepass 仍强制
+`memory_write_on_finalize=false`，所以并发 case 只读取 seed/pre-existing memory，不会互相写入
+episodic/reflection 污染。
+
+HTTP eval 同样使用一个并行 case runner core：`--concurrency` / `HTTP_CONCURRENCY` /
+`METRIC_RCA_EVAL_CONCURRENCY` 同时控制 memory prepass 与 baseline phase。HTTP memory leg
+通过 `/api/rca/runs` per-request override 传 `memory_write_on_finalize=false`，因此不需要串行执行来避免
+case 间污染。
+
+### 理由
+
+RunOutcome 可以帮助调试 expert 是否自认为完成，但不能成为事实源；否则会违反 ADL-0006 的
+persisted artifact projection。并发 memory prepass 与 P8 的写隔离相容，可显著缩短 P9 eval
+反馈时间，同时保持 eval 读写污染边界。
+
+### 被否决的方案
+
+- malformed RunOutcome fail-fast：会让非事实辅助输出掩盖 DB 中已经完整的 Evidence/Reflection。
+- 用 RunOutcome 字段生成 report 或 candidate：绕过 persisted Evidence 和 deterministic projector。
+- memory prepass 继续固定顺序：没有安全收益，且使 P9 eval 开发反馈过慢。
+- memory prepass 并发但允许写 memory：会重建 P8 已修复的 case 间 episodic/reflection 污染。
+- HTTP eval 保持串行：会让 API-only acceptance 与 direct eval 在调度语义上分叉，且反馈过慢。
+
+### 后续跟进
+
+Differential tests 只断言结构等价、triage trace、共享 budget、no-anomaly contract 与 repair flow；
+不要求 multi-agent LLM 输出与 single-agent top1 完全一致。
+
+---
+
 ## ADL-0031: P9 multi-agent 只按 ParsedIntent 路由并共享 run 级 guard budget
 
 | 字段 | 值 |
@@ -24,6 +81,10 @@ data-tool step/query/drilldown budget。Expert subagents 共享同一个 tool se
 GuardMiddleware、同一个 `RunGuardContext`，因此预算与 repair guard 均为 run 级。Expert 完成后
 必须返回结构化 `RunOutcome`；malformed outcome 统一失败为 `AGENT_INVOKE_FAILED`。Eval scorer
 记录 `multi_agent_path`，取值为 `single_agent` 或 `multi_agent:{family}`，summary 统计路径分布。
+
+> ADL-0032 supersedes the malformed-RunOutcome failure behavior: RunOutcome is
+> advisory and malformed output logs a warning while persisted artifacts remain
+> authoritative.
 
 ### 理由
 

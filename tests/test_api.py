@@ -63,6 +63,29 @@ def test_post_rca_runs_invokes_run_rca_and_persists_agent_run() -> None:
     assert repo.get_agent_run("api-run-1")["status"] == "succeeded"
 
 
+def test_post_rca_runs_passes_memory_write_on_finalize_override_to_runner() -> None:
+    repo = _Repository()
+    captured: dict[str, Any] = {}
+
+    def runner(question: str, **kwargs: Any) -> dict[str, Any]:
+        captured["memory_enabled"] = kwargs["settings"].memory_enabled
+        captured["memory_write_on_finalize"] = kwargs["settings"].memory_write_on_finalize
+        return _run_rca(question, **kwargs)
+
+    response = TestClient(create_app(ApiDependencies(repository=repo, rca_runner=runner))).post(
+        "/api/rca/runs",
+        json={
+            "question": "Why did yesterday GMV drop?",
+            "memory_enabled": True,
+            "memory_required": False,
+            "memory_write_on_finalize": False,
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured == {"memory_enabled": True, "memory_write_on_finalize": False}
+
+
 def test_post_rca_runs_passes_per_request_llm_overrides_only_to_runner() -> None:
     repo = _Repository()
     captured: dict[str, Any] = {}
@@ -643,6 +666,7 @@ def test_post_eval_summary_upserts_eval_run_summary() -> None:
                 "completed_memory_case_total": 2,
                 "complete": True,
                 "thresholds_met": True,
+                "multi_agent_path_distribution": {"single_agent": 2},
             }
         },
     )
@@ -674,6 +698,7 @@ def test_post_eval_summary_upserts_eval_run_summary() -> None:
         "completed_memory_case_total": 2,
         "complete": True,
         "thresholds_met": True,
+        "multi_agent_path_distribution": {"single_agent": 2},
     }
 
 

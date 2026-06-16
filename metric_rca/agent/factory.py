@@ -32,11 +32,22 @@ class AgentFactoryError(RuntimeError):
 @dataclass(frozen=True)
 class MetricRCAAgentBundle:
     agent: Any
+    expert_agents: dict[str, Any]
     tools: list[Any]
     middleware: GuardMiddleware
     guard_context: RunGuardContext
     token_usage_callback: MetricRCATokenUsageCallback
     exposed_tool_names: frozenset[str]
+
+    def agent_for_family(self, family: str | None) -> Any:
+        if not self.expert_agents:
+            return self.agent
+        if family is None:
+            raise AgentFactoryError("AGENT_INVOKE_FAILED", "multi-agent family is required")
+        try:
+            return self.expert_agents[family]
+        except KeyError as exc:
+            raise AgentFactoryError("METRIC_NOT_FOUND", f"unknown expert family: {family}") from exc
 
 
 def create_metric_rca_agent(
@@ -65,22 +76,49 @@ def create_metric_rca_agent(
     token_usage_callback = MetricRCATokenUsageCallback(guard_context)
     subagents = build_subagents(settings=settings, tools=tools, middleware=[middleware])
     try:
-        agent = agent_factory(
-            model=f"{settings.llm_provider}:{model_name}",
-            tools=tools,
-            system_prompt=EXPERT_SYSTEM_PROMPT,
-            middleware=[middleware],
-            subagents=subagents,
-            settings=settings,
-        )
-        exposed = _compiled_tool_names(agent)
-        _validate_compiled_tool_names(exposed)
+        if subagents:
+            expert_agents: dict[str, Any] = {}
+            exposed_sets: set[frozenset[str]] = set()
+            for spec in subagents:
+                agent = agent_factory(
+                    model=f"{settings.llm_provider}:{model_name}",
+                    tools=tools,
+                    system_prompt=spec["system_prompt"],
+                    middleware=[middleware],
+                    subagents=[],
+                    settings=settings,
+                    response_format=spec.get("response_format"),
+                    name=spec["name"],
+                )
+                exposed = _compiled_tool_names(agent)
+                _validate_compiled_tool_names(exposed)
+                exposed_sets.add(exposed)
+                expert_agents[str(spec["family"])] = agent
+            if len(exposed_sets) != 1:
+                raise AgentFactoryError("DEEPAGENTS_ACTION_SPACE_INVALID", "multi-agent experts exposed different tool sets")
+            agent = next(iter(expert_agents.values()))
+            exposed = next(iter(exposed_sets))
+        else:
+            agent = agent_factory(
+                model=f"{settings.llm_provider}:{model_name}",
+                tools=tools,
+                system_prompt=EXPERT_SYSTEM_PROMPT,
+                middleware=[middleware],
+                subagents=[],
+                settings=settings,
+                response_format=None,
+                name="single_agent",
+            )
+            expert_agents = {}
+            exposed = _compiled_tool_names(agent)
+            _validate_compiled_tool_names(exposed)
     except (OpenAIError, LangChainException, RuntimeError, ValueError, TypeError) as exc:
         if isinstance(exc, AgentFactoryError):
             raise
         raise AgentFactoryError("LLM_REQUIRED_UNAVAILABLE", "deepagents agent construction failed") from exc
     return MetricRCAAgentBundle(
         agent=agent,
+        expert_agents=expert_agents,
         tools=tools,
         middleware=middleware,
         guard_context=guard_context,
@@ -97,9 +135,9 @@ def _create_filesystem_free_deep_agent(
     middleware: list[Any],
     subagents: list[dict[str, Any]],
     settings: Any,
+    response_format: Any | None = None,
+    name: str | None = None,
 ) -> Any:
-    if subagents:
-        raise AgentFactoryError("MULTI_AGENT_P9_SCOPE", "subagents are disabled until P9")
     try:
         from deepagents.graph import (
             BASE_AGENT_PROMPT,
@@ -142,6 +180,8 @@ def _create_filesystem_free_deep_agent(
         tools=tools,
         system_prompt=f"{system_prompt}\n\n{BASE_AGENT_PROMPT}",
         middleware=deepagent_middleware,
+        response_format=response_format,
+        name=name,
     ).with_config({"recursion_limit": 1000})
 
 

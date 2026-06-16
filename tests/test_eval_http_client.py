@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import threading
+import time
 from typing import Any
 
 import httpx
@@ -40,6 +42,7 @@ def test_eval_http_client_uses_only_api_endpoints_and_scores_locally(tmp_path: P
             assert payload["llm_api_key"] == "secret-http-eval"
             assert payload["memory_required"] is False
             assert payload["memory_enabled"] in {True, False}
+            assert payload["memory_write_on_finalize"] is (not payload["memory_enabled"])
             return httpx.Response(200, json=_run_summary(_run_id_from_payload(payload)))
         return _artifact_response(request)
 
@@ -81,6 +84,50 @@ def test_eval_http_client_uses_only_api_endpoints_and_scores_locally(tmp_path: P
     assert any(event["summary"]["complete"] is False for event in progress_events)
     assert progress_events[-1]["summary"]["complete"] is True
     assert "secret-http-eval" not in (tmp_path / "eval-http-1.json").read_text()
+
+
+def test_eval_http_client_parallelizes_memory_and_baseline_phases(tmp_path: Path) -> None:
+    from metric_rca.evals.client import run_http_eval
+
+    lock = threading.Lock()
+    active_by_phase = {"memory": 0, "baseline": 0}
+    max_active_by_phase = {"memory": 0, "baseline": 0}
+    memory_write_flags: list[bool] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content.decode()) if request.content else None
+        if request.method == "POST" and request.url.path == "/api/rca/runs":
+            assert payload is not None
+            phase = "memory" if payload["memory_enabled"] else "baseline"
+            with lock:
+                active_by_phase[phase] += 1
+                max_active_by_phase[phase] = max(max_active_by_phase[phase], active_by_phase[phase])
+                if phase == "memory":
+                    memory_write_flags.append(payload["memory_write_on_finalize"])
+            time.sleep(0.05)
+            try:
+                return httpx.Response(200, json=_run_summary(_run_id_from_payload(payload)))
+            finally:
+                with lock:
+                    active_by_phase[phase] -= 1
+        return _artifact_response(request)
+
+    output = run_http_eval(
+        base_url="http://127.0.0.1:8000",
+        provider="openai",
+        model="gpt-5-nano",
+        cases_path=_http_cases_file(tmp_path),
+        output_dir=tmp_path,
+        transport=httpx.MockTransport(handler),
+        eval_id="eval-http-parallel",
+        retry_seconds=0,
+        concurrency=2,
+    )
+
+    assert output["summary"]["thresholds_met"] is True
+    assert max_active_by_phase == {"memory": 2, "baseline": 2}
+    assert memory_write_flags == [False, False]
+    assert [row["case_id"] for row in output["cases"]] == ["gmv_paid_ads_drop", "gmv_no_anomaly"]
 
 
 def test_eval_http_client_retries_typed_transient_failed_run_response(tmp_path: Path) -> None:
@@ -472,6 +519,7 @@ def test_makefile_has_eval_http_target() -> None:
     assert "LANGSMITH_TRACING=false" in source
     assert "LANGCHAIN_TRACING_V2=false" in source
     assert "--timeout $(HTTP_TIMEOUT)" in source
+    assert "--concurrency $(HTTP_CONCURRENCY)" in source
     assert "PROVIDER ?=" not in source
     assert "MODEL ?=" not in source
     assert "PROVIDER is required for eval-http" in source
@@ -515,6 +563,7 @@ def test_eval_http_client_main_passes_configured_timeout(monkeypatch: Any, tmp_p
 
     monkeypatch.setattr(client, "run_http_eval", fake_run_http_eval)
     monkeypatch.setenv("METRIC_RCA_EVAL_HTTP_TIMEOUT", "456")
+    monkeypatch.setenv("METRIC_RCA_EVAL_CONCURRENCY", "7")
 
     exit_code = client.main(
         [
@@ -533,6 +582,7 @@ def test_eval_http_client_main_passes_configured_timeout(monkeypatch: Any, tmp_p
 
     assert exit_code == 0
     assert captured["timeout"] == 456.0
+    assert captured["concurrency"] == 7
 
 
 def test_eval_http_thresholds_require_no_anomaly_correct_even_without_trap_cases() -> None:

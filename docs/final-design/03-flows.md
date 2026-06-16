@@ -6,13 +6,13 @@
 |---|---|---|---|---|
 | 1 | API | POST /api/rca/runs | agent_run(running) | 422 |
 | 2 | Orchestrator | 构建 deep agent；将 user question + run context（target_date、metric_id 白名单、ParsedIntent 结构化过滤范围、parsed analysis_strategy、DiscoveryPolicy 摘要）发给 LLM；LLM 不可用 | — | LLM_REQUIRED_UNAVAILABLE → failed |
-| 3 | 分诊 agent | parse intent → 路由 gmv_family expert | trace(triage_route) | PARSE_FAILED → failed |
+| 3 | Orchestrator triage | ParsedIntent.metric_id → route_gmv_family / route_rate_family | trace(node=triage, action=route_{family}) | METRIC_NOT_FOUND → failed |
 | 4 | expert | detect_anomaly(net_gmv) | trace + E1 + audit | NO_ANOMALY → 流程 §2 |
 | 5 | expert | drilldown_dimension（发现型可在预算内做多个 E2-family 下钻；无显式过滤 GMV 必须覆盖 channel/category/product） | trace + E2 / E2_* | 工具 ok=False → LLM 换动作或结束 |
 | 6 | expert | fetch_related_signal(campaign) | trace + E3 / E3_*（如 `E3_ch_paid_ads`） | 重试 1 次 → 仍败 failed |
 | 7 | expert | calculate_contribution(net_gmv_chain 或 selected slice) | trace + E4 | 工具 ok=False → LLM 换动作或结束 |
 | 8 | expert | rank_root_causes（内部按需调用 Adtributor） | trace + E_rank；更新 E4 candidates EP/surprise | ATTRIBUTION_COVERAGE_LOW → 结构化证据不足 |
-| 9 | expert | 结构化 RunOutcome 返回 | — | — |
+| 9 | expert | advisory RunOutcome 返回（malformed 只 warning） | — | — |
 | 10 | Orchestrator | Reflection 校验 persisted artifacts | — | issues → §3 repair |
 | 11 | Orchestrator | report 投影 + create_tasks + write_memory(episodic) | report/task/memory | MEMORY_WRITE_FAILED → failed |
 | 12 | API | 返回 succeeded；GET 全部从 persisted artifacts 重构 | agent_run(succeeded) | — |

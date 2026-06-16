@@ -36,7 +36,7 @@
   agent harness，构建于 LangGraph 之上。
 - `wrap_tool_call` middleware 可拦截每次工具调用：校验、改写、**短路拒绝**
   （不调用 handler 直接返回错误 ToolMessage）。这是守卫与预算的落点。
-- subagent 支持 `response_format=<PydanticModel>` 结构化输出；
+- subagent 可提示输出 advisory `RunOutcome`，但 persisted artifacts 仍是事实源；
   `CompiledSubAgent` 可挂任意自定义 LangGraph 图。
 - 官方明确：「需要自定义工作流控制时用 LangGraph」。即本迁移是**有意识地用
   prompt + middleware 替代图结构保证**，代价与缓解见 §5。

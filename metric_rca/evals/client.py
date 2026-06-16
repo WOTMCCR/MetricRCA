@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 import json
 import os
@@ -28,6 +29,7 @@ DEFAULT_OUTPUT_DIR = Path("eval_out")
 DEFAULT_HTTP_EVAL_MAX_ATTEMPTS = 3
 DEFAULT_HTTP_EVAL_RETRY_SECONDS = 20.0
 DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS = 600.0
+DEFAULT_HTTP_EVAL_CONCURRENCY = 1
 TRANSIENT_HTTP_EVAL_CODES = frozenset(
     {"llm_required_unavailable", "rate_limit_exceeded", "request_timeout", "timeout"}
 )
@@ -74,15 +76,87 @@ def run_http_eval(
     timeout: float = DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS,
     max_attempts: int = DEFAULT_HTTP_EVAL_MAX_ATTEMPTS,
     retry_seconds: float = DEFAULT_HTTP_EVAL_RETRY_SECONDS,
+    concurrency: int = DEFAULT_HTTP_EVAL_CONCURRENCY,
     progress: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     if max_attempts < 1:
         raise EvalRuntimeError("EVAL_HTTP_ATTEMPTS_INVALID", "max_attempts must be >= 1")
+    if concurrency < 1:
+        raise EvalRuntimeError("EVAL_HTTP_CONCURRENCY_INVALID", "concurrency must be >= 1")
     resolved_eval_id = eval_id or f"eval-http-{uuid4().hex[:8]}"
     cases = load_http_cases(cases_path)
-    memory_scores: list[dict[str, Any]] = []
-    scores: list[dict[str, Any]] = []
+    memory_scores_progress: list[dict[str, Any]] = []
+    scores_progress: list[dict[str, Any]] = []
     with httpx.Client(base_url=base_url, transport=transport, timeout=timeout, trust_env=False) as client:
+        output = _build_http_eval_output(
+            eval_id=resolved_eval_id,
+            provider=provider,
+            model=model,
+            total_case_count=len(cases),
+            memory_scores=memory_scores_progress,
+            scores=scores_progress,
+            complete=False,
+        )
+        _publish_http_eval_state(client=client, output=output, output_dir=output_dir, progress=progress)
+
+        def publish_memory(score: dict[str, Any]) -> None:
+            memory_scores_progress.append(score)
+            output = _build_http_eval_output(
+                eval_id=resolved_eval_id,
+                provider=provider,
+                model=model,
+                total_case_count=len(cases),
+                memory_scores=memory_scores_progress,
+                scores=scores_progress,
+                complete=False,
+            )
+            _publish_http_eval_state(client=client, output=output, output_dir=output_dir, progress=progress)
+
+        memory_scores = _run_http_cases(
+            base_url=base_url,
+            cases=cases,
+            provider=provider,
+            model=model,
+            api_key=api_key,
+            memory_enabled=True,
+            memory_write_on_finalize=False,
+            timeout=timeout,
+            max_attempts=max_attempts,
+            retry_seconds=retry_seconds,
+            concurrency=concurrency,
+            transport=transport,
+            on_case_complete=publish_memory,
+        )
+
+        def publish_case(score: dict[str, Any]) -> None:
+            scores_progress.append(score)
+            _persist_http_eval_case_result(client=client, eval_id=resolved_eval_id, score=score)
+            output = _build_http_eval_output(
+                eval_id=resolved_eval_id,
+                provider=provider,
+                model=model,
+                total_case_count=len(cases),
+                memory_scores=memory_scores_progress,
+                scores=scores_progress,
+                complete=len(scores_progress) == len(cases),
+            )
+            _publish_http_eval_state(client=client, output=output, output_dir=output_dir, progress=progress)
+
+        scores = _run_http_cases(
+            base_url=base_url,
+            cases=cases,
+            provider=provider,
+            model=model,
+            api_key=api_key,
+            memory_enabled=False,
+            memory_write_on_finalize=True,
+            timeout=timeout,
+            max_attempts=max_attempts,
+            retry_seconds=retry_seconds,
+            concurrency=concurrency,
+            transport=transport,
+            on_case_complete=publish_case,
+        )
         output = _build_http_eval_output(
             eval_id=resolved_eval_id,
             provider=provider,
@@ -90,55 +164,9 @@ def run_http_eval(
             total_case_count=len(cases),
             memory_scores=memory_scores,
             scores=scores,
-            complete=False,
+            complete=True,
         )
         _publish_http_eval_state(client=client, output=output, output_dir=output_dir, progress=progress)
-        for case in cases:
-            memory_scores.append(
-                _run_and_score_http_case(
-                    client=client,
-                    case=case,
-                    provider=provider,
-                    model=model,
-                    api_key=api_key,
-                    memory_enabled=True,
-                    max_attempts=max_attempts,
-                    retry_seconds=retry_seconds,
-                )
-            )
-            output = _build_http_eval_output(
-                eval_id=resolved_eval_id,
-                provider=provider,
-                model=model,
-                total_case_count=len(cases),
-                memory_scores=memory_scores,
-                scores=scores,
-                complete=False,
-            )
-            _publish_http_eval_state(client=client, output=output, output_dir=output_dir, progress=progress)
-        for case in cases:
-            score = _run_and_score_http_case(
-                client=client,
-                case=case,
-                provider=provider,
-                model=model,
-                api_key=api_key,
-                memory_enabled=False,
-                max_attempts=max_attempts,
-                retry_seconds=retry_seconds,
-            )
-            scores.append(score)
-            _persist_http_eval_case_result(client=client, eval_id=resolved_eval_id, score=score)
-            output = _build_http_eval_output(
-                eval_id=resolved_eval_id,
-                provider=provider,
-                model=model,
-                total_case_count=len(cases),
-                memory_scores=memory_scores,
-                scores=scores,
-                complete=len(scores) == len(cases),
-            )
-            _publish_http_eval_state(client=client, output=output, output_dir=output_dir, progress=progress)
     if not output["summary"]["thresholds_met"]:
         raise EvalRuntimeError("EVAL_THRESHOLD_NOT_MET", resolved_eval_id)
     return output
@@ -232,6 +260,129 @@ def _http_case_result_row(score: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _run_http_cases(
+    *,
+    base_url: str,
+    cases: list[dict[str, Any]],
+    provider: str,
+    model: str,
+    api_key: str | None,
+    memory_enabled: bool,
+    memory_write_on_finalize: bool,
+    timeout: float,
+    max_attempts: int,
+    retry_seconds: float,
+    concurrency: int,
+    transport: httpx.BaseTransport | None,
+    on_case_complete: Callable[[dict[str, Any]], None] | None = None,
+) -> list[dict[str, Any]]:
+    if concurrency == 1:
+        results: list[dict[str, Any]] = []
+        for case in cases:
+            score = _run_and_score_http_case_with_client(
+                base_url=base_url,
+                case=case,
+                provider=provider,
+                model=model,
+                api_key=api_key,
+                memory_enabled=memory_enabled,
+                memory_write_on_finalize=memory_write_on_finalize,
+                timeout=timeout,
+                max_attempts=max_attempts,
+                retry_seconds=retry_seconds,
+                transport=transport,
+            )
+            if on_case_complete is not None:
+                on_case_complete(score)
+            results.append(score)
+        return results
+
+    executor = ThreadPoolExecutor(max_workers=concurrency)
+    closed = False
+    try:
+        results: list[dict[str, Any] | None] = [None] * len(cases)
+        futures: dict[Any, int] = {}
+        next_index = 0
+
+        def submit_next() -> None:
+            nonlocal next_index
+            if next_index >= len(cases):
+                return
+            case = cases[next_index]
+            futures[
+                executor.submit(
+                    _run_and_score_http_case_with_client,
+                    base_url=base_url,
+                    case=case,
+                    provider=provider,
+                    model=model,
+                    api_key=api_key,
+                    memory_enabled=memory_enabled,
+                    memory_write_on_finalize=memory_write_on_finalize,
+                    timeout=timeout,
+                    max_attempts=max_attempts,
+                    retry_seconds=retry_seconds,
+                    transport=transport,
+                )
+            ] = next_index
+            next_index += 1
+
+        for _ in range(min(concurrency, len(cases))):
+            submit_next()
+        while futures:
+            for future in as_completed(tuple(futures)):
+                index = futures.pop(future)
+                score = future.result()
+                results[index] = score
+                if on_case_complete is not None:
+                    on_case_complete(score)
+                submit_next()
+                break
+        ordered_results: list[dict[str, Any]] = []
+        for index, result in enumerate(results):
+            if result is None:
+                raise EvalRuntimeError("EVAL_HTTP_RESULT_MISSING", str(index))
+            ordered_results.append(result)
+        return ordered_results
+    except BaseException:
+        for future in futures:
+            future.cancel()
+        executor.shutdown(wait=False, cancel_futures=True)
+        closed = True
+        raise
+    finally:
+        if not closed:
+            executor.shutdown(wait=True, cancel_futures=False)
+
+
+def _run_and_score_http_case_with_client(
+    *,
+    base_url: str,
+    case: dict[str, Any],
+    provider: str,
+    model: str,
+    api_key: str | None,
+    memory_enabled: bool,
+    memory_write_on_finalize: bool,
+    timeout: float,
+    max_attempts: int,
+    retry_seconds: float,
+    transport: httpx.BaseTransport | None,
+) -> dict[str, Any]:
+    with httpx.Client(base_url=base_url, transport=transport, timeout=timeout, trust_env=False) as client:
+        return _run_and_score_http_case(
+            client=client,
+            case=case,
+            provider=provider,
+            model=model,
+            api_key=api_key,
+            memory_enabled=memory_enabled,
+            memory_write_on_finalize=memory_write_on_finalize,
+            max_attempts=max_attempts,
+            retry_seconds=retry_seconds,
+        )
+
+
 def _run_and_score_http_case(
     *,
     client: httpx.Client,
@@ -240,6 +391,7 @@ def _run_and_score_http_case(
     model: str,
     api_key: str | None,
     memory_enabled: bool,
+    memory_write_on_finalize: bool,
     max_attempts: int,
     retry_seconds: float,
 ) -> dict[str, Any]:
@@ -250,6 +402,7 @@ def _run_and_score_http_case(
         model=model,
         api_key=api_key,
         memory_enabled=memory_enabled,
+        memory_write_on_finalize=memory_write_on_finalize,
         max_attempts=max_attempts,
         retry_seconds=retry_seconds,
     )
@@ -273,6 +426,7 @@ def _create_http_run_with_retries(
     model: str,
     api_key: str | None,
     memory_enabled: bool,
+    memory_write_on_finalize: bool,
     max_attempts: int,
     retry_seconds: float,
 ) -> tuple[str, int]:
@@ -286,6 +440,7 @@ def _create_http_run_with_retries(
                 model=model,
                 api_key=api_key,
                 memory_enabled=memory_enabled,
+                memory_write_on_finalize=memory_write_on_finalize,
             )
             return run_id, attempt
         except EvalRuntimeError as exc:
@@ -307,6 +462,7 @@ def _create_http_run_once(
     model: str,
     api_key: str | None,
     memory_enabled: bool,
+    memory_write_on_finalize: bool,
 ) -> str:
     target_date = date.fromisoformat(str(case["expected_business_date"]))
     payload = {
@@ -315,6 +471,7 @@ def _create_http_run_once(
         "business_today": (target_date + timedelta(days=1)).isoformat(),
         "memory_enabled": memory_enabled,
         "memory_required": False,
+        "memory_write_on_finalize": memory_write_on_finalize,
         "llm_provider": provider,
         "llm_model": model,
     }
@@ -471,6 +628,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=float, default=float(os.getenv("METRIC_RCA_EVAL_HTTP_TIMEOUT", DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS)))
     parser.add_argument("--max-attempts", type=int, default=int(os.getenv("METRIC_RCA_EVAL_LLM_MAX_ATTEMPTS", DEFAULT_HTTP_EVAL_MAX_ATTEMPTS)))
     parser.add_argument("--retry-seconds", type=float, default=float(os.getenv("METRIC_RCA_EVAL_LLM_RETRY_SECONDS", DEFAULT_HTTP_EVAL_RETRY_SECONDS)))
+    parser.add_argument("--concurrency", type=int, default=int(os.getenv("METRIC_RCA_EVAL_CONCURRENCY", DEFAULT_HTTP_EVAL_CONCURRENCY)))
     args = parser.parse_args(argv)
     if not args.provider:
         parser.error("--provider or METRIC_RCA_EVAL_PROVIDER is required")
@@ -488,6 +646,7 @@ def main(argv: list[str] | None = None) -> int:
             timeout=args.timeout,
             max_attempts=args.max_attempts,
             retry_seconds=args.retry_seconds,
+            concurrency=args.concurrency,
             progress=_print_progress,
         )
     except EvalRuntimeError as exc:

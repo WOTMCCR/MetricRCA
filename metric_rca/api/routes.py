@@ -47,6 +47,7 @@ def build_router(dependencies: ApiDependencies) -> APIRouter:
             business_today=request.business_today,
             memory_enabled=request.memory_enabled,
             memory_required=request.memory_required,
+            memory_write_on_finalize=request.memory_write_on_finalize,
             llm_provider=request.llm_provider,
             llm_model=request.llm_model,
             llm_api_key=request.llm_api_key,

@@ -284,12 +284,65 @@ def test_eval_parallel_cases_use_worker_repositories_and_preserve_output_order(t
     )
 
     assert max_active == 2
-    assert len(worker_repos) == 2
+    assert len(worker_repos) == 4
     assert worker_repos[0] is not worker_repos[1]
     assert all(repo.closed for repo in worker_repos)
     assert [row["case_id"] for row in output["cases"]] == ["gmv_paid_ads_drop", "gmv_no_anomaly"]
     assert [row["case_id"] for row in main_repo.case_results] == ["gmv_paid_ads_drop", "gmv_no_anomaly"]
     assert main_repo.eval_run_updates[-1]["summary"]["complete"] is True
+
+
+def test_eval_memory_prepass_uses_eval_concurrency_and_write_isolation(tmp_path: Path) -> None:
+    main_repo = _EvalRepository()
+    active_memory = 0
+    max_active_memory = 0
+    lock = threading.Lock()
+    memory_settings_seen: list[tuple[bool, bool]] = []
+
+    def repository_factory() -> _EvalRepository:
+        return _EvalRepository()
+
+    def runner(question: str, **kwargs: Any) -> dict[str, Any]:
+        nonlocal active_memory, max_active_memory
+        repo: _EvalRepository = kwargs["repository"]
+        run_id = kwargs["run_id"]
+        case_id = _case_id_from_run_id(run_id)
+        settings = kwargs["settings"]
+        if settings.memory_enabled:
+            with lock:
+                active_memory += 1
+                max_active_memory = max(max_active_memory, active_memory)
+                memory_settings_seen.append((settings.memory_enabled, settings.memory_write_on_finalize))
+            time.sleep(0.05)
+            try:
+                repo.persist_case(run_id, case_id)
+                return {"run_id": run_id, "status": repo.agent_runs[run_id]["status"], "error_code": None}
+            finally:
+                with lock:
+                    active_memory -= 1
+        repo.persist_case(run_id, case_id)
+        return {"run_id": run_id, "status": repo.agent_runs[run_id]["status"], "error_code": None}
+
+    output = run_eval(
+        repository=main_repo,
+        repository_factory=repository_factory,
+        rca_runner=runner,
+        cases_path=_cases_file(tmp_path),
+        output_dir=tmp_path,
+        eval_id="eval-1",
+        settings=Settings(
+            db_dsn="mysql+pymysql://app:app@localhost/db",
+            readonly_db_dsn="mysql+pymysql://reader:reader@localhost/db",
+            llm_provider="openai",
+            llm_model="gpt-test",
+            llm_api_key="key",
+            eval_concurrency=2,
+        ),
+    )
+
+    assert max_active_memory == 2
+    assert sorted(memory_settings_seen) == [(True, False), (True, False)]
+    assert [row["case_id"] for row in output["memory_cases"]] == ["gmv_paid_ads_drop", "gmv_no_anomaly"]
 
 
 def test_eval_writes_progress_summary_when_memory_prepass_fails(tmp_path: Path) -> None:

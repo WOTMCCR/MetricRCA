@@ -292,8 +292,14 @@ class AgentRun(BaseModel):
 flowchart TB
   UI[React/Vite 调试 UI] --> API[FastAPI]
   API --> ORCH[RunOrchestrator]
-  ORCH --> AGENT[deepagents LLM tool-calling]
-  ORCH --> TOOLS[确定性工具层]
+  ORCH --> MODE{multi_agent_enabled}
+  MODE -->|false| AGENT[single deepagents expert]
+  MODE -->|true| TRIAGE[triage by ParsedIntent.metric_id]
+  TRIAGE --> GMV[gmv_family expert]
+  TRIAGE --> RATE[rate_family expert]
+  AGENT --> TOOLS[确定性工具层]
+  GMV --> TOOLS
+  RATE --> TOOLS
   TOOLS --> GUARD[SQL Guardrail - sqlglot]
   TOOLS --> ALGO[确定性算法: 异常检测/贡献/分解/排序]
   GUARD --> REPO[Repositories - SQLAlchemy]
@@ -305,18 +311,25 @@ flowchart TB
   TRACE --> DB
 ```
 
-### 3.2 控制流（P6 active）
+### 3.2 控制流（P9 active）
 
 ```mermaid
 flowchart LR
   START((START)) --> start_run[start agent_run]
   start_run --> memory[required memory read]
-  memory --> agent[deep agent invoke]
-  agent --> guard[GuardMiddleware tool boundary]
+  memory --> mode{multi_agent_enabled}
+  mode -->|false| agent[single expert invoke]
+  mode -->|true| triage[triage route by ParsedIntent.metric_id]
+  triage --> expert[gmv/rate expert invoke]
+  agent --> guard[shared GuardMiddleware tool boundary]
+  expert --> guard
   guard --> tools[deterministic MetricRCA tools]
   tools --> evidence[persist Evidence and trace]
   agent --> reflect[persisted-artifact Reflection]
+  expert --> outcome[advisory RunOutcome warning only]
+  outcome --> reflect
   reflect -->|repairable once| agent
+  reflect -->|repairable once + multi-agent| expert
   reflect -->|passed| project[ADL-0006 report projection]
   reflect -->|failed| fail[failed + error_code]
   project --> tasks[operation task finalization]
@@ -328,8 +341,11 @@ flowchart LR
 
 ### 3.3 数据流（详见第 15 节）
 
-### 3.4 1 个月增强架构
-新增：多维归因服务（Adtributor 解释力 + Surprise）、语义 / 情景 / 反思记忆库（可选向量库）、可观测性看板、可选 MCP server 暴露工具、可选 Multi-Agent（分诊 + 专家）。
+### 3.4 最终增强架构
+已落地：多维归因服务（Adtributor 解释力 + Surprise）、semantic / episodic /
+reflection / case 四层 memory、token/latency + memory observability、HTTP eval
+client、per-request LLM override、以及开关式 Multi-Agent（deterministic triage +
+family experts）。MCP server 与向量库不属于当前最终版强依赖。
 
 ---
 
@@ -346,7 +362,7 @@ metric_rca/
     tools/            # 确定性工具核心（QuerySpec -> Guard -> Repo）
     prompts.py        # expert system prompt
     reflection.py     # persisted-artifact Reflection 校验器
-    subagents.py      # P9 multi-agent gate
+    subagents.py      # P9 RunOutcome + family routing/subagent specs
   domain/             # enums, models（Pydantic）
   data/               # seed_data.py, schema.sql, anomaly_injection.py
   repositories/       # SQLAlchemy 访问层（只读取数 + 系统表写入）
@@ -376,18 +392,19 @@ metric_rca/
 > remain auditable, but new implementation work must target the v2
 > `RunOrchestrator + deepagents + GuardMiddleware` architecture.
 
-P6 replaces the hand-written graph under `metric_rca/agent/` with this package
-layout:
+P6 replaced the hand-written graph under `metric_rca/agent/`; P9 adds the
+switchable triage + expert topology without changing the deterministic tool and
+Reflection boundary:
 
 ```text
 metric_rca/agent/
   runner.py          # RunOrchestrator lifecycle, repair re-entry, finalization
-  factory.py         # create_deep_agent assembly
-  middleware.py      # GuardMiddleware via wrap_tool_call
+  factory.py         # single-agent or multi-agent expert assembly
+  middleware.py      # GuardMiddleware via wrap_tool_call; run-level budgets
   tools/             # LangChain @tool wrappers over deterministic tools
   prompts.py         # controlled expert prompt
   reflection.py      # persisted-artifact rule verifier
-  subagents.py       # P9-only subagent config gate
+  subagents.py       # RunOutcome, family routing, expert specs
 ```
 
 The active control flow is:
@@ -395,17 +412,30 @@ The active control flow is:
 1. `RunOrchestrator` creates `agent_run(status=running)`.
 2. `factory.create_metric_rca_agent` builds a deepagents agent with the required
    LLM model, registered tool whitelist, `GuardMiddleware`, planning
-   `write_todos`, and filesystem tools disabled by policy.
-3. The LLM chooses among whitelisted tools only. It never writes SQL and never
-   sees raw result rows.
-4. `GuardMiddleware` validates each tool name and Pydantic argument schema,
+   `write_todos`, and filesystem tools disabled by policy. When
+   `multi_agent_enabled=false`, this is the P8 single-agent path. When
+   `multi_agent_enabled=true`, factory builds `gmv_family_expert` and
+   `rate_family_expert` with the same registered tool set, same
+   `GuardMiddleware` instance, and same `RunGuardContext`.
+3. After LLM intent parsing, deterministic triage reads only
+   `ParsedIntent.metric_id`. GMV-family metrics (`gmv`, `net_gmv`, `uv`,
+   `aov`) route to `gmv_family`; rate metrics (`pay_cvr`, `refund_rate`,
+   `stockout_rate`, `complaint_rate`) route to `rate_family`; unsupported
+   metrics fail `METRIC_NOT_FOUND`. Triage writes a trace step with
+   `node=triage` and `action=route_{family}` and does not consume data-tool
+   step/query/drilldown budget.
+4. The selected expert LLM chooses among whitelisted tools only. It never writes
+   SQL and never sees raw result rows. In multi-agent mode, expert output may
+   include advisory structured `RunOutcome`; malformed or mismatched output is
+   logged as a warning and does not replace the persisted-artifact flow.
+5. `GuardMiddleware` validates each tool name and Pydantic argument schema,
    enforces run-scoped budget counters, executes the tool, writes trace, and
    fails if any data-fetching tool returns no current-run `evidence_id`.
-5. After the agent loop stops, `RunOrchestrator` runs deterministic Reflection
+6. After the agent loop stops, `RunOrchestrator` runs deterministic Reflection
    over persisted artifacts only. One repair re-entry is allowed through the
-   same thread/checkpointer. A second failure returns
-   `REFLECTION_REPAIR_FAILED` and no report.
-6. `RunOrchestrator` enforces the no-anomaly contract at finalization: an
+   same thread/checkpointer and the same selected expert path. A second failure
+   returns `REFLECTION_REPAIR_FAILED` and no report.
+7. `RunOrchestrator` enforces the no-anomaly contract at finalization: an
    `is_anomaly=false` evidence may only produce a `no_anomaly` run with no
    drilldown/rank trace and no operation task. Violations fail with
    `NO_ANOMALY_CONTRACT_VIOLATED`.
@@ -512,6 +542,10 @@ stateDiagram-v2
 The active v2 ReAct contract is:
 
 - The LLM is required and runs with `temperature=0`.
+- P9 multi-agent mode changes only the expert selection surface: deterministic
+  triage routes by structured `ParsedIntent.metric_id`, then the selected
+  family expert runs the same ReAct/tool loop. Triage never re-parses raw
+  natural language and never owns separate budgets.
 - The LLM client is configured through Settings only. Native OpenAI and
   OpenAI-compatible providers share the same ChatModel construction boundary:
   `llm_provider`, `llm_model`, `llm_api_key`, optional `llm_base_url`, and
@@ -521,6 +555,14 @@ The active v2 ReAct contract is:
 - The exposed tools are exactly the MetricRCA whitelist plus deepagents
   planning `write_todos`; filesystem tools (`ls`, `read_file`, `write_file`,
   `edit_file`, and equivalents) are not part of the exposed action set.
+- In multi-agent mode, `gmv_family_expert` and `rate_family_expert` must expose
+  the same tool names and share the same `GuardMiddleware` object; run-level
+  counters (`step_count`, `query_count`, `drilldown_depth`) cannot reset per
+  expert.
+- Expert response structure may include an advisory `RunOutcome` containing
+  status, metric_id, candidate fields, evidence ids, and reflection notes. It is
+  not a fact source; malformed output logs a warning, and the final report is
+  still projected from persisted Evidence and Reflection artifacts.
 - Each MetricRCA tool has `extra="forbid"` Pydantic input/output models.
 - `GuardMiddleware.wrap_tool_call` short-circuits illegal tool names or invalid
   arguments with an `ACTION_SCHEMA_INVALID` observation and does not execute the
@@ -1251,17 +1293,18 @@ async def health(): return {"status": "ok"}
 | 1 API 入口 | question | run_id | 写 agent_run | status=running | 422(校验) |
 | 2 parse_question | question | metric=gmv, analysis_strategy | — | metric_id | PARSE_FAILED→error_return |
 | 3 read_memory | gmv\|channel | hits | 读 memory_record | memory_hits | MEMORY_READ_FAILED→error_return |
-| 4 detect_anomaly | gmv,date | is_anomaly,z,delta | 读 fact_order(经守卫) | anomaly,evidences+E1 | NO_ANOMALY→无异常返回 |
-| 5 drilldown channel | gmv,channel | paid_ads 83% | 读 fact_order(经守卫) | evidences+E2 | DIMENSION_NOT_ALLOWED |
-| 6 fetch_related_signal | campaign | spend-61% | 读 fact_campaign(经守卫) | evidences+E3 | SQL_EXECUTION_FAILED |
-| 7 calculate_contribution | UV×CVR×AOV | UV 主因 | 读 fact_traffic(经守卫) | evidences+E4 | SQL_EXECUTION_FAILED / QUERY_SPEC_INVALID |
-| 8 attribute_rank | evidences | campaign_traffic_drop | — | candidates | ATTRIBUTION_COVERAGE_LOW |
-| 9 reflection_verify | candidates | passed | — | reflection | repair / 失败显式返回 |
-| 10 generate_report | passed reflection + persisted E4 | verified report projection | 读 evidence(E4) | report | REFLECTION_REPAIR_FAILED |
-| 11 create_tasks | candidate | task_id | 写 operation_task | — | — |
-| 12 write_memory | report | ok | 写 memory_record | — | MEMORY_WRITE_FAILED→error_return |
-| 13 trace 持久化 | 每步 | TraceStep | 写 trace_step / sql_audit | — | final token trace writes through repository-only idempotent retry; retry exhausted→failed |
-| 14 final response | — | run+report | — | status=succeeded | — |
+| 4 triage (P9 when enabled) | ParsedIntent.metric_id | route_gmv_family | 写 trace_step | selected expert | METRIC_NOT_FOUND |
+| 5 detect_anomaly | gmv,date | is_anomaly,z,delta | 读 fact_order(经守卫) | anomaly,evidences+E1 | NO_ANOMALY→无异常返回 |
+| 6 drilldown channel | gmv,channel | paid_ads 83% | 读 fact_order(经守卫) | evidences+E2 | DIMENSION_NOT_ALLOWED |
+| 7 fetch_related_signal | campaign | spend-61% | 读 fact_campaign(经守卫) | evidences+E3 | SQL_EXECUTION_FAILED |
+| 8 calculate_contribution | UV×CVR×AOV | UV 主因 | 读 fact_traffic(经守卫) | evidences+E4 | SQL_EXECUTION_FAILED / QUERY_SPEC_INVALID |
+| 9 attribute_rank | evidences | campaign_traffic_drop | — | candidates | ATTRIBUTION_COVERAGE_LOW |
+| 10 reflection_verify | candidates | passed | — | reflection | repair / 失败显式返回 |
+| 11 generate_report | passed reflection + persisted E4 | verified report projection | 读 evidence(E4) | report | REFLECTION_REPAIR_FAILED |
+| 12 create_tasks | candidate | task_id | 写 operation_task | — | — |
+| 13 write_memory | report | ok | 写 memory_record | — | MEMORY_WRITE_FAILED→error_return |
+| 14 trace 持久化 | 每步 | TraceStep | 写 trace_step / sql_audit | — | final token trace writes through repository-only idempotent retry; retry exhausted→failed |
+| 15 final response | — | run+report | — | status=succeeded | — |
 
 每步均落 trace_step；每条 SQL 落 sql_audit + evidence。
 
@@ -1279,6 +1322,9 @@ P3B/P4 约束：`generate_report` 只能做 verified artifact projection，不�
 - **token usage（P8 active）**：`trace_step.token_usage` 记录每次 LLM call 的
   prompt/completion/total token；`agent_run` API 投影提供 `token_summary`（总 token、总
   latency、按 llm/tool/trace step breakdown），数值只能由 persisted `trace_step` 聚合。
+- **triage trace（P9 active）**：multi-agent mode 在 expert 调用前写入
+  `trace_step(node="triage", action="route_{family}")`，用于证明
+  `ParsedIntent.metric_id` 路由结果并支撑 eval 的 `multi_agent_path`。
 - **UI 展示 trace**：React/Vite debug UI 通过 FastAPI 按 run_id 读取 trace_step 时序、每步动作 / 观察、evidence、SQL audit、Reflection issues、memory layer records 与 token/latency status。
 - **失败 RCA 复盘**：查 status=failed 的 run，看 error_code 落在哪个 node。
 - **重放 / 重构**：因 QuerySpec / SQL / seed 确定，可用相同 run 输入 + 固定 seed 重构同一 RCA 过程；trace_step 提供完整时序还原。
@@ -1303,6 +1349,11 @@ P8 adds an HTTP eval client while preserving direct `make eval`:
   to write `eval_case_result`. Local JSON/Markdown artifacts are updated with
   progress summary before final completion; CLI progress goes to stderr and final
   machine-readable summary remains on stdout.
+- HTTP eval uses the same parallel case scheduling semantics as direct eval:
+  `--concurrency` / `METRIC_RCA_EVAL_CONCURRENCY` controls both memory prepass
+  and baseline phases. Memory prepass sends per-request
+  `memory_write_on_finalize=false`, so concurrent HTTP cases read seed /
+  pre-existing memory without writing eval-produced episodic/reflection records.
 - The HTTP client must not import `run_rca`, `MetricRepository`, or any DB-backed
   repository. Local HTTP calls use `httpx.Client(trust_env=False)` so localhost
   traffic does not leak through proxy environment variables.
@@ -1315,7 +1366,13 @@ P8 adds an HTTP eval client while preserving direct `make eval`:
 - `make eval-http BASE_URL=... PROVIDER=openai MODEL=gpt-5-nano` is additive;
   `make eval` remains direct-call mode for CI and local DB-backed runs.
 
-Direct eval 并发约束：每个 worker 必须使用独立 `RunOrchestrator` / `MetricRepository` / `TraceWriter`，不得共享注入的可变 repository；主线程用完成即收集的 future 调度，并按 cases 输入 index 还原最终输出顺序；direct `eval_run.summary` 只能由主线程最后写入；`make seed` 不并发且只在开跑前执行一次；eval case settings 禁用 memory，避免并发记忆污染。
+Direct eval 并发约束：每个 worker 必须使用独立 `RunOrchestrator` /
+`MetricRepository` / `TraceWriter`，不得共享注入的可变 repository；主线程用完成即收集的
+future 调度，并按 cases 输入 index 还原最终输出顺序；direct `eval_run.summary` 只能由主线程最后写入；
+`make seed` 不并发且只在开跑前执行一次。P8/P9 paired memory prepass 与 baseline phase 共用
+`METRIC_RCA_EVAL_CONCURRENCY` 并发控制；memory prepass 使用 `memory_enabled=true` 且
+`memory_write_on_finalize=false`，所以每个 eval case 只读取 seed / pre-existing memory，不把本轮 eval
+产生的 episodic/reflection 写入污染后续 case；baseline case 继续以 `memory_enabled=false` 评分。
 
 **指标**：
 - intent-parse accuracy（解析对指标）
@@ -1330,6 +1387,9 @@ P5 必须额外校验：
 - `report_traceable_ok`：final report 每个 numeric_claim 都能在 persisted Evidence.result_summary 中找到。
 - `memory_pollution_ok`：memory hit 不得作为 evidence_id，不得单独生成 candidate / confirmed conclusion。
 - `no_anomaly_correct`：status=no_anomaly，只有 E1，无 operation_task，无 attribute_rank trace，无 confirmed candidate。
+- `multi_agent_path_distribution`：P9 scorer 从 triage trace 推导
+  `single_agent` 或 `multi_agent:{family}`，并在 summary 中统计路径分布；score 字段名在
+  single-agent 与 multi-agent 模式下保持一致。
 
 字段归属：逐 case 字段写入 `eval_case_result.intent_ok/anomaly_ok/top1_ok/top3_ok/evidence_coverage/sql_safe/reflection_repair_ok`；汇总字段如 `case_total`、`dangerous_sql_blocked`、`no_anomaly_correct`、命中率等写入 `eval_run.summary` JSON。
 

@@ -8,6 +8,7 @@ EVAL_ID ?=
 
 BASE_URL ?= http://127.0.0.1:8000
 HTTP_TIMEOUT ?= 600
+HTTP_CONCURRENCY ?= $(or $(METRIC_RCA_EVAL_CONCURRENCY),1)
 LOCAL_TRACING_ENV ?= LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false
 
 up:
@@ -31,7 +32,7 @@ eval-stream:
 eval-http:
 	@test -n "$(PROVIDER)" || (echo "PROVIDER is required for eval-http" >&2; exit 2)
 	@test -n "$(MODEL)" || (echo "MODEL is required for eval-http" >&2; exit 2)
-	$(LOCAL_TRACING_ENV) python -m metric_rca.evals.client --base-url $(BASE_URL) --provider $(PROVIDER) --model $(MODEL) --timeout $(HTTP_TIMEOUT)
+	$(LOCAL_TRACING_ENV) python -m metric_rca.evals.client --base-url $(BASE_URL) --provider $(PROVIDER) --model $(MODEL) --timeout $(HTTP_TIMEOUT) --concurrency $(HTTP_CONCURRENCY)
 
 eval-gaps:
 	$(LOCAL_TRACING_ENV) python -m metric_rca.evals.gap_analyzer --eval-id $(EVAL_ID)

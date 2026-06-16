@@ -33,6 +33,7 @@ def settings_with_overrides(
     business_today: Any = None,
     memory_enabled: bool | None = None,
     memory_required: bool | None = None,
+    memory_write_on_finalize: bool | None = None,
     llm_provider: str | None = None,
     llm_model: str | None = None,
     llm_api_key: str | None = None,
@@ -47,6 +48,8 @@ def settings_with_overrides(
         values["memory_enabled"] = memory_enabled
     if memory_required is not None:
         values["memory_required"] = memory_required
+    if memory_write_on_finalize is not None:
+        values["memory_write_on_finalize"] = memory_write_on_finalize
     if llm_provider is not None:
         values["llm_provider"] = llm_provider
     if llm_model is not None:

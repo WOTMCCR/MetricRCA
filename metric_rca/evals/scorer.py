@@ -54,6 +54,7 @@ def score_case(
     )
     no_anomaly_task_ok = _no_anomaly_task_ok(agent_run=agent_run, artifacts=artifacts)
     adtributor_used = _adtributor_used(selected_candidate=selected_candidate, artifacts=artifacts)
+    multi_agent_path = _multi_agent_path(artifacts.trace_steps)
     required_dimension_elements = _required_dimension_elements(case_id)
     dimension_elements_required = bool(required_dimension_elements)
     if required_dimension_elements and not _has_dimension_elements(selected_candidate, required_dimension_elements):
@@ -73,7 +74,7 @@ def score_case(
         "memory_pollution_ok": int(memory_pollution_ok),
         "no_anomaly_task_ok": int(no_anomaly_task_ok),
         "adtributor_used": int(adtributor_used),
-        "multi_agent_path": "single_agent",
+        "multi_agent_path": multi_agent_path,
         "detail": {
             "status": agent_run.get("status"),
             "metric_id": agent_run.get("metric_id"),
@@ -129,6 +130,7 @@ def summarize_scores(
         sum(_detail_number(row, "latency_ms") for row in case_scores) / total,
         6,
     )
+    summary["multi_agent_path_distribution"] = _multi_agent_path_distribution(case_scores)
     return summary
 
 
@@ -175,6 +177,24 @@ def _detail_number(row: dict[str, Any], key: str) -> float:
     if value is None:
         return 0.0
     return float(value)
+
+
+def _multi_agent_path(trace_steps: list[dict[str, Any]]) -> str:
+    for row in trace_steps:
+        if row.get("node") != "triage":
+            continue
+        action = str(row.get("action") or "")
+        if action.startswith("route_"):
+            return f"multi_agent:{action.removeprefix('route_')}"
+    return "single_agent"
+
+
+def _multi_agent_path_distribution(case_scores: list[dict[str, Any]]) -> dict[str, int]:
+    distribution: dict[str, int] = {}
+    for row in case_scores:
+        path = str(row.get("multi_agent_path") or "single_agent")
+        distribution[path] = distribution.get(path, 0) + 1
+    return distribution
 
 
 def _anomaly_ok(

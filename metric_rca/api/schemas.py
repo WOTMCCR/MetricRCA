@@ -20,6 +20,7 @@ class RunCreateRequest(BaseModel):
     business_today: date | None = None
     memory_enabled: bool | None = None
     memory_required: bool | None = None
+    memory_write_on_finalize: bool | None = None
     llm_provider: str | None = None
     llm_model: str | None = None
     llm_api_key: str | None = None
@@ -105,6 +106,7 @@ class EvalSummaryPayload(BaseModel):
     completed_memory_case_total: NonNegativeInt | None = None
     complete: StrictBool | None = None
     thresholds_met: StrictBool | None = None
+    multi_agent_path_distribution: dict[str, NonNegativeInt] | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -144,6 +146,7 @@ class EvalSummaryPayload(BaseModel):
             "completed_case_total",
             "completed_memory_case_total",
             "thresholds_met",
+            "multi_agent_path_distribution",
         }
         missing = sorted(field for field in required if getattr(self, field) is None)
         if missing:

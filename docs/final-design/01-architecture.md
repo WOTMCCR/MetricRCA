@@ -39,7 +39,7 @@ metric_rca/agent/
   tools/             # langchain @tool 包装确定性服务，每工具 Pydantic In/Out
   prompts.py         # 分诊/专家 system prompt（受控动作空间说明、禁止编造数值）
   reflection.py      # 确定性校验器（v1 逻辑保留，输入改为 persisted artifacts）
-  subagents.py       # expert 子代理配置（P9；response_format=RunOutcome）
+  subagents.py       # expert 子代理配置（P9；advisory RunOutcome）
 ```
 
 Orchestrator 调用 agent 时会把 run context 附加到用户消息：当前
@@ -208,14 +208,15 @@ eval 的 `no_anomaly_correct` 继续按 v1 标准判分。
 ## 7. Multi-Agent（P9，开关式）
 
 - `Settings.multi_agent_enabled: bool = False`。
-- true：分诊主 agent 仅做路由（无取数工具），按 ParsedIntent.family 调用
-  expert subagent；experts 共享同一工具集与 GuardMiddleware，预算计数器
+- true：RunOrchestrator 用纯 Python triage 按 `ParsedIntent.metric_id` 做路由
+  （无 LLM 调用、无取数工具），调用对应 expert；experts 共享同一工具集与 GuardMiddleware，预算计数器
   **run 级共享**（防止 subagent 重置预算）。
-- expert `response_format=RunOutcome`（仅 status_hint 与最终 rank evidence_id
-  引用，不含自由数值——真值永远来自 persisted artifacts）。
-- 路由决策写 trace_step（node=triage_route）。
+- expert prompt asks for advisory `RunOutcome` tracing/diagnostic output；
+  malformed/mismatched output 只记录 warning，真值永远来自 persisted artifacts。
+- 路由决策写 trace_step（node=`triage`, action=`route_{family}`）。
 - false：跳过分诊，单 expert 直连。差分测试：同一 case 两种模式下
-  persisted artifacts 投影一致（evidence 序列允许不同，结论与判分字段一致）。
+  score 字段结构一致、trace 含 triage step、预算共享/no-anomaly/repair 合约保留；
+  不要求 LLM top1 结果逐字一致。
 
 ## 8. 可观测性增强
 

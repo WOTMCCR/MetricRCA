@@ -59,9 +59,10 @@ eval-http 模式同一后端 + 两个 provider 各跑 20 case 均 green。
 
 ## P9（10）Multi-Agent + 收尾 — codex/p9-multiagent-final
 
-1. 分诊主 agent + gmv_family/rate_family experts（subagents,
-   response_format=RunOutcome，预算 run 级共享）。
-2. 开关差分测试：multi_agent on/off 判分字段一致。
+1. 纯 Python metric_id triage + gmv_family/rate_family experts（advisory
+   RunOutcome prompt/optional validation，预算 run 级共享）。
+2. 开关差分测试：multi_agent on/off 判分字段结构一致，并证明 triage trace、共享预算、
+   no-anomaly contract、repair flow 保留。
 3. 收尾：README、最终 eval 报告、文档一致性清扫。
 
 验收：00-overview §4 全表门槛；连续 2 次 `make eval` 全绿。
