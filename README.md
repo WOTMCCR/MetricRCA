@@ -40,13 +40,16 @@ PATH=.venv/bin:$PATH make seed
 PATH=.venv/bin:$PATH make api
 PATH=.venv/bin:$PATH make ui
 PATH=.venv/bin:$PATH make eval
+PATH=.venv/bin:$PATH make eval-http BASE_URL=http://127.0.0.1:8000 PROVIDER=openai MODEL=gpt-5-nano
 PATH=.venv/bin:$PATH make test
 npm test --prefix frontend -- --run
 npm run build --prefix frontend
 ```
 
 Make targets map to `docker compose`, `python`, `uvicorn`, `npm`, and `pytest`
-commands as defined in `Makefile`.
+commands as defined in `Makefile`. Local API and eval targets prefix their
+commands with `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false` so external
+LangSmith network ingestion cannot affect persisted-artifact verification.
 
 ## API
 
@@ -61,6 +64,8 @@ FastAPI is exposed by `metric_rca.api.main:app`.
 - `GET /api/rca/runs/{run_id}/tasks`
 - `GET /api/rca/runs/{run_id}/memory`
 - `POST /api/evals/run`
+- `POST /api/evals/{eval_id}/summary`
+- `POST /api/evals/{eval_id}/case-results`
 - `GET /api/evals/{eval_id}`
 
 `POST /api/rca/runs` invokes `run_rca()`. `GET /api/rca/runs/{run_id}` reads
@@ -90,26 +95,30 @@ Representative error codes include `SYSTEM_TABLE_READ_FAILED`,
 
 The UI is a separated React/Vite frontend in `frontend/`. It uses an injectable
 API client and browser `fetch`, not direct graph imports. The dashboard renders
-nine panels:
+P8 observability panels:
 
 1. Question input
 2. Conclusion/report
 3. Root cause Top-K
-4. Evidence table
-5. SQL audit table
-6. Trace timeline
-7. Reflection issues
-8. Memory status
-9. Eval summary
+4. Adtributor candidates
+5. Evidence table
+6. SQL audit table
+7. Trace timeline
+8. Token/latency dashboard
+9. Reflection issues
+10. Memory status
+11. Memory layers
+12. Eval summary
 
 Set `VITE_METRIC_RCA_API_BASE_URL` when the API is not running at
 `http://127.0.0.1:8000`.
 
 ## Eval
 
-`make eval` runs the five MVP cases in `metric_rca/evals/cases.jsonl`. The
+`make eval` runs the 20 persisted-artifact cases in `metric_rca/evals/cases.jsonl`. The
 runner reads authoritative answers from `anomaly_ground_truth`, calls `run_rca`
-once per case, then scores persisted artifacts:
+once per memory-enabled case and once per memory-disabled baseline case, then
+scores persisted artifacts:
 
 - `agent_run`
 - `evidence`

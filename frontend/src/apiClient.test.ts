@@ -29,6 +29,33 @@ describe('HttpMetricRcaApiClient', () => {
     );
   });
 
+  test('createRun sends per-request LLM overrides when provided', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ run_id: 'run-1', status: 'succeeded' }),
+    } as Response);
+    const client = new HttpMetricRcaApiClient('http://127.0.0.1:8000');
+
+    await client.createRun({
+      question: 'Why did GMV drop?',
+      llm_provider: 'openai',
+      llm_model: 'gpt-5-nano',
+      llm_api_key: 'secret-ui-key',
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:8000/api/rca/runs',
+      expect.objectContaining({
+        body: JSON.stringify({
+          question: 'Why did GMV drop?',
+          llm_provider: 'openai',
+          llm_model: 'gpt-5-nano',
+          llm_api_key: 'secret-ui-key',
+        }),
+      }),
+    );
+  });
+
   test('recognizes typed API errors without faking success', () => {
     expect(
       isApiError({

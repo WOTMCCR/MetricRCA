@@ -7,23 +7,26 @@ import type { MetricRcaApiClient, RunPayload } from './apiClient';
 describe('MetricRCA UI', () => {
   afterEach(() => cleanup());
 
-  test('renders nine required persisted-artifact panels from data', () => {
+  test('renders twelve required persisted-artifact panels from data', () => {
     render(<App apiClient={fakeClient()} initialData={loadedRun()} />);
 
     for (const title of [
       'Question Input',
       'Conclusion',
       'Root Cause Top-K',
+      'Adtributor Candidates',
       'Evidence Table',
       'SQL Audit Table',
       'Trace Timeline',
+      'Token/Latency Dashboard',
       'Reflection Issues',
       'Memory Status',
+      'Memory Layers',
       'Eval Summary',
     ]) {
       expect(screen.getByRole('region', { name: title })).toBeInTheDocument();
     }
-    expect(screen.getByText('paid_ads')).toBeInTheDocument();
+    expect(screen.getAllByText('paid_ads').length).toBeGreaterThan(0);
     expect(screen.getByText('case_total')).toBeInTheDocument();
   });
 
@@ -40,6 +43,35 @@ describe('MetricRCA UI', () => {
     expect(panel.getByText('paid_ads')).toBeInTheDocument();
     expect(panel.getByText('electronics')).toBeInTheDocument();
     expect(panel.getByText('likely')).toBeInTheDocument();
+  });
+
+  test('renders adtributor candidates ordered by explanatory power', () => {
+    render(<App apiClient={fakeClient()} initialData={loadedRun()} />);
+
+    const panel = within(screen.getByRole('region', { name: 'Adtributor Candidates' }));
+    const rows = panel.getAllByRole('row').map((row) => row.textContent ?? '');
+
+    expect(panel.getByRole('columnheader', { name: 'explanatory_power' })).toBeInTheDocument();
+    expect(panel.getByRole('columnheader', { name: 'surprise_js' })).toBeInTheDocument();
+    expect(rows[1]).toContain('organic');
+    expect(rows[2]).toContain('paid_ads');
+  });
+
+  test('renders token latency and layered memory observability', () => {
+    render(<App apiClient={fakeClient()} initialData={loadedRun()} />);
+
+    const tokenPanel = within(screen.getByRole('region', { name: 'Token/Latency Dashboard' }));
+    expect(tokenPanel.getByText('total_tokens')).toBeInTheDocument();
+    expect(tokenPanel.getByText('12')).toBeInTheDocument();
+    expect(tokenPanel.getAllByText('latency_ms')).toHaveLength(2);
+    expect(tokenPanel.getAllByText('150')).toHaveLength(2);
+    expect(tokenPanel.getByText('llm_call')).toBeInTheDocument();
+    expect(tokenPanel.getByText('agent_llm')).toBeInTheDocument();
+
+    const memoryPanel = within(screen.getByRole('region', { name: 'Memory Layers' }));
+    expect(memoryPanel.getByText('semantic')).toBeInTheDocument();
+    expect(memoryPanel.getByText('episodic')).toBeInTheDocument();
+    expect(memoryPanel.getByText('reflection')).toBeInTheDocument();
   });
 
   test('renders reflection_verify output summary details', () => {
@@ -71,7 +103,7 @@ describe('MetricRCA UI', () => {
       'getTasks:run-1',
       'getMemory:run-1',
     ]);
-    expect(await screen.findByText('paid_ads')).toBeInTheDocument();
+    expect((await screen.findAllByText('paid_ads')).length).toBeGreaterThan(0);
   });
 
   test('does not load success panels when artifact fetch fails with typed API error', async () => {
@@ -155,21 +187,49 @@ function loadedRun() {
           dimension: 'channel',
           element: 'paid_ads',
           verdict: 'confirmed',
+          explanatory_power: 0.91,
+          surprise_js: 0.12,
         },
         {
           root_cause_type: 'stockout',
           dimension: 'category',
           element: 'electronics',
           verdict: 'likely',
+          explanatory_power: 0.7,
+          surprise_js: 0.08,
         },
       ],
       tasks: [{ task_id: 'task-1', title: 'Fix channel' }],
+      token_summary: {
+        prompt_tokens: 8,
+        completion_tokens: 4,
+        total_tokens: 12,
+        latency_ms: 150,
+        by_step: [
+          { seq: 1, node: 'parse_question', action: 'parse_question', latency_ms: 0 },
+          {
+            seq: 2,
+            node: 'llm_call',
+            action: 'agent_llm',
+            latency_ms: 150,
+            token_usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 },
+          },
+        ],
+      },
     },
     trace: [
       { step_id: 's1', seq: 1, node: 'parse_question', action: 'parse_question' },
       {
-        step_id: 's2',
+        step_id: 's-llm',
         seq: 2,
+        node: 'llm_call',
+        action: 'agent_llm',
+        latency_ms: 150,
+        token_usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 },
+      },
+      {
+        step_id: 's2',
+        seq: 3,
         node: 'reflection_verify',
         action: 'reflection_verify',
         error_code: 'ATTRIBUTION_COVERAGE_LOW',
@@ -181,10 +241,41 @@ function loadedRun() {
         },
       },
     ],
-    evidence: [{ evidence_id: 'run-1:E4', guard_status: 'passed', sql_hash: 'abc' }],
+    evidence: [
+      {
+        evidence_id: 'run-1:E4',
+        guard_status: 'passed',
+        sql_hash: 'abc',
+        result_summary: {
+          ranker: 'adtributor_internal',
+          candidates: [
+            {
+              root_cause_type: 'campaign_traffic_drop',
+              dimension: 'channel',
+              element: 'paid_ads',
+              verdict: 'confirmed',
+              explanatory_power: 0.91,
+              surprise_js: 0.12,
+            },
+            {
+              root_cause_type: 'campaign_traffic_drop',
+              dimension: 'channel',
+              element: 'organic',
+              verdict: 'likely',
+              explanatory_power: 0.95,
+              surprise_js: 0.18,
+            },
+          ],
+        },
+      },
+    ],
     sqlAudit: [{ audit_id: 1, guard_status: 'passed', row_count: 1 }],
     tasks: [{ task_id: 'task-1', title: 'Fix channel' }],
-    memory: [{ step_id: 'm1', node: 'read_memory' }],
+    memory: [
+      { memory_id: 'm-sem', layer: 'semantic', mem_key: 'gmv|semantic' },
+      { memory_id: 'm-epi', layer: 'episodic', mem_key: 'gmv|channel' },
+      { memory_id: 'm-ref', layer: 'reflection', mem_key: 'run-1|reflection' },
+    ],
     evalStatus: {
       summary: { case_total: 5, dangerous_sql_blocked: true },
     },

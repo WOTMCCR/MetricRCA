@@ -86,6 +86,54 @@ Future implementation work must preserve these architecture requirements:
 - FastAPI and React/Vite implemented as real app surfaces, not CLI placeholders.
 - Eval reads `anomaly_ground_truth` and computes real `dangerous_sql_blocked`.
 
+## Predict-Then-Verify Protocol
+
+After code changes pass pytest, use this protocol instead of running eval blindly.
+
+### Phase 1: Predict (main thread, before eval)
+
+Write `eval_out/{eval_id}/predictions.jsonl` with multi-aspect predictions.
+Each line is a `(case_id, aspect)` pair — predict only the aspects you have
+insight into. Available aspects: `intent`, `execution`, `evidence`, `memory`,
+`outcome`.
+
+At minimum predict: `intent` + `outcome` for all 20 cases.
+For high-risk or recently-changed cases, also predict: `execution` + `evidence`
+\+ `memory`.
+
+Each prediction line must include `reasoning` (WHY you expect this behavior)
+and `risks` (what could invalidate the prediction). The reasoning process is
+the primary value — it forces deep analysis of system behavior.
+
+### Phase 2: Parallel Dispatch (subagents)
+
+Dispatch simultaneously:
+- **Eval subagent**: run `make eval-stream`, results write to `eval_out/`
+  as per-case JSONL and individual `cases/{case_id}.json` files
+- **Architecture review subagent**: review middleware guards, discovery policy,
+  evidence chain — check whether they match the assumptions in predictions
+- **Flow review subagent**: review ReAct loop, reflection repair path, budget
+  management — identify structural weaknesses
+
+Main thread: while subagents run, analyze risk factors from predictions and
+prepare fix strategy frameworks for the highest-risk cases.
+
+### Phase 3: Synthesize (after subagents return)
+
+1. Run `make eval-gaps EVAL_ID=xxx`
+2. Read `eval_out/{eval_id}/gap_report.json` — act on findings by priority:
+   - `design_flaw` → fix code immediately (intent parsing, evidence chain, memory)
+   - `complexity_gap` → evaluate if system capability needs enhancement
+   - `overfit` → recalibrate prediction accuracy for next iteration
+3. Cross-reference with architecture/flow review findings
+4. Plan next iteration with updated predictions
+
+### Eval Discipline
+
+Do not run `make eval` or `make eval-http` outside this protocol. Use `pytest`
+for fast iteration during implementation. The predict-then-verify cycle is the
+only sanctioned eval workflow.
+
 ## Required Work Process
 
 Before writing application code:

@@ -5,6 +5,7 @@ export type RunSummary = {
   report: Record<string, unknown> | null;
   candidates: Array<Record<string, unknown>>;
   tasks: Array<Record<string, unknown>>;
+  token_summary?: Record<string, unknown> | null;
   links?: Record<string, string>;
 };
 
@@ -26,8 +27,12 @@ export type ApiError = {
 export type RunPayload = {
   question: string;
   target_date?: string;
+  business_today?: string;
   memory_enabled?: boolean;
   memory_required?: boolean;
+  llm_provider?: string;
+  llm_model?: string;
+  llm_api_key?: string;
 };
 
 export interface MetricRcaApiClient {

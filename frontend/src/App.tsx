@@ -18,6 +18,13 @@ type LoadedRun = {
   evalStatus: Record<string, unknown> | null;
 };
 
+type TokenTotals = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  latency_ms: number;
+};
+
 type AppProps = {
   apiClient?: MetricRcaApiClient;
   initialData?: LoadedRun;
@@ -125,6 +132,13 @@ export function App({ apiClient = defaultClient, initialData }: AppProps) {
           />
         </Panel>
 
+        <Panel title="Adtributor Candidates">
+          <DataTable
+            rows={adtributorCandidates(loaded)}
+            columns={['root_cause_type', 'dimension', 'element', 'verdict', 'explanatory_power', 'surprise_js']}
+          />
+        </Panel>
+
         <Panel title="Evidence Table">
           <DataTable rows={loaded?.evidence ?? []} columns={['evidence_id', 'guard_status', 'sql_hash']} />
         </Panel>
@@ -137,12 +151,24 @@ export function App({ apiClient = defaultClient, initialData }: AppProps) {
           <DataTable rows={loaded?.trace ?? []} columns={['seq', 'node', 'action', 'error_code']} />
         </Panel>
 
+        <Panel title="Token/Latency Dashboard">
+          <KeyValueRows rows={tokenSummary(loaded)} />
+          <DataTable
+            rows={tokenBreakdownRows(loaded)}
+            columns={['seq', 'node', 'action', 'latency_ms', 'token_usage']}
+          />
+        </Panel>
+
         <Panel title="Reflection Issues">
           <ReflectionIssues trace={loaded?.trace ?? []} />
         </Panel>
 
         <Panel title="Memory Status">
-          <DataTable rows={loaded?.memory ?? []} columns={['node', 'error_code']} />
+          <DataTable rows={loaded?.memory ?? []} columns={['memory_id', 'layer', 'mem_key', 'confidence', 'source']} />
+        </Panel>
+
+        <Panel title="Memory Layers">
+          <DataTable rows={memoryLayerRows(loaded?.memory ?? [])} columns={['layer', 'record_count', 'mem_keys']} />
         </Panel>
 
         <Panel title="Eval Summary">
@@ -223,6 +249,85 @@ function EvalStatus({ value }: { value: Record<string, unknown> | null }) {
   return <KeyValueRows rows={value.summary as Record<string, unknown>} />;
 }
 
+function adtributorCandidates(loaded: LoadedRun | null): Array<Record<string, unknown>> {
+  if (loaded === null) {
+    return [];
+  }
+  for (const evidence of loaded.evidence) {
+    const summary = readPath(evidence, 'result_summary');
+    const candidates = readPath(summary, 'candidates');
+    if (!Array.isArray(candidates)) {
+      continue;
+    }
+    const rows = candidates.filter(isRecord);
+    if (rows.some((row) => row.explanatory_power !== undefined || row.surprise_js !== undefined)) {
+      return [...rows].sort(compareAdtributorCandidate);
+    }
+  }
+  return [...loaded.run.candidates].sort(compareAdtributorCandidate);
+}
+
+function compareAdtributorCandidate(a: Record<string, unknown>, b: Record<string, unknown>) {
+  const epDelta = numericValue(b.explanatory_power) - numericValue(a.explanatory_power);
+  if (epDelta !== 0) {
+    return epDelta;
+  }
+  return numericValue(b.surprise_js) - numericValue(a.surprise_js);
+}
+
+function tokenSummary(loaded: LoadedRun | null): Record<string, unknown> {
+  if (loaded === null) {
+    return {};
+  }
+  if (isRecord(loaded.run.token_summary)) {
+    const { by_step: _byStep, ...summary } = loaded.run.token_summary;
+    return summary;
+  }
+  return loaded.trace.reduce<TokenTotals>(
+    (acc, row) => {
+      acc.latency_ms += numericValue(row.latency_ms);
+      const usage = readPath(row, 'token_usage');
+      if (isRecord(usage)) {
+        acc.prompt_tokens += numericValue(usage.prompt_tokens);
+        acc.completion_tokens += numericValue(usage.completion_tokens);
+        acc.total_tokens += numericValue(usage.total_tokens);
+      }
+      return acc;
+    },
+    { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, latency_ms: 0 },
+  );
+}
+
+function tokenBreakdownRows(loaded: LoadedRun | null): Array<Record<string, unknown>> {
+  if (loaded === null) {
+    return [];
+  }
+  if (isRecord(loaded.run.token_summary) && Array.isArray(loaded.run.token_summary.by_step)) {
+    return loaded.run.token_summary.by_step.filter(isRecord);
+  }
+  return loaded.trace.map((row) => ({
+    seq: row.seq,
+    node: row.node,
+    action: row.action,
+    latency_ms: row.latency_ms,
+    token_usage: row.token_usage,
+  }));
+}
+
+function memoryLayerRows(memory: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  const byLayer = new Map<string, string[]>();
+  for (const row of memory) {
+    const layer = String(row.layer ?? 'unknown');
+    const memKey = String(row.mem_key ?? '');
+    byLayer.set(layer, [...(byLayer.get(layer) ?? []), memKey]);
+  }
+  return [...byLayer.entries()].map(([layer, memKeys]) => ({
+    layer,
+    record_count: memKeys.length,
+    mem_keys: memKeys.filter(Boolean).join(', '),
+  }));
+}
+
 function formatValue(value: unknown): string {
   if (value === undefined || value === null) {
     return '';
@@ -238,6 +343,20 @@ function readPath(value: unknown, key: string): unknown {
     return undefined;
   }
   return (value as Record<string, unknown>)[key];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function numericValue(value: unknown): number {
+  if (typeof value === 'number') {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    return Number(value);
+  }
+  return 0;
 }
 
 function emptyLoadedRun(): LoadedRun {
