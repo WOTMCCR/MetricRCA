@@ -507,7 +507,7 @@ def test_cases_jsonl_embeds_expected_fields_for_http_eval() -> None:
         if line.strip()
     ]
 
-    assert len(rows) == 20
+    assert len(rows) == 28
     assert all(required <= set(row) for row in rows)
 
 

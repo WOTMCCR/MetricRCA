@@ -26,6 +26,8 @@ HASH_TABLES = [
 ]
 TARGET_DATE = date(2026, 6, 5)
 GMV_NO_ANOMALY_DATE = date(2026, 6, 4)
+BORDERLINE_DATE = date(2026, 6, 3)
+SPIKE_DATE = date(2026, 6, 2)
 EXPECTED_GROUND_TRUTH = {
     "gmv_paid_ads_drop": ("gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", TARGET_DATE),
     "gmv_stockout_electronics": ("gmv", 1, "stockout", "category", "electronics", TARGET_DATE),
@@ -47,6 +49,14 @@ EXPECTED_GROUND_TRUTH = {
     "C18_cvr_channel_landing": ("pay_cvr", 1, "conversion_drop", "channel", "affiliate", TARGET_DATE),
     "C19_gmv_seasonal_false_positive": ("gmv", 0, "no_anomaly", None, None, GMV_NO_ANOMALY_DATE),
     "C20_cvr_no_anomaly_noise": ("pay_cvr", 0, "no_anomaly", None, None, GMV_NO_ANOMALY_DATE),
+    "C21_cvr_discovery": ("pay_cvr", 1, "conversion_drop", "device", "mobile", TARGET_DATE),
+    "C22_gmv_borderline": ("gmv", 0, "no_anomaly", None, None, BORDERLINE_DATE),
+    "C23_uv_organic_drop": ("uv", 1, "campaign_traffic_drop", "channel", "organic", TARGET_DATE),
+    "C24_gmv_positive_spike": ("gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", SPIKE_DATE),
+    "C25_refund_discovery": ("refund_rate", 1, "complaint_or_quality_issue", "product", "1", TARGET_DATE),
+    "C26_ambiguous_intent": ("gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", TARGET_DATE),
+    "C27_composite_cause": ("gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", TARGET_DATE),
+    "C28_multi_day_drift": ("gmv", 1, "campaign_traffic_drop", "channel", "organic", TARGET_DATE),
 }
 
 
@@ -241,7 +251,7 @@ def test_seed_metric_definitions_and_ground_truth_cases() -> None:
                 for row in conn.execute(text("SELECT * FROM anomaly_ground_truth")).mappings()
             }
             assert set(cases) == set(EXPECTED_GROUND_TRUTH)
-            assert len(cases) == 20
+            assert len(cases) == 28
             for case_id, (metric_id, expected_anomaly, root_cause, dimension, element, business_date) in EXPECTED_GROUND_TRUTH.items():
                 assert cases[case_id]["metric_id"] == metric_id
                 assert cases[case_id]["expected_anomaly"] == expected_anomaly
@@ -263,6 +273,9 @@ def test_seed_metric_definitions_and_ground_truth_cases() -> None:
             assert cases["C19_gmv_seasonal_false_positive"]["business_date"] == GMV_NO_ANOMALY_DATE
             assert cases["C20_cvr_no_anomaly_noise"]["expected_anomaly"] == 0
             assert cases["C20_cvr_no_anomaly_noise"]["business_date"] == GMV_NO_ANOMALY_DATE
+            assert cases["C22_gmv_borderline"]["expected_anomaly"] == 0
+            assert cases["C22_gmv_borderline"]["business_date"] == BORDERLINE_DATE
+            assert cases["C24_gmv_positive_spike"]["business_date"] == SPIKE_DATE
             assert cases["gmv_paid_ads_drop"]["business_date"] == TARGET_DATE
             assert cases["gmv_stockout_electronics"]["business_date"] == TARGET_DATE
     finally:
@@ -318,8 +331,12 @@ def test_gmv_no_anomaly_label_matches_same_weekday_baseline() -> None:
     engine = create_engine(str(settings.db_dsn), pool_pre_ping=True)
     try:
         with engine.connect() as conn:
+            borderline_stats = _gmv_anomaly_stats(conn, BORDERLINE_DATE)
             no_anomaly_stats = _gmv_anomaly_stats(conn, GMV_NO_ANOMALY_DATE)
+            assert borderline_stats["is_anomaly"] is False
+            assert borderline_stats["z_score"] < 2.0
             assert no_anomaly_stats["is_anomaly"] is False
+            assert no_anomaly_stats["z_score"] < 1.5
 
             target_stats = _gmv_anomaly_stats(conn, TARGET_DATE)
             assert target_stats["is_anomaly"] is True

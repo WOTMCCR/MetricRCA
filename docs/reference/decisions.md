@@ -1,3 +1,57 @@
+## ADL-0034: Eval harness expansion from 20 to 28 cases
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-16 |
+| 状态 | accepted |
+| 关联迭代 | Eval harness expansion |
+| 影响范围 | anomaly injection, seed ground truth, eval case library, scorer |
+
+### 背景与场景
+
+P9 的 20-case eval 已覆盖核心 GMV/rate/no-anomaly/multi-dimension 路径，但仍有三类
+评估空洞：已存在注入却没有题面的指标覆盖、日期/方向鲁棒性挑战、以及组合/时间漂移结构复杂度。
+本阶段只扩展 eval harness，不修 agent、service、API、intent 或工具行为；新增 case 失败应作为后续
+优化阶段的系统能力缺口，而不是在本阶段改题面、阈值或评分迁就。
+
+### 决策
+
+将 eval case library 从 20 扩到 28：
+
+- Coverage gaps：C21 `pay_cvr` discovery、C23 `uv` target metric、C25 `refund_rate`
+  discovery，均复用已有 TARGET_DATE 注入。
+- Robustness challenges：C22 2026-06-03 paid_ads borderline GMV no-anomaly、C24
+  2026-06-02 paid_ads 正向 spike、C26 模糊 sales intent，验证日期/方向/意图鲁棒性。
+- Structural complexity：C27 复用 TARGET_DATE 的 paid_ads + electronics 组合主因，并在
+  scorer 中要求 `dimension_elements` 同时包含 `("channel","paid_ads")` 与
+  `("category","electronics")`；C28 添加 TARGET_DATE 前 organic UV 渐进式 drift，但仍按
+  TARGET_DATE 单日评分。
+
+`anomaly_injection.py` 只新增 `BORDERLINE_DATE`、`SPIKE_DATE` 和 organic drift 乘数，不改既有
+TARGET_DATE 分支。Organic drift 乘数按 seed 后实测调弱为 2026-06-03 `0.95`、
+2026-06-04 `0.945`，以保证 C22 与 06-04 no-anomaly traps 的 GMV z-score 均低于 2.0。
+`scorer.py` 只把 C22 纳入 no-anomaly traps，并把 C27 纳入多维组合断言。
+
+### 理由
+
+把 coverage/robustness/structural 三类 case 放进同一 harness，可以在不修系统行为的前提下暴露
+后续优化优先级：自然语言 traffic→UV、正向异常检测、ambiguous intent、组合主因证明和单日系统对
+multi-day framing 的处理。C22 与 06-04 no-anomaly overlap 必须通过 seed 后数据查询验证，防止新增
+organic drift 破坏已有 no-anomaly trap。
+
+### 被否决的方案
+
+- 在本阶段修 intent planner、agent prompt 或工具策略：会混淆“eval harness 扩容”和“系统能力优化”。
+- 改 anomaly thresholds 或 scorer 阈值来适配新增 case：会削弱 eval integrity。
+- 调整既有 20 条 ground truth：会破坏 P7/P9 可比性。
+
+### 后续跟进
+
+下一优化阶段可运行 eval 并基于 trace 判断新增 case 的真实失败原因；预期 C23/C24/C26/C28
+等 case 可能暴露 intent、正向异常或 temporal framing 能力缺口。
+
+---
+
 ## ADL-0033: P9 multi-agent unknown metric and expert factory failures fail fast
 
 | 字段 | 值 |

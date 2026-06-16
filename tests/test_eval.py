@@ -35,7 +35,7 @@ def test_eval_cases_are_natural_questions_without_answer_leakage() -> None:
     cases = load_cases(Path("metric_rca/evals/cases.jsonl"))
     by_id = {case.case_id: case.question.lower() for case in cases}
 
-    assert len(cases) == 20
+    assert len(cases) == 28
     assert all("metric_id=" not in question for question in by_id.values())
     discovery_forbidden = {
         "stockout",
@@ -52,11 +52,18 @@ def test_eval_cases_are_natural_questions_without_answer_leakage() -> None:
         "organic",
         "product 2",
     }
+    # C25 is discovery, but "refund rate" is the target metric name, not a leaked
+    # root-cause mechanism or discovered dimension element.
     for case_id in [
         "C06_gmv_multi_channel_drop",
         "C07_gmv_category_channel_cross",
         "C08_gmv_aov_drop",
         "C09_gmv_uv_organic_drop",
+        "C21_cvr_discovery",
+        "C23_uv_organic_drop",
+        "C26_ambiguous_intent",
+        "C27_composite_cause",
+        "C28_multi_day_drift",
     ]:
         assert [token for token in discovery_forbidden if token in by_id[case_id]] == []
 
@@ -508,11 +515,23 @@ def test_eval_scores_adtributor_used_and_multi_agent_path() -> None:
     assert score["top1_ok"] == 1
 
 
-def test_eval_requires_dimension_elements_for_c06_c07() -> None:
+def test_eval_requires_dimension_elements_for_c06_c07_c27() -> None:
     missing = score_case(
         case_id="C06_gmv_multi_channel_drop",
         ground_truth=_gt("C06_gmv_multi_channel_drop"),
         artifacts=_artifacts("run-1", selected=_candidate()),
+    )
+    c27_missing = score_case(
+        case_id="C27_composite_cause",
+        ground_truth=_gt("C27_composite_cause", dimension="channel", element="paid_ads"),
+        artifacts=_artifacts(
+            "run-2",
+            selected=_candidate(
+                dimension="channel",
+                element="paid_ads",
+                dimension_elements=[("channel", "paid_ads")],
+            ),
+        ),
     )
     present = score_case(
         case_id="C07_gmv_category_channel_cross",
@@ -526,10 +545,25 @@ def test_eval_requires_dimension_elements_for_c06_c07() -> None:
             ),
         ),
     )
+    c27_present = score_case(
+        case_id="C27_composite_cause",
+        ground_truth=_gt("C27_composite_cause", dimension="channel", element="paid_ads"),
+        artifacts=_artifacts(
+            "run-2",
+            selected=_candidate(
+                dimension="channel",
+                element="paid_ads",
+                dimension_elements=[("channel", "paid_ads"), ("category", "electronics")],
+            ),
+        ),
+    )
 
     assert missing["top1_ok"] == 0
     assert missing["detail"]["dimension_elements_required"] is True
+    assert c27_missing["top1_ok"] == 0
+    assert c27_missing["detail"]["dimension_elements_required"] is True
     assert present["top1_ok"] == 1
+    assert c27_present["top1_ok"] == 1
 
 
 def test_eval_c07_requires_exact_channel_category_pair() -> None:
@@ -1061,7 +1095,12 @@ def test_no_anomaly_correct_requires_all_no_anomaly_traps_clean() -> None:
         score_case(
             case_id="C20_cvr_no_anomaly_noise",
             ground_truth=_gt("C20_cvr_no_anomaly_noise", expected_anomaly=False, root_cause_type=None, dimension=None, element=None),
-            artifacts=_no_anomaly_artifacts("run-3", trace_action="rank_root_causes"),
+            artifacts=_no_anomaly_artifacts("run-3"),
+        ),
+        score_case(
+            case_id="C22_gmv_borderline",
+            ground_truth=_gt("C22_gmv_borderline", expected_anomaly=False, root_cause_type=None, dimension=None, element=None),
+            artifacts=_no_anomaly_artifacts("run-4", trace_action="rank_root_causes"),
         ),
     ]
 

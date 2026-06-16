@@ -1,9 +1,7 @@
 """异常注入：把"异常长什么样"与"数据怎么生成"解耦的一组纯函数。
 
-每个函数只在 business_date == TARGET_DATE(2026-06-05) 时返回异常倍率/数值，其余日期返回正常值。
-seed_data.py 在生成 60 天数据时调用它们，从而在目标日精确叠加 4 个"异常" ground truth case
-的异常，并保证完全确定性（无随机）。无异常 case 走另一天（见 seed_data.GMV_NO_ANOMALY_DATE），
-因此目标日与"无异常日"互不干扰。这样异常检测/归因才有"真因"可对照。
+seed_data.py 在生成 60 天数据时调用这些纯函数，从而在固定业务日期精确叠加
+eval ground truth 所需的异常/边界场景，并保证完全确定性（无随机）。
 
 对应 docs/COMPLIANCE_MATRIX.md 第 5 行；docs/MetricRCA.md §10。
 """
@@ -14,6 +12,8 @@ from datetime import date
 
 
 TARGET_DATE = date(2026, 6, 5)  # 固定目标日（昨天），4 个异常 case 注入于此
+BORDERLINE_DATE = date(2026, 6, 3)  # 弱 paid_ads 波动，预期不触发异常
+SPIKE_DATE = date(2026, 6, 2)  # paid_ads 正向 spike，用于正向异常 eval
 QUALITY_PRODUCT_ID = 1  # refund_rate_product_quality case 注入的问题商品
 
 
@@ -25,14 +25,26 @@ def traffic_multiplier(
     category: str,
     product_id: int | None = None,
 ) -> tuple[float, float]:
-    """返回 (uv 倍率, 支付人数倍率)，仅在目标日对特定切片注入下跌。
+    """返回 (uv 倍率, 支付人数倍率)，按固定 eval 日期对特定切片注入波动。
 
-    - paid_ads：uv 与支付双降（gmv_paid_ads_drop）。
-    - mobile：支付人数下降（cvr_mobile_drop）。
-    - electronics：支付人数下降（配合缺货 → gmv_stockout_electronics）。
+    - TARGET_DATE：覆盖原 20-case 的下跌/转化/缺货场景。
+    - BORDERLINE_DATE：paid_ads 弱 UV 波动，用于 no-anomaly 边界。
+    - SPIKE_DATE：paid_ads 正向流量/转化 spike。
+    - TARGET_DATE 前：organic 轻度 drift，不应破坏 no-anomaly trap。
     """
     uv_multiplier = 1.0
     pay_user_multiplier = 1.0
+    if business_date == BORDERLINE_DATE and channel == "paid_ads":
+        uv_multiplier *= 0.88
+        # Conversion compensation keeps this date a GMV no-anomaly while preserving a weak UV dip.
+        pay_user_multiplier *= 1.15
+    if business_date == SPIKE_DATE and channel == "paid_ads":
+        uv_multiplier *= 2.5
+        pay_user_multiplier *= 2.3
+    if channel == "organic" and business_date == date(2026, 6, 3):
+        uv_multiplier *= 0.95
+    if channel == "organic" and business_date == date(2026, 6, 4):
+        uv_multiplier *= 0.945
     if business_date == TARGET_DATE and channel == "paid_ads":
         uv_multiplier *= 0.38
         pay_user_multiplier *= 0.35
@@ -53,7 +65,9 @@ def traffic_multiplier(
 
 
 def campaign_multiplier(*, business_date: date, channel: str) -> tuple[float, float]:
-    """返回 (spend 倍率, clicks 倍率)；目标日 paid_ads 投放骤降（campaign_traffic_drop 的信号面）。"""
+    """返回 (spend 倍率, clicks 倍率)，覆盖目标日下跌与 spike 日正向投放信号。"""
+    if business_date == SPIKE_DATE and channel == "paid_ads":
+        return 2.8, 2.5
     if business_date == TARGET_DATE and channel == "paid_ads":
         return 0.30, 0.35
     if business_date == TARGET_DATE and channel == "social":
@@ -104,7 +118,7 @@ def support_ticket_count(*, business_date: date, product_id: int, category: str 
 def order_amount_multiplier(*, business_date: date, category: str, product_id: int) -> float:
     """目标日价格/AOV 类异常：只改变事实订单金额，不改变 DDL 或指标口径。"""
     if business_date == TARGET_DATE and category == "fashion":
-        return 0.18
+        return 0.16
     if business_date == TARGET_DATE and product_id == 2:
         return 0.18
     return 1.0

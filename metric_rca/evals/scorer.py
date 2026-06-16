@@ -630,6 +630,8 @@ def _required_dimension_elements(case_id: str) -> set[tuple[str, str]]:
         return {("channel", "paid_ads"), ("channel", "social")}
     if case_id == "C07_gmv_category_channel_cross":
         return {("channel", "paid_ads"), ("category", "electronics")}
+    if case_id == "C27_composite_cause":
+        return {("channel", "paid_ads"), ("category", "electronics")}
     return set()
 
 
@@ -656,7 +658,12 @@ def _evidence_id_matches_alias(evidence_id: str, *, run_id: str, alias: str) -> 
 
 
 def _all_no_anomaly_traps_clean(case_scores: list[dict[str, Any]]) -> bool:
-    traps = {"gmv_no_anomaly", "C19_gmv_seasonal_false_positive", "C20_cvr_no_anomaly_noise"}
+    traps = {
+        "gmv_no_anomaly",
+        "C19_gmv_seasonal_false_positive",
+        "C20_cvr_no_anomaly_noise",
+        "C22_gmv_borderline",
+    }
     present = {row["case_id"] for row in case_scores if row["case_id"] in traps}
     return bool(present) and all(
         bool(row["no_anomaly_task_ok"]) and bool(row["anomaly_ok"])

@@ -3,8 +3,8 @@
 设计要点：
   - 完全可复现：默认 seed 与业务日固定，`make seed SEED=...` 可切换确定性数据版本。
   - 真实感：周内效应 + 季节性 + 渠道/类目/设备分布，叠加投放/库存/投诉退款的异常注入。
-  - 可评估：写入 anomaly_ground_truth（4 个异常 case 在 TARGET_DATE，1 个无异常 case 在另一天），
-    使后续 eval 能用"真因"逐 case 打分，而非靠人读。
+  - 可评估：写入 28-case anomaly_ground_truth，使后续 eval 能用"真因"逐 case 打分，
+    而非靠人读。
 
 对应 docs/COMPLIANCE_MATRIX.md 第 5 行；docs/MetricRCA.md §10。
 """
@@ -23,6 +23,8 @@ from sqlalchemy.exc import OperationalError
 
 from metric_rca.config.settings import get_settings
 from metric_rca.data.anomaly_injection import (
+    BORDERLINE_DATE,
+    SPIKE_DATE,
     TARGET_DATE,
     campaign_multiplier,
     complaint_count,
@@ -698,7 +700,7 @@ def _insert_business_facts(conn, rng: random.Random) -> None:
 
 
 def _insert_ground_truth(conn) -> None:
-    """写 anomaly_ground_truth：P7 20-case library，固定日期且幂等重建。"""
+    """写 anomaly_ground_truth：28-case eval harness，固定日期且幂等重建。"""
     rows = [
         {
             "case_id": "gmv_paid_ads_drop",
@@ -880,6 +882,78 @@ def _insert_ground_truth(conn) -> None:
             "root_cause_type": "no_anomaly",
             "dimension": None,
             "element": None,
+        },
+        {
+            "case_id": "C21_cvr_discovery",
+            "business_date": TARGET_DATE,
+            "metric_id": "pay_cvr",
+            "expected_anomaly": 1,
+            "root_cause_type": "conversion_drop",
+            "dimension": "device",
+            "element": "mobile",
+        },
+        {
+            "case_id": "C22_gmv_borderline",
+            "business_date": BORDERLINE_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 0,
+            "root_cause_type": "no_anomaly",
+            "dimension": None,
+            "element": None,
+        },
+        {
+            "case_id": "C23_uv_organic_drop",
+            "business_date": TARGET_DATE,
+            "metric_id": "uv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "organic",
+        },
+        {
+            "case_id": "C24_gmv_positive_spike",
+            "business_date": SPIKE_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+        },
+        {
+            "case_id": "C25_refund_discovery",
+            "business_date": TARGET_DATE,
+            "metric_id": "refund_rate",
+            "expected_anomaly": 1,
+            "root_cause_type": "complaint_or_quality_issue",
+            "dimension": "product",
+            "element": "1",
+        },
+        {
+            "case_id": "C26_ambiguous_intent",
+            "business_date": TARGET_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+        },
+        {
+            "case_id": "C27_composite_cause",
+            "business_date": TARGET_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+        },
+        {
+            "case_id": "C28_multi_day_drift",
+            "business_date": TARGET_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "organic",
         },
     ]
     conn.execute(
