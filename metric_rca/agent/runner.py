@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import time
+import json
+import logging
 from typing import Any
 from uuid import uuid4
 
@@ -18,6 +19,7 @@ from metric_rca.config.settings import Settings, get_settings
 from metric_rca.domain.models import Evidence, PHASE1_METRICS, QuerySpec, RootCauseCandidate
 from metric_rca.guardrails.renderer import SQLRenderer
 from metric_rca.memory.memory_repo import MemoryRepository
+from metric_rca.observability.summary import build_token_summary
 from metric_rca.observability.trace import TraceWriteError, TraceWriter
 from metric_rca.reporting.projector import build_report_from_persisted_artifacts
 from metric_rca.repositories.metadata_repository import MetadataRepository
@@ -26,8 +28,7 @@ from metric_rca.services.metric_contracts import ParsedIntent
 from metric_rca.services.metric_service import MetricService
 
 
-FINAL_TOKEN_TRACE_MAX_ATTEMPTS = 3
-FINAL_TOKEN_TRACE_RETRY_SECONDS = 0.2
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -59,7 +60,10 @@ def build_dependencies(
     resolved_trace_writer = trace_writer or TraceWriter(resolved_repository)
     resolved_memory_repo = memory_repo
     if resolved_memory_repo is None and getattr(resolved_settings, "memory_enabled", False):
-        resolved_memory_repo = MemoryRepository.from_settings(resolved_settings)
+        resolved_memory_repo = MemoryRepository.from_settings(
+            resolved_settings,
+            system_repository=resolved_repository,
+        )
     return AgentDependencies(
         settings=resolved_settings,
         repository=resolved_repository,
@@ -86,8 +90,8 @@ class RunOrchestrator:
         except TraceWriteError as exc:
             return {"run_id": resolved_run_id, "question": question, "status": "failed", "error_code": exc.code}
 
+        parsed_intent: ParsedIntent | None = None
         try:
-            self._read_required_memory(resolved_run_id)
             parsed_intent = self.dependencies.metric_service.parse_question(
                 question,
                 business_today=self.dependencies.settings.business_today,
@@ -106,9 +110,11 @@ class RunOrchestrator:
             bundle.guard_context.target_metric_id = parsed_intent.metric_id
             bundle.guard_context.target_date = parsed_intent.target_date
             bundle.guard_context.discovery_policy = discovery_policy_from_intent(parsed_intent)
-        except (AgentFactoryError, RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
-            code = getattr(exc, "code", None) or _code_from_message(str(exc), "LLM_REQUIRED_UNAVAILABLE")
-            return self._fail(resolved_run_id, question, code)
+            memory_hits = self._read_required_memory(resolved_run_id, parsed_intent=parsed_intent)
+        except (AgentFactoryError, TraceWriteError, RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
+            code = _code_from_exception(exc, "LLM_REQUIRED_UNAVAILABLE")
+            extra_payload = _failure_payload(parsed_intent)
+            return self._fail(resolved_run_id, question, code, extra_payload=extra_payload)
 
         try:
             bundle.agent.invoke(
@@ -120,6 +126,7 @@ class RunOrchestrator:
                                 question,
                                 self.dependencies.settings,
                                 parsed_intent=parsed_intent,
+                                memory_hits=memory_hits,
                             ),
                         }
                     ]
@@ -130,22 +137,28 @@ class RunOrchestrator:
                 },
             )
         except (RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
-            code = getattr(exc, "code", None) or _code_from_message(str(exc), "AGENT_INVOKE_FAILED")
+            code = _code_from_exception(exc, "AGENT_INVOKE_FAILED")
             if not self._can_continue_after_terminal_agent_error(resolved_run_id, code):
-                return self._fail(resolved_run_id, question, code)
+                return self._fail(resolved_run_id, question, code, extra_payload=_failure_payload(parsed_intent))
         try:
             self._flush_pending_token_usage(bundle.guard_context)
         except TraceWriteError as exc:
-            return self._fail(resolved_run_id, question, exc.code)
+            return self._fail(resolved_run_id, question, exc.code, extra_payload=_failure_payload(parsed_intent))
 
         if bundle.guard_context.failed:
-            return self._fail(resolved_run_id, question, bundle.guard_context.error_code or "AGENT_TOOL_FAILED")
+            return self._fail(
+                resolved_run_id,
+                question,
+                bundle.guard_context.error_code or "AGENT_TOOL_FAILED",
+                extra_payload=_failure_payload(parsed_intent),
+            )
 
         no_anomaly_error = self._no_anomaly_contract_error(resolved_run_id)
         if no_anomaly_error is not None:
-            return self._fail(resolved_run_id, question, no_anomaly_error)
+            return self._fail(resolved_run_id, question, no_anomaly_error, extra_payload=_failure_payload(parsed_intent))
 
-        reflection = self._verify(resolved_run_id, repair_count=0)
+        reflection = self._verify(resolved_run_id, repair_count=0, parsed_intent=parsed_intent)
+        initial_reflection = reflection
         if not reflection.passed:
             if _has_repair_action(reflection) and int(getattr(self.dependencies.settings, "max_repair", 1)) > 0:
                 repair_action = _first_repair_action(reflection)
@@ -166,31 +179,64 @@ class RunOrchestrator:
                         },
                     )
                 except (RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
-                    code = getattr(exc, "code", None) or _code_from_message(str(exc), "REFLECTION_REPAIR_FAILED")
-                    return self._fail(resolved_run_id, question, code)
+                    code = _code_from_exception(exc, "REFLECTION_REPAIR_FAILED")
+                    return self._fail(
+                        resolved_run_id,
+                        question,
+                        code,
+                        extra_payload=_failure_payload(
+                            parsed_intent,
+                            {"reflection_issues": _reflection_issues_payload(initial_reflection)},
+                        ),
+                    )
                 finally:
                     bundle.guard_context.required_repair_action = None
                 try:
                     self._flush_pending_token_usage(bundle.guard_context)
                 except TraceWriteError as exc:
-                    return self._fail(resolved_run_id, question, exc.code)
+                    return self._fail(resolved_run_id, question, exc.code, extra_payload=_failure_payload(parsed_intent))
                 if bundle.guard_context.failed:
-                    return self._fail(resolved_run_id, question, bundle.guard_context.error_code or "AGENT_TOOL_FAILED")
-                reflection = self._verify(resolved_run_id, repair_count=1)
+                    return self._fail(
+                        resolved_run_id,
+                        question,
+                        bundle.guard_context.error_code or "AGENT_TOOL_FAILED",
+                        extra_payload=_failure_payload(parsed_intent),
+                    )
+                reflection = self._verify(resolved_run_id, repair_count=1, parsed_intent=parsed_intent)
             if not reflection.passed:
-                return self._fail(resolved_run_id, question, "REFLECTION_REPAIR_FAILED")
+                return self._fail(
+                    resolved_run_id,
+                    question,
+                    "REFLECTION_REPAIR_FAILED",
+                    extra_payload=_failure_payload(
+                        parsed_intent,
+                        {"reflection_issues": _reflection_issues_payload(reflection)},
+                    ),
+                )
 
         status = "no_anomaly" if self._is_no_anomaly(resolved_run_id) else "succeeded"
         report = self._project_report(resolved_run_id, status=status)
-        if status == "succeeded" and report is None:
-            return self._fail(resolved_run_id, question, "REPORT_PROJECTION_FAILED")
+        if report is None:
+            return self._fail(
+                resolved_run_id,
+                question,
+                "REPORT_PROJECTION_FAILED",
+                extra_payload=_failure_payload(parsed_intent),
+            )
         try:
             self._create_required_tasks(resolved_run_id, report)
-            self._write_required_memory(resolved_run_id, report)
-            self.dependencies.trace_writer.finish_run(run_id=resolved_run_id, status=status, error_code=None)
+            self._finish_run_with_observability(resolved_run_id, status=status, error_code=None)
+            self._write_required_memory(
+                resolved_run_id,
+                report,
+                reflection=reflection,
+                status=status,
+                initial_reflection=initial_reflection,
+                parsed_intent=parsed_intent,
+            )
         except (TraceWriteError, RuntimeError) as exc:
-            code = getattr(exc, "code", None) or _code_from_message(str(exc), "MEMORY_WRITE_FAILED")
-            return self._fail(resolved_run_id, question, code)
+            code = _code_from_exception(exc, "MEMORY_WRITE_FAILED")
+            return self._fail(resolved_run_id, question, code, extra_payload=_failure_payload(parsed_intent))
         return {
             "run_id": resolved_run_id,
             "question": question,
@@ -200,8 +246,8 @@ class RunOrchestrator:
             "report": report,
         }
 
-    def _verify(self, run_id: str, *, repair_count: int) -> Any:
-        state = self._reflection_state(run_id, repair_count=repair_count)
+    def _verify(self, run_id: str, *, repair_count: int, parsed_intent: ParsedIntent | None = None) -> Any:
+        state = self._reflection_state(run_id, repair_count=repair_count, parsed_intent=parsed_intent)
         persisted = {row["evidence_id"]: row for row in self.dependencies.repository.get_evidences(run_id)}
         return verify_reflection(
             state,
@@ -209,7 +255,13 @@ class RunOrchestrator:
             persisted_evidence_by_id=persisted,
         )
 
-    def _reflection_state(self, run_id: str, *, repair_count: int) -> dict[str, Any]:
+    def _reflection_state(
+        self,
+        run_id: str,
+        *,
+        repair_count: int,
+        parsed_intent: ParsedIntent | None = None,
+    ) -> dict[str, Any]:
         evidences = [self._evidence_from_row(row) for row in self.dependencies.repository.get_evidences(run_id)]
         e4 = next((ev for ev in evidences if ev.evidence_id == f"{run_id}:E4"), None)
         candidates = []
@@ -223,8 +275,11 @@ class RunOrchestrator:
         trace_nodes = [row.get("action") or row.get("node") for row in self.dependencies.repository.get_trace_steps(run_id)]
         return {
             "run_id": run_id,
-            "metric_id": run.get("metric_id"),
-            "target_date": run.get("target_date") or getattr(self.dependencies.settings, "target_date"),
+            "metric_id": run.get("metric_id") or (parsed_intent.metric_id if parsed_intent is not None else None),
+            "target_date": run.get("target_date")
+            or (parsed_intent.target_date if parsed_intent is not None else None)
+            or getattr(self.dependencies.settings, "target_date"),
+            "parsed_spec": {"filters": _parsed_intent_scope(parsed_intent)} if parsed_intent is not None else {"filters": {}},
             "status": "no_anomaly" if self._is_no_anomaly(run_id) else "running",
             "evidences": evidences,
             "candidates": candidates,
@@ -291,42 +346,59 @@ class RunOrchestrator:
             tasks=self.dependencies.repository.get_operation_tasks(run_id),
         )
 
-    def _read_required_memory(self, run_id: str) -> None:
+    def _read_required_memory(self, run_id: str, *, parsed_intent: ParsedIntent) -> list[dict[str, Any]]:
         if not getattr(self.dependencies.settings, "memory_enabled", False):
-            return
+            return []
         repo = getattr(self.dependencies, "memory_repo", None)
         if repo is None:
-            if getattr(self.dependencies.settings, "memory_required", False):
-                raise RuntimeError("MEMORY_READ_FAILED: memory repository unavailable")
-            return
+            raise RuntimeError("MEMORY_READ_FAILED: memory repository unavailable")
+        if not hasattr(repo, "read_layers"):
+            raise RuntimeError("MEMORY_READ_FAILED: memory repository does not implement four-layer reads")
         try:
-            repo.read(f"{run_id}|start", layer="case")
+            raw_hits = [
+                *repo.read_layers(f"{parsed_intent.metric_id}|semantic", layers=("semantic",)),
+                *repo.read_layers(
+                    f"{parsed_intent.metric_id}|run",
+                    layers=("episodic", "reflection", "case"),
+                ),
+            ]
+            scope = _parsed_intent_scope(parsed_intent)
+            hits = _filter_memory_hits_by_scope(raw_hits, scope=scope)
+            self.dependencies.trace_writer.write_step(
+                run_id=run_id,
+                node="memory_read",
+                action="read_layers",
+                input_summary={
+                    "metric_id": parsed_intent.metric_id,
+                    "mem_keys": [f"{parsed_intent.metric_id}|semantic", f"{parsed_intent.metric_id}|run"],
+                    "layers": ["semantic", "episodic", "reflection", "case"],
+                    "filters": scope,
+                },
+                output_summary={
+                    "hit_count": len(hits),
+                    "excluded_hit_count": len(raw_hits) - len(hits),
+                    "hits": [_memory_hit_audit(hit) for hit in hits],
+                },
+                error_code=None,
+            )
+            return hits
         except RuntimeError as exc:
-            if getattr(self.dependencies.settings, "memory_required", False):
-                raise RuntimeError("MEMORY_READ_FAILED: required memory read failed") from exc
+            raise RuntimeError("MEMORY_READ_FAILED: memory read failed") from exc
 
     def _flush_pending_token_usage(self, guard_context: Any) -> None:
         for usage in guard_context.drain_pending_token_usage():
             self._write_final_token_usage_trace(guard_context.run_id, usage)
 
     def _write_final_token_usage_trace(self, run_id: str, usage: dict[str, Any]) -> None:
-        for attempt in range(1, FINAL_TOKEN_TRACE_MAX_ATTEMPTS + 1):
-            try:
-                self.dependencies.trace_writer.write_step(
-                    run_id=run_id,
-                    node="llm_call",
-                    action=None,
-                    input_summary={},
-                    output_summary={"token_usage": usage},
-                    error_code=None,
-                    token_usage=usage,
-                )
-                return
-            except TraceWriteError as exc:
-                if exc.code == "SYSTEM_TABLE_WRITE_FAILED" and attempt < FINAL_TOKEN_TRACE_MAX_ATTEMPTS:
-                    time.sleep(FINAL_TOKEN_TRACE_RETRY_SECONDS * attempt)
-                    continue
-                raise
+        self.dependencies.trace_writer.write_step(
+            run_id=run_id,
+            node="llm_call",
+            action=None,
+            input_summary={},
+            output_summary={"token_usage": usage},
+            error_code=None,
+            token_usage=usage,
+        )
 
     def _create_required_tasks(self, run_id: str, report: dict[str, Any] | None) -> None:
         if report is None or report.get("status") != "succeeded":
@@ -355,42 +427,148 @@ class RunOrchestrator:
         except RuntimeError as exc:
             raise RuntimeError("TASK_WRITE_FAILED: required operation task write failed") from exc
 
-    def _write_required_memory(self, run_id: str, report: dict[str, Any] | None) -> None:
-        if not getattr(self.dependencies.settings, "memory_enabled", False):
+    def _write_required_memory(
+        self,
+        run_id: str,
+        report: dict[str, Any] | None,
+        *,
+        reflection: Any,
+        status: str,
+        initial_reflection: Any | None = None,
+        parsed_intent: ParsedIntent | None = None,
+    ) -> None:
+        if not _memory_write_on_finalize_enabled(self.dependencies.settings):
             return
         repo = getattr(self.dependencies, "memory_repo", None)
         if repo is None:
-            if getattr(self.dependencies.settings, "memory_required", False):
-                raise RuntimeError("MEMORY_WRITE_FAILED: memory repository unavailable")
-            return
+            raise RuntimeError("MEMORY_WRITE_FAILED: memory repository unavailable")
         if report is None:
-            return
+            raise RuntimeError("MEMORY_WRITE_FAILED: terminal report required for memory write")
+        candidate = report.get("top_candidate") if isinstance(report.get("top_candidate"), dict) else {}
+        metric_id = report.get("metric_id")
+        filters = _parsed_intent_scope(parsed_intent)
+        dimension = candidate.get("dimension") if isinstance(candidate, dict) else None
+        root_cause_type = candidate.get("root_cause_type") if isinstance(candidate, dict) else None
+        verdict = candidate.get("verdict") if isinstance(candidate, dict) else None
+        if status == "no_anomaly":
+            root_cause_type = "no_anomaly"
+            verdict = "no_anomaly"
         try:
+            repair_count = int(getattr(reflection, "repair_count", 0) or 0)
+            if repair_count > 0:
+                self._write_reflection_memory(
+                    run_id,
+                    "REFLECTION_REPAIRED",
+                    {
+                        "repair_count": repair_count,
+                        "metric_id": metric_id,
+                        **({"filters": filters} if filters else {}),
+                        "reflection_issues": _reflection_issues_payload(initial_reflection or reflection),
+                    },
+                )
+            payload = {
+                "run_id": run_id,
+                "metric_id": metric_id,
+                "dimension": dimension,
+                "root_cause_type": root_cause_type,
+                "verdict": verdict,
+            }
+            if filters:
+                payload["filters"] = filters
             repo.write(
                 {
                     "layer": "episodic",
-                    "key": f"{report.get('metric_id')}|run",
-                    "payload": {"run_id": run_id, "status": report.get("status")},
+                    "mem_key": f"{metric_id}|run",
+                    "payload": payload,
                     "confidence": 0.8,
                     "source": "reflection_verified",
                 }
             )
         except RuntimeError as exc:
-            if getattr(self.dependencies.settings, "memory_required", False):
-                raise RuntimeError("MEMORY_WRITE_FAILED: required memory write failed") from exc
+            raise RuntimeError("MEMORY_WRITE_FAILED: memory write failed") from exc
 
-    def _fail(self, run_id: str, question: str, code: str) -> dict[str, Any]:
+    def _fail(
+        self,
+        run_id: str,
+        question: str,
+        code: str,
+        *,
+        extra_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        secondary_error_code: str | None = None
+        if code not in {"MEMORY_READ_FAILED", "MEMORY_WRITE_FAILED"}:
+            try:
+                self._write_reflection_memory(
+                    run_id,
+                    code,
+                    {"gap_description": _message_for_failure_code(code), **(extra_payload or {})},
+                )
+            except RuntimeError as exc:
+                secondary_error_code = _code_from_exception(exc, "MEMORY_WRITE_FAILED")
+                LOGGER.warning(
+                    "reflection memory write failed; preserving primary error_code=%s: %s",
+                    code,
+                    exc,
+                )
         try:
-            self.dependencies.trace_writer.finish_run(run_id=run_id, status="failed", error_code=code)
-        except TraceWriteError as exc:
+            self._finish_run_with_observability(run_id, status="failed", error_code=code)
+        except (TraceWriteError, RuntimeError) as exc:
             return {
                 "run_id": run_id,
                 "question": question,
                 "status": "failed",
                 "error_code": code,
-                "finalization_error_code": exc.code,
+                "finalization_error_code": _code_from_exception(exc, "SYSTEM_TABLE_READ_FAILED"),
+                **({"secondary_error_code": secondary_error_code} if secondary_error_code else {}),
             }
-        return {"run_id": run_id, "question": question, "status": "failed", "error_code": code}
+        return {
+            "run_id": run_id,
+            "question": question,
+            "status": "failed",
+            "error_code": code,
+            **({"secondary_error_code": secondary_error_code} if secondary_error_code else {}),
+        }
+
+    def _finish_run_with_observability(self, run_id: str, *, status: str, error_code: str | None) -> None:
+        token_summary = build_token_summary(self.dependencies.repository.get_trace_steps(run_id))
+        self.dependencies.trace_writer.finish_run(
+            run_id=run_id,
+            status=status,
+            error_code=error_code,
+            total_tokens=token_summary["total_tokens"],
+            total_latency_ms=token_summary["latency_ms"],
+            token_breakdown=token_summary["by_step"],
+        )
+
+    def _write_reflection_memory(self, run_id: str, error_code: str, extra_payload: dict[str, Any] | None = None) -> None:
+        if not _memory_write_on_finalize_enabled(self.dependencies.settings):
+            return
+        repo = getattr(self.dependencies, "memory_repo", None)
+        if repo is None:
+            raise RuntimeError("MEMORY_WRITE_FAILED: memory repository unavailable")
+        payload = {"run_id": run_id, "error_code": error_code, **(extra_payload or {})}
+        metric_id = payload.get("metric_id") or (self.dependencies.repository.get_agent_run(run_id) or {}).get("metric_id")
+        if not metric_id:
+            raise RuntimeError("MEMORY_WRITE_FAILED: reflection memory requires metric_id")
+        mem_key = f"{metric_id}|run"
+        try:
+            repo.write(
+                {
+                    "layer": "reflection",
+                    "mem_key": mem_key,
+                    "payload": payload,
+                    "confidence": 0.75,
+                    "source": "reflection_verified",
+                }
+            )
+        except RuntimeError as exc:
+            raise RuntimeError("MEMORY_WRITE_FAILED: reflection memory write failed") from exc
+
+
+def _memory_write_on_finalize_enabled(settings: Any) -> bool:
+    return bool(getattr(settings, "memory_enabled", False)) and bool(
+        getattr(settings, "memory_write_on_finalize", True)
+    )
 
 
 def run_rca(
@@ -406,6 +584,11 @@ def run_rca(
     dependencies: AgentDependencies | None = None,
     agent_factory: Any | None = None,
 ) -> dict[str, Any]:
+    owns_memory_repo = (
+        dependencies is None
+        and memory_repo is None
+        and getattr(settings or get_settings(), "memory_enabled", False)
+    )
     deps = dependencies or build_dependencies(
         settings=settings,
         repository=repository,
@@ -414,7 +597,13 @@ def run_rca(
         trace_writer=trace_writer,
         memory_repo=memory_repo,
     )
-    return RunOrchestrator(dependencies=deps, agent_factory=agent_factory).run(question, run_id=run_id)
+    try:
+        return RunOrchestrator(dependencies=deps, agent_factory=agent_factory).run(question, run_id=run_id)
+    finally:
+        if owns_memory_repo:
+            close = getattr(deps.memory_repo, "close", None)
+            if callable(close):
+                close()
 
 
 def _has_repair_action(reflection: Any) -> bool:
@@ -430,19 +619,35 @@ def _first_repair_action(reflection: Any) -> str | None:
 
 
 def _repair_instruction(reflection: Any, *, repair_action: str | None) -> str:
-    repair_payload = reflection.model_dump(mode="json")
+    repair_payload = json.dumps(_json_ready(reflection.model_dump(mode="json")), sort_keys=True)
     if repair_action is None:
         return f"Repair Reflection issue using persisted evidence only: {repair_payload}"
-    repair_args = _first_repair_args(reflection)
+    repair_args = json.dumps(_json_ready(_first_repair_args(reflection)), sort_keys=True)
+    continuation = _repair_continuation_text(repair_action)
+    forbidden_tools = (
+        "Do not call detect_anomaly or drilldown_dimension during repair."
+        if repair_action != "detect_anomaly"
+        else "After detect_anomaly, continue only if the returned E1 says is_anomaly=true."
+    )
     return (
         "Repair Reflection issue using persisted evidence only.\n"
-        f"Only call {repair_action} in this repair turn. Do not call detect_anomaly, "
-        "drilldown_dimension, fetch_related_signal, or calculate_contribution unless that exact tool is the required repair action.\n"
+        f"Only call {repair_action} as the first repair tool. {forbidden_tools}\n"
         f"Required repair action: {repair_action}\n"
         f"Call exactly this tool with exactly these JSON args: {repair_action}({repair_args})\n"
-        "Do not answer in text; the next assistant response must be the required tool call.\n"
+        f"{continuation}\n"
+        "Do not answer in text before the required repair tool call.\n"
         f"Reflection result: {repair_payload}"
     )
+
+
+def _json_ready(value: Any) -> Any:
+    return json.loads(json.dumps(value, default=_json_default))
+
+
+def _json_default(value: Any) -> str:
+    if hasattr(value, "isoformat"):
+        return str(value.isoformat())
+    return str(value)
 
 
 def _first_repair_args(reflection: Any) -> dict[str, Any]:
@@ -454,9 +659,70 @@ def _first_repair_args(reflection: Any) -> dict[str, Any]:
     return {}
 
 
+def _repair_continuation_text(repair_action: str) -> str:
+    if repair_action == "detect_anomaly":
+        return (
+            "If detect_anomaly returns E1 with is_anomaly=true, continue the normal RCA path: drilldown_dimension, "
+            "fetch_related_signal, calculate_contribution, then rank_root_causes. If is_anomaly=false, stop."
+        )
+    if repair_action == "fetch_related_signal":
+        return (
+            "If fetch_related_signal returns E3, immediately call calculate_contribution with the exact E1/E2/E3 evidence_ids, "
+            "then call rank_root_causes after E4."
+        )
+    if repair_action == "calculate_contribution":
+        return "If calculate_contribution returns E4, immediately call rank_root_causes."
+    return "After the required repair tool completes, stop unless that tool returns instructions for the mandatory next RCA step."
+
+
 def _code_from_message(message: str, default: str) -> str:
     code = message.split(":", maxsplit=1)[0]
     return code if code and code.isupper() else default
+
+
+def _code_from_exception(exc: BaseException, default: str) -> str:
+    explicit_code = getattr(exc, "code", None)
+    if isinstance(explicit_code, str) and explicit_code:
+        if explicit_code.isupper():
+            return explicit_code
+        provider_code = _provider_transient_code(exc, explicit_code=explicit_code)
+        if provider_code is not None:
+            return provider_code
+        return explicit_code
+    typed_message_code = _code_from_message(str(exc), "")
+    if typed_message_code:
+        return typed_message_code
+    transient_code = _provider_transient_code(exc)
+    if transient_code is not None:
+        return transient_code
+    return _code_from_message(str(exc), default)
+
+
+def _provider_transient_code(exc: BaseException, *, explicit_code: str | None = None) -> str | None:
+    status_code = getattr(exc, "status_code", None)
+    if status_code == 429:
+        return "RATE_LIMIT_EXCEEDED"
+    if status_code in {408, 504}:
+        return "REQUEST_TIMEOUT"
+    if status_code in {500, 502, 503}:
+        return "LLM_REQUIRED_UNAVAILABLE"
+
+    text = f"{explicit_code or ''} {exc.__class__.__name__}: {exc}".lower()
+    if "rate limit" in text or "rate_limit" in text or "too many requests" in text:
+        return "RATE_LIMIT_EXCEEDED"
+    if "timeout" in text or "timed out" in text:
+        return "REQUEST_TIMEOUT"
+    if (
+        "api connection" in text
+        or "connection error" in text
+        or "temporarily unavailable" in text
+        or "server error" in text
+        or "internal server" in text
+        or "bad gateway" in text
+        or "service unavailable" in text
+    ):
+        return "LLM_REQUIRED_UNAVAILABLE"
+    return None
 
 
 def _is_transient_llm_error_code(error_code: str) -> bool:
@@ -477,10 +743,19 @@ def _has_required_evidence_chain(run_id: str, evidence_ids: Any) -> bool:
         for evidence_id in evidence_ids
         if str(evidence_id).startswith(prefix)
     }
-    return all(any(alias == required or alias.startswith(f"{required}_") for alias in aliases) for required in {"E1", "E2", "E3", "E4"})
+    return all(
+        any(alias == required or alias.startswith(f"{required}_") for alias in aliases)
+        for required in {"E1", "E2", "E3", "E4", "E_rank"}
+    )
 
 
-def _agent_user_message(question: str, settings: Any, *, parsed_intent: ParsedIntent | None = None) -> str:
+def _agent_user_message(
+    question: str,
+    settings: Any,
+    *,
+    parsed_intent: ParsedIntent | None = None,
+    memory_hits: list[dict[str, Any]] | None = None,
+) -> str:
     target_date = parsed_intent.target_date if parsed_intent is not None else getattr(settings, "target_date", None)
     target_date_text = target_date.isoformat() if hasattr(target_date, "isoformat") else str(target_date)
     allowed_metrics = ", ".join(sorted(PHASE1_METRICS))
@@ -490,6 +765,7 @@ def _agent_user_message(question: str, settings: Any, *, parsed_intent: ParsedIn
     analysis_strategy_text = parsed_intent.analysis_strategy if parsed_intent is not None else "unparsed"
     discovery_policy = discovery_policy_from_intent(parsed_intent) if parsed_intent is not None else DiscoveryPolicy()
     discovery_policy_text = _discovery_policy_text(discovery_policy)
+    memory_context_text = _memory_context_text(memory_hits or [])
     return (
         f"{question}\n\n"
         "Run context:\n"
@@ -505,6 +781,7 @@ def _agent_user_message(question: str, settings: Any, *, parsed_intent: ParsedIn
         "- Target metric is the KPI being explained. Words such as stockout, refund, UV, AOV, logistics, or quality are cause mechanisms to verify, not permission to change target metric.\n"
         "- Use metric_id exactly as listed above; do not uppercase, translate, or invent aliases.\n"
         f"- explicit or parsed question filters: {explicit_scope_text or 'none'}\n"
+        f"- memory context: {memory_context_text}\n"
         "- If filters are listed, detect_anomaly, drilldown_dimension, and calculate_contribution must carry the same filters.\n"
         "- fetch_related_signal may omit filters, or pass filters only when they exactly match its selected dimension/element.\n"
     )
@@ -535,3 +812,95 @@ def _parsed_intent_scope(parsed_intent: ParsedIntent | None) -> dict[str, str]:
     if parsed_intent.dimension is not None and parsed_intent.element is not None:
         return {str(parsed_intent.dimension): str(parsed_intent.element)}
     return {}
+
+
+def _memory_context_text(memory_hits: list[dict[str, Any]]) -> str:
+    if not memory_hits:
+        return "none"
+    fragments = []
+    for hit in memory_hits[:6]:
+        layer = hit.get("layer")
+        mem_key = hit.get("mem_key")
+        hit_payload = hit.get("payload") if isinstance(hit.get("payload"), dict) else {}
+        public_hit = {**hit_payload, **hit}
+        public_hit.pop("payload", None)
+        payload = {
+            key: value
+            for key, value in public_hit.items()
+            if key
+            in {
+                "metric_id",
+                "dimension",
+                "filters",
+                "root_cause_type",
+                "verdict",
+                "error_code",
+                "display_name",
+                "confidence",
+            }
+        }
+        fragments.append(f"{layer}:{mem_key}:{payload}")
+    return "; ".join(fragments)
+
+
+def _memory_hit_audit(hit: dict[str, Any]) -> dict[str, Any]:
+    filters = _memory_hit_filters(hit)
+    return {
+        "memory_id": hit.get("memory_id"),
+        "layer": hit.get("layer"),
+        "mem_key": hit.get("mem_key"),
+        "filters": filters,
+        "confidence": hit.get("confidence"),
+        "source": hit.get("source"),
+    }
+
+
+def _reflection_issues_payload(reflection: Any) -> list[dict[str, Any]]:
+    issues = getattr(reflection, "issues", []) or []
+    payload: list[dict[str, Any]] = []
+    for issue in issues:
+        if hasattr(issue, "model_dump"):
+            payload.append(issue.model_dump(mode="json"))
+        elif isinstance(issue, dict):
+            payload.append(dict(issue))
+        else:
+            payload.append({"message": str(issue)})
+    return payload
+
+
+def _failure_payload(
+    parsed_intent: ParsedIntent | None,
+    extra_payload: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    payload = dict(extra_payload or {})
+    if parsed_intent is not None:
+        payload.setdefault("metric_id", parsed_intent.metric_id)
+        filters = _parsed_intent_scope(parsed_intent)
+        if filters:
+            payload.setdefault("filters", filters)
+    return payload or None
+
+
+def _filter_memory_hits_by_scope(hits: list[dict[str, Any]], *, scope: dict[str, str]) -> list[dict[str, Any]]:
+    return [hit for hit in hits if _memory_hit_matches_scope(hit, scope=scope)]
+
+
+def _memory_hit_matches_scope(hit: dict[str, Any], *, scope: dict[str, str]) -> bool:
+    hit_filters = _memory_hit_filters(hit)
+    if not hit_filters:
+        return not scope or str(hit.get("layer")) == "semantic"
+    return hit_filters == scope
+
+
+def _memory_hit_filters(hit: dict[str, Any]) -> dict[str, str]:
+    payload = hit.get("payload") if isinstance(hit.get("payload"), dict) else {}
+    raw_filters = hit.get("filters", payload.get("filters"))
+    if raw_filters is None:
+        return {}
+    if not isinstance(raw_filters, dict):
+        raise RuntimeError("MEMORY_READ_FAILED: memory filters must be an object")
+    return {str(key): str(value) for key, value in raw_filters.items()}
+
+
+def _message_for_failure_code(code: str) -> str:
+    return code.lower().replace("_", " ")

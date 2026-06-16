@@ -61,6 +61,7 @@ def test_system_table_write_failure_returns_typed_graph_error() -> None:
         )
 
     assert exc_info.value.code == "SYSTEM_TABLE_WRITE_FAILED"
+    assert exc_info.value.message == "SYSTEM_TABLE_WRITE_FAILED"
 
 
 class _TraceRepository:
@@ -76,9 +77,27 @@ class _TraceRepository:
     def update_agent_run_context(self, *, run_id: str, metric_id: str, target_date) -> None:
         self.context_updates.append({"run_id": run_id, "metric_id": metric_id, "target_date": target_date})
 
-    def finish_agent_run(self, *, run_id: str, status: str, error_code: str | None, finished_at) -> None:
+    def finish_agent_run(
+        self,
+        *,
+        run_id: str,
+        status: str,
+        error_code: str | None,
+        finished_at,
+        total_tokens=None,
+        total_latency_ms=None,
+        token_breakdown=None,
+    ) -> None:
         self.finish_updates.append(
-            {"run_id": run_id, "status": status, "error_code": error_code, "finished_at": finished_at}
+            {
+                "run_id": run_id,
+                "status": status,
+                "error_code": error_code,
+                "finished_at": finished_at,
+                "total_tokens": total_tokens,
+                "total_latency_ms": total_latency_ms,
+                "token_breakdown": token_breakdown,
+            }
         )
 
     def create_trace_step(self, row: dict) -> None:

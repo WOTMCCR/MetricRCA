@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     adtributor_t_eep: float = 0.10
     memory_enabled: bool = True
     memory_required: bool = False
+    memory_write_on_finalize: bool = True
     memory_trusted_sources: set[str] = Field(
         default_factory=lambda: {"reflection_verified", "system_verified"}
     )
@@ -124,6 +125,10 @@ class Settings(BaseSettings):
             )
         if not self.memory_trusted_sources:
             raise ValueError("CONFIG_INVALID: memory_trusted_sources must not be empty")
+        if self.memory_required and not self.memory_enabled:
+            raise ValueError("CONFIG_INVALID: memory_required requires memory_enabled")
+        if self.memory_required and not self.memory_write_on_finalize:
+            raise ValueError("CONFIG_INVALID: memory_required requires memory_write_on_finalize")
         return self
 
 

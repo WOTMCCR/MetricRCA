@@ -1,0 +1,1 @@
+{"case_id":"C08_gmv_aov_drop","question":"Why did yesterday's GMV decline in merchandise sales?","tags":["p7","discovery"],"expected_metric_id":"gmv","expected_anomaly":true,"expected_root_cause_type":"aov_drop","expected_dimension":"product","expected_element":"2","expected_business_date":"2026-06-05"}

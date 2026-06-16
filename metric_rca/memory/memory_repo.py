@@ -17,6 +17,7 @@ from metric_rca.config.settings import Settings
 
 ALLOWED_MEMORY_LAYERS = frozenset({"case", "semantic", "episodic", "reflection"})
 DEFAULT_TRUSTED_MEMORY_SOURCES = frozenset({"reflection_verified", "system_verified"})
+DEFAULT_LAYER_READ_ORDER = ("semantic", "episodic", "reflection", "case")
 
 
 class MemoryRepository:
@@ -29,6 +30,7 @@ class MemoryRepository:
         min_confidence: float = 0.70,
         trusted_sources: set[str] | frozenset[str] | None = None,
         now_fn: Callable[[], datetime] | None = None,
+        system_writer: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self._engine = engine
         self._min_confidence = min_confidence
@@ -38,15 +40,24 @@ class MemoryRepository:
             else DEFAULT_TRUSTED_MEMORY_SOURCES
         )
         self._now_fn = now_fn or _now
+        self._system_writer = system_writer
 
     @classmethod
-    def from_settings(cls, settings: Settings) -> MemoryRepository:
+    def from_settings(cls, settings: Settings, *, system_repository: Any | None = None) -> MemoryRepository:
+        system_writer = None
+        if system_repository is not None:
+            system_writer = getattr(system_repository, "create_memory_record", None)
+            if not callable(system_writer):
+                raise RuntimeError("MEMORY_WRITE_FAILED: system repository lacks create_memory_record")
         return cls(
             engine=create_engine(str(settings.db_dsn), pool_pre_ping=True),
             trusted_sources=getattr(settings, "memory_trusted_sources", DEFAULT_TRUSTED_MEMORY_SOURCES),
+            system_writer=system_writer,
         )
 
     def read(self, mem_key: str, *, layer: str = "case") -> list[dict[str, Any]]:
+        if layer not in ALLOWED_MEMORY_LAYERS:
+            raise RuntimeError("MEMORY_READ_FAILED")
         try:
             with self._engine.connect() as conn:
                 rows = conn.execute(
@@ -70,8 +81,38 @@ class MemoryRepository:
             raise RuntimeError("MEMORY_READ_FAILED") from exc
         if not valid:
             return []
-        highest_version = max(int(row["version"]) for row in valid)
-        return [self._public_hit(row) for row in valid if int(row["version"]) == highest_version][:1]
+        return [self._public_hit(row) for row in valid]
+
+    def read_layers(
+        self,
+        mem_key: str,
+        *,
+        layers: tuple[str, ...] | list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        ordered_layers = tuple(layers) if layers is not None else DEFAULT_LAYER_READ_ORDER
+        if any(layer not in ALLOWED_MEMORY_LAYERS for layer in ordered_layers):
+            raise RuntimeError("MEMORY_READ_FAILED")
+        hits: list[dict[str, Any]] = []
+        for layer in ordered_layers:
+            hits.extend(self.read(mem_key, layer=layer))
+        return hits
+
+    def freeze_legacy_layers(self) -> int:
+        try:
+            with self._engine.begin() as conn:
+                result = conn.execute(
+                    text(
+                        """
+                        UPDATE memory_record
+                        SET layer = 'case'
+                        WHERE layer IS NULL
+                           OR layer NOT IN ('case', 'semantic', 'episodic', 'reflection')
+                        """
+                    )
+                )
+        except SQLAlchemyError as exc:
+            raise RuntimeError("MEMORY_WRITE_FAILED") from exc
+        return int(result.rowcount or 0)
 
     def write(self, record: dict[str, Any]) -> None:
         try:
@@ -80,6 +121,12 @@ class MemoryRepository:
             raise
         except (JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             raise RuntimeError("MEMORY_WRITE_FAILED") from exc
+        if self._system_writer is not None:
+            try:
+                self._system_writer(row)
+            except RuntimeError as exc:
+                raise RuntimeError("MEMORY_WRITE_FAILED") from exc
+            return
         try:
             with self._engine.begin() as conn:
                 conn.execute(
@@ -95,7 +142,7 @@ class MemoryRepository:
                         )
                         """
                     ),
-                    row,
+                    {**row, "payload": json.dumps(row["payload"])},
                 )
         except SQLAlchemyError as exc:
             raise RuntimeError("MEMORY_WRITE_FAILED") from exc
@@ -171,7 +218,7 @@ class MemoryRepository:
             "memory_id": record.get("memory_id") or f"mem-{uuid4().hex}",
             "layer": layer,
             "mem_key": mem_key,
-            "payload": json.dumps(payload),
+            "payload": payload,
             "confidence": confidence,
             "source": source,
             "version": version,

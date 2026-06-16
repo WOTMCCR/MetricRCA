@@ -107,6 +107,9 @@ EXPECTED_COLUMNS = {
         "target_date": "date",
         "status": "varchar",
         "error_code": "varchar",
+        "total_tokens": "int",
+        "total_latency_ms": "int",
+        "token_breakdown": "json",
         "created_at": "datetime",
         "finished_at": "datetime",
     },
@@ -136,6 +139,7 @@ EXPECTED_COLUMNS = {
     },
     "sql_audit": {
         "audit_id": "bigint",
+        "audit_key": "varchar",
         "run_id": "varchar",
         "sql_text": "text",
         "sql_hash": "char",
@@ -257,6 +261,32 @@ def test_schema_has_exact_phase1_tables_columns_and_indexes() -> None:
             assert ("fact_order", "idx_date_channel") in indexes
             assert ("fact_customer_ticket", "idx_date_product") in indexes
             assert ("memory_record", "idx_layer_key") in indexes
+            assert ("sql_audit", "uq_audit_key") in indexes
             assert ("eval_case_result", "idx_eval") in indexes
+            assert ("eval_case_result", "uq_eval_case") in indexes
+
+            check_constraints = {
+                (row.TABLE_NAME, row.CONSTRAINT_NAME)
+                for row in conn.execute(
+                    text(
+                        """
+                        SELECT TABLE_NAME, CONSTRAINT_NAME
+                        FROM information_schema.TABLE_CONSTRAINTS
+                        WHERE TABLE_SCHEMA = DATABASE()
+                          AND CONSTRAINT_TYPE = 'CHECK'
+                        """
+                    )
+                )
+            }
+            for constraint in {
+                "chk_eval_case_result_intent_ok",
+                "chk_eval_case_result_anomaly_ok",
+                "chk_eval_case_result_top1_ok",
+                "chk_eval_case_result_top3_ok",
+                "chk_eval_case_result_sql_safe",
+                "chk_eval_case_result_reflection_repair_ok",
+                "chk_eval_case_result_evidence_coverage",
+            }:
+                assert ("eval_case_result", constraint) in check_constraints
     finally:
         engine.dispose()

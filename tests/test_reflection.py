@@ -207,6 +207,21 @@ def test_reflection_suggests_signal_repair_when_no_candidates_but_drilldowns_exi
     }
 
 
+def test_reflection_suggests_detect_repair_when_no_evidence_exists() -> None:
+    state = _state(candidates=[], evidences=[], parsed_spec={"filters": {"channel": "paid_ads"}})
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id={})
+
+    issue = next(issue for issue in result.issues if issue.check == "evidence_coverage")
+    assert issue.suggested_action is not None
+    assert issue.suggested_action.action == "detect_anomaly"
+    assert issue.suggested_action.args == {
+        "metric_id": "gmv",
+        "target_date": date(2026, 6, 5),
+        "filters": {"channel": "paid_ads"},
+    }
+
+
 def test_reflection_state_only_fabricated_evidence_fails() -> None:
     state = _state()
 
@@ -314,7 +329,7 @@ def test_reflection_wrong_signal_type_for_candidate_fails() -> None:
 
 
 def test_reflection_accepts_related_signal_metric_for_aliased_e3_evidence() -> None:
-    candidate = _candidate(evidence_ids=["run-1:E1", "run-1:E2_channel", "run-1:E3_channel_paid_ads", "run-1:E4"])
+    candidate = _candidate(evidence_ids=["run-1:E1", "run-1:E2_channel", "run-1:E3_channel_paid_ads", "run-1:E4", "run-1:E_rank"])
     state = _state(
         candidates=[candidate],
         evidences=[
@@ -332,6 +347,7 @@ def test_reflection_accepts_related_signal_metric_for_aliased_e3_evidence() -> N
                 },
             ),
             _evidence("run-1:E4", summary={"selected_candidate": candidate.model_dump(mode="json"), "value": 0.90}),
+            _evidence("run-1:E_rank", summary={"selected_candidate": candidate.model_dump(mode="json"), "value": 0.90}),
         ],
     )
 
@@ -374,7 +390,7 @@ def test_reflection_accepts_aov_drop_when_e4_decomposition_proves_aov_factor() -
         root_cause_type="aov_drop",
         dimension="category",
         element="fashion",
-        evidence_ids=["run-1:E1", "run-1:E2_category", "run-1:E3_cat_fashion", "run-1:E4"],
+        evidence_ids=["run-1:E1", "run-1:E2_category", "run-1:E3_cat_fashion", "run-1:E4", "run-1:E_rank"],
     )
     state = _state(
         candidates=[candidate],
@@ -400,6 +416,7 @@ def test_reflection_accepts_aov_drop_when_e4_decomposition_proves_aov_factor() -
                     "value": 0.90,
                 },
             ),
+            _evidence("run-1:E_rank", summary={"selected_candidate": candidate.model_dump(mode="json"), "value": 0.90}),
         ],
     )
 
@@ -453,7 +470,7 @@ def test_reflection_accepts_net_gmv_refund_quality_signal_for_quality_candidate(
         root_cause_type="complaint_or_quality_issue",
         dimension="product",
         element="1",
-        evidence_ids=["run-1:E1", "run-1:E2_product", "run-1:E3_prod_1", "run-1:E4"],
+        evidence_ids=["run-1:E1", "run-1:E2_product", "run-1:E3_prod_1", "run-1:E4", "run-1:E_rank"],
     )
     state = _state(
         metric_id="net_gmv",
@@ -477,6 +494,7 @@ def test_reflection_accepts_net_gmv_refund_quality_signal_for_quality_candidate(
                 metric_id="net_gmv",
                 summary={"selected_candidate": candidate.model_dump(mode="json"), "value": 0.90},
             ),
+            _evidence("run-1:E_rank", metric_id="net_gmv", summary={"selected_candidate": candidate.model_dump(mode="json"), "value": 0.90}),
         ],
     )
 
@@ -526,6 +544,7 @@ def _state(**overrides: Any) -> dict[str, Any]:
             },
         ),
         _evidence("run-1:E4", summary={"selected_candidate": candidate.model_dump(mode="json"), "value": 0.90}),
+        _evidence("run-1:E_rank", summary={"selected_candidate": candidate.model_dump(mode="json"), "value": 0.90}),
     ]
     state = {
         "run_id": "run-1",
@@ -562,7 +581,7 @@ def _candidate(
         verdict=verdict,
         evidence_ids=evidence_ids
         if evidence_ids is not None
-        else ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"],
+        else ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4", "run-1:E_rank"],
     )
 
 

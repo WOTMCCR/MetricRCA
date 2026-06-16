@@ -14,7 +14,7 @@ from metric_rca.domain.enums import RootCauseType
 from metric_rca.domain.models import AgentAction, Evidence, ReflectionIssue, ReflectionResult, RootCauseCandidate
 
 
-REQUIRED_EVIDENCE_ALIASES = ("E1", "E2", "E3", "E4")
+REQUIRED_EVIDENCE_ALIASES = ("E1", "E2", "E3", "E4", "E_rank")
 ATTRIBUTION_COVERAGE_THRESHOLD = 0.60
 
 
@@ -322,6 +322,15 @@ def _suggested_action_for_missing_aliases(
     current_ids = _current_evidence_ids(state)
     state_aliases = _aliases(state)
     target_date = state.get("target_date")
+    if "E_rank" in missing_aliases and _has_aliases(state_aliases, {"E1", "E2", "E3", "E4"}):
+        return AgentAction(
+            action="rank_root_causes",
+            args={
+                "metric_id": state["metric_id"],
+                "target_date": target_date,
+            },
+            rationale="reflection repair requires ranked root-cause evidence",
+        )
     if "E4" in missing_aliases and _has_aliases(state_aliases, {"E1", "E2", "E3"}):
         if not candidate.dimension or not candidate.element:
             return None
@@ -365,6 +374,17 @@ def _suggested_action_for_missing_aliases(
 
 def _suggested_action_for_no_candidates(state: dict[str, Any]) -> AgentAction | None:
     aliases = _aliases(state)
+    if not _has_aliases(aliases, {"E1"}):
+        return AgentAction(
+            action="detect_anomaly",
+            args={
+                "metric_id": state["metric_id"],
+                "target_date": state.get("target_date"),
+                "filters": _state_filters(state),
+            },
+            rationale="reflection repair requires anomaly evidence before RCA",
+        )
+
     e3 = _first_evidence_for_alias(state, "E3")
     if e3 is not None and _has_aliases(aliases, {"E1", "E2"}):
         summary = e3.result_summary or {}

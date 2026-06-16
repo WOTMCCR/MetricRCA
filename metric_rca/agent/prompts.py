@@ -69,18 +69,19 @@ drilldown; later drilldown ids may be named like E2_category or E2_product.
 The run context DiscoveryPolicy is authoritative. If it lists a first_signal,
 the first successful fetch_related_signal after required drilldowns MUST use
 that exact dimension and signal_type. If it also lists first_signal_element,
-use that exact element. first_signal=product:inventory requires the product
-drilldown's strongest element. first_signal=channel:campaign without an
-element does not require the strongest channel element; use the channel
-candidate whose traffic/campaign signal best explains the anomaly rather than
-mechanically choosing the first drilldown row.
-When DiscoveryPolicy requires first_signal=channel:campaign without a
-first_signal_element, choose the channel candidate whose traffic/campaign signal
-best explains the anomaly; category/product drilldowns are still required so
-rank_root_causes can prove cross-dimension candidates from persisted E2
-evidence. When DiscoveryPolicy requires first_signal=product:inventory, use the
-product drilldown's strongest drop candidate for fetch_related_signal and
-calculate_contribution so the GMV factor decomposition can verify aov_drop.
+use that exact element. If it lists
+first_signal_must_use_top_drilldown_candidate=true, use that dimension's
+strongest drilldown candidate element exactly. first_signal=product:inventory
+and broad first_signal=channel:campaign GMV discovery both use the relevant top
+drilldown candidate unless a first_signal_element is explicitly listed.
+When DiscoveryPolicy requires first_signal=channel:campaign with
+first_signal_must_use_top_drilldown_candidate=true, use the top E2_channel
+candidate for fetch_related_signal and calculate_contribution; category/product
+drilldowns are still required so rank_root_causes can prove cross-dimension
+candidates from persisted E2 evidence. When DiscoveryPolicy requires
+first_signal=product:inventory, use the product drilldown's strongest drop
+candidate for fetch_related_signal and calculate_contribution so the GMV factor
+decomposition can verify aov_drop.
 After the first successful fetch_related_signal creates an E3-family evidence
 id, immediately call calculate_contribution for that same element. Do not fetch
 signals for additional elements before E4; rank_root_causes uses persisted

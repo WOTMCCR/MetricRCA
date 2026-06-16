@@ -41,6 +41,20 @@ def test_memory_repo_from_settings_uses_trusted_sources() -> None:
         repo.close()
 
 
+def test_memory_repo_from_settings_rejects_incompatible_system_repository() -> None:
+    from metric_rca.memory.memory_repo import MemoryRepository
+
+    try:
+        MemoryRepository.from_settings(
+            Settings.model_construct(db_dsn="sqlite+pysqlite:///:memory:"),
+            system_repository=object(),
+        )
+    except RuntimeError as exc:
+        assert str(exc) == "MEMORY_WRITE_FAILED: system repository lacks create_memory_record"
+    else:
+        raise AssertionError("incompatible system_repository must fail fast")
+
+
 def test_memory_low_confidence_ignored() -> None:
     repo = _repo()
     repo.write(_record("gmv|channel", {"dimension": "channel"}, version=1, confidence=0.40))
@@ -95,9 +109,120 @@ def test_memory_version_conflict_higher_version_wins() -> None:
 
     hits = repo.read("gmv|channel")
 
-    assert len(hits) == 1
     assert hits[0]["version"] == 3
     assert hits[0]["dimension"] == "category"
+    assert [hit["version"] for hit in hits] == [3, 2, 1]
+
+
+def test_memory_read_layers_returns_older_scoped_hits_for_runner_filtering() -> None:
+    repo = _repo()
+    older = _record(
+        "gmv|run",
+        {"metric_id": "gmv", "filters": {"category": "electronics"}, "run_id": "electronics-run"},
+        version=1,
+    )
+    older["layer"] = "episodic"
+    newer = _record(
+        "gmv|run",
+        {"metric_id": "gmv", "filters": {"category": "fashion"}, "run_id": "fashion-run"},
+        version=2,
+    )
+    newer["layer"] = "episodic"
+    repo.write(older)
+    repo.write(newer)
+
+    hits = repo.read_layers("gmv|run", layers=("episodic",))
+
+    assert [hit["run_id"] for hit in hits] == ["fashion-run", "electronics-run"]
+
+
+def test_memory_repo_reads_all_four_layers_for_run_context() -> None:
+    repo = _repo()
+    for index, layer in enumerate(["semantic", "episodic", "reflection", "case"], start=1):
+        record = _record("gmv|run", {"metric_id": "gmv", "layer_payload": layer}, version=index)
+        record["layer"] = layer
+        repo.write(record)
+
+    hits = repo.read_layers("gmv|run")
+
+    assert [hit["layer"] for hit in hits] == ["semantic", "episodic", "reflection", "case"]
+    assert {hit["layer_payload"] for hit in hits} == {"semantic", "episodic", "reflection", "case"}
+
+
+def test_memory_repo_freezes_unknown_legacy_layers_to_case() -> None:
+    repo = _repo()
+    with repo._engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO memory_record (
+                  memory_id, layer, mem_key, payload, confidence, source,
+                  version, ttl_days, created_at
+                )
+                VALUES (
+                  :memory_id, :layer, :mem_key, :payload, :confidence, :source,
+                  :version, :ttl_days, :created_at
+                )
+                """
+            ),
+            {
+                "memory_id": "legacy-layer",
+                "layer": "runtime",
+                "mem_key": "gmv|legacy",
+                "payload": '{"metric_id": "gmv"}',
+                "confidence": 0.90,
+                "source": "test",
+                "version": 1,
+                "ttl_days": 30,
+                "created_at": datetime(2026, 6, 1),
+            },
+        )
+
+    repo.freeze_legacy_layers()
+
+    with repo._engine.connect() as conn:
+        layer = conn.execute(
+            text("SELECT layer FROM memory_record WHERE memory_id = 'legacy-layer'")
+        ).scalar_one()
+    assert layer == "case"
+
+
+def test_memory_repo_freezes_null_legacy_layers_to_case() -> None:
+    repo = _repo(layer_nullable=True)
+    with repo._engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO memory_record (
+                  memory_id, layer, mem_key, payload, confidence, source,
+                  version, ttl_days, created_at
+                )
+                VALUES (
+                  :memory_id, :layer, :mem_key, :payload, :confidence, :source,
+                  :version, :ttl_days, :created_at
+                )
+                """
+            ),
+            {
+                "memory_id": "legacy-null-layer",
+                "layer": None,
+                "mem_key": "gmv|legacy",
+                "payload": '{"metric_id": "gmv"}',
+                "confidence": 0.90,
+                "source": "test",
+                "version": 1,
+                "ttl_days": 30,
+                "created_at": datetime(2026, 6, 1),
+            },
+        )
+
+    repo.freeze_legacy_layers()
+
+    with repo._engine.connect() as conn:
+        layer = conn.execute(
+            text("SELECT layer FROM memory_record WHERE memory_id = 'legacy-null-layer'")
+        ).scalar_one()
+    assert layer == "case"
 
 
 def test_memory_write_without_version_bumps_existing_highest_version() -> None:
@@ -119,6 +244,20 @@ def test_memory_write_without_version_bumps_existing_highest_version() -> None:
 
     assert hits[0]["version"] == 3
     assert hits[0]["dimension"] == "device"
+
+
+def test_memory_write_uses_injected_system_table_writer() -> None:
+    writes: list[dict[str, Any]] = []
+    repo = _repo(system_writer=writes.append)
+
+    repo.write(_record("gmv|channel", {"dimension": "channel"}, version=1))
+
+    assert len(writes) == 1
+    assert writes[0]["memory_id"].startswith("mem-")
+    assert writes[0]["layer"] == "case"
+    assert writes[0]["mem_key"] == "gmv|channel"
+    assert writes[0]["payload"] == {"dimension": "channel"}
+    assert writes[0]["confidence"] == 0.90
 
 
 def test_memory_invalid_confidence_rejected() -> None:
@@ -190,6 +329,17 @@ def test_memory_invalid_layer_or_ttl_write_returns_MEMORY_WRITE_FAILED() -> None
             raise AssertionError("invalid memory layer/ttl was accepted")
 
 
+def test_memory_read_rejects_invalid_layer() -> None:
+    repo = _repo()
+
+    try:
+        repo.read("gmv|run", layer="runtime")
+    except RuntimeError as exc:
+        assert str(exc) == "MEMORY_READ_FAILED"
+    else:
+        raise AssertionError("invalid memory read layer was accepted")
+
+
 def test_memory_required_read_failure_fails_run() -> None:
     repo = _Repo()
     result = RunOrchestrator(
@@ -199,6 +349,56 @@ def test_memory_required_read_failure_fails_run() -> None:
 
     assert result["status"] == "failed"
     assert result["error_code"] == "MEMORY_READ_FAILED"
+
+
+def test_memory_enabled_read_failure_fails_run_even_when_not_required() -> None:
+    repo = _Repo()
+    result = RunOrchestrator(
+        dependencies=_deps(repo, memory_required=False, memory_repo=_FailingMemoryRepo()),
+        agent_factory=lambda **kwargs: _Agent(),
+    ).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "MEMORY_READ_FAILED"
+
+
+def test_orchestrator_writes_episodic_key_that_future_runs_read() -> None:
+    from tests.test_orchestrator import _deps as _orchestrator_deps
+
+    repo = _Repo()
+    memory_repo = _repo()
+
+    class Agent(_Agent):
+        def invoke(self, *args, **kwargs):
+            repo.add_valid_evidences("run-1")
+            return {}
+
+    result = RunOrchestrator(
+        dependencies=_orchestrator_deps(repo, memory_repo=memory_repo),
+        agent_factory=lambda **kwargs: Agent(),
+    ).run("why", run_id="run-1")
+
+    assert result["status"] == "succeeded"
+    hits = memory_repo.read_layers("gmv|run", layers=("episodic",))
+    assert hits[0]["run_id"] == "run-1"
+    assert hits[0]["root_cause_type"] == "campaign_traffic_drop"
+
+
+def test_orchestrator_writes_reflection_key_that_future_runs_read() -> None:
+    from tests.test_orchestrator import _deps as _orchestrator_deps
+
+    repo = _Repo()
+    memory_repo = _repo()
+
+    result = RunOrchestrator(
+        dependencies=_orchestrator_deps(repo, memory_repo=memory_repo),
+        agent_factory=lambda **kwargs: _Agent(),
+    ).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    hits = memory_repo.read_layers("gmv|run", layers=("reflection",))
+    assert hits[0]["run_id"] == "run-1"
+    assert hits[0]["error_code"] == "REFLECTION_REPAIR_FAILED"
 
 
 def test_memory_cannot_be_final_conclusion_without_current_evidence() -> None:
@@ -219,7 +419,12 @@ def test_memory_cannot_be_final_conclusion_without_current_evidence() -> None:
     assert "current_run_evidence" in {issue.check for issue in result.issues}
 
 
-def _repo(*, now: datetime = datetime(2026, 6, 5)):
+def _repo(
+    *,
+    now: datetime = datetime(2026, 6, 5),
+    system_writer: Any | None = None,
+    layer_nullable: bool = False,
+):
     from metric_rca.memory.memory_repo import MemoryRepository
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
@@ -229,7 +434,7 @@ def _repo(*, now: datetime = datetime(2026, 6, 5)):
                 """
                 CREATE TABLE memory_record (
                   memory_id VARCHAR(64) PRIMARY KEY,
-                  layer VARCHAR(16) NOT NULL,
+                  layer VARCHAR(16) {layer_constraint},
                   mem_key VARCHAR(128) NOT NULL,
                   payload TEXT NOT NULL,
                   confidence REAL NOT NULL,
@@ -238,10 +443,15 @@ def _repo(*, now: datetime = datetime(2026, 6, 5)):
                   ttl_days INTEGER,
                   created_at DATETIME NOT NULL
                 )
-                """
+                """.format(layer_constraint="" if layer_nullable else "NOT NULL")
             )
         )
-    return MemoryRepository(engine=engine, now_fn=lambda: now, trusted_sources={"test", "reflection_verified"})
+    return MemoryRepository(
+        engine=engine,
+        now_fn=lambda: now,
+        trusted_sources={"test", "reflection_verified"},
+        system_writer=system_writer,
+    )
 
 
 def _record(

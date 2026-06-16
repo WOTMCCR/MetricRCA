@@ -122,6 +122,9 @@ CREATE TABLE agent_run (
   target_date DATE NOT NULL,
   status      VARCHAR(16) NOT NULL,
   error_code  VARCHAR(48),
+  total_tokens INT,
+  total_latency_ms INT,
+  token_breakdown JSON NULL,
   created_at  DATETIME NOT NULL,
   finished_at DATETIME,
   KEY idx_status (status)
@@ -161,6 +164,7 @@ CREATE TABLE evidence (
 -- SQL 审计：每条执行的 SQL（含被拒/失败）都落一行，便于安全复盘。
 CREATE TABLE sql_audit (
   audit_id     BIGINT AUTO_INCREMENT PRIMARY KEY,
+  audit_key    VARCHAR(64),
   run_id       VARCHAR(64) NOT NULL,
   sql_text     TEXT NOT NULL,
   sql_hash     CHAR(64) NOT NULL,
@@ -169,7 +173,8 @@ CREATE TABLE sql_audit (
   row_count    INT,
   latency_ms   INT,
   created_at   DATETIME NOT NULL,
-  KEY idx_run (run_id)
+  KEY idx_run (run_id),
+  UNIQUE KEY uq_audit_key (audit_key)
 ) ENGINE=InnoDB;
 
 -- 运营任务：仅 confirmed/likely 主因生成；no_anomaly 不建任务。
@@ -209,12 +214,23 @@ CREATE TABLE eval_case_result (
   id         BIGINT AUTO_INCREMENT PRIMARY KEY,
   eval_id    VARCHAR(64) NOT NULL,
   case_id    VARCHAR(64) NOT NULL,
-  intent_ok  TINYINT, anomaly_ok TINYINT,
-  top1_ok    TINYINT, top3_ok TINYINT,
-  evidence_coverage DECIMAL(4,3),
-  sql_safe   TINYINT, reflection_repair_ok TINYINT,
-  detail     JSON,
-  KEY idx_eval (eval_id)
+  intent_ok  TINYINT NOT NULL,
+  anomaly_ok TINYINT NOT NULL,
+  top1_ok    TINYINT NOT NULL,
+  top3_ok    TINYINT NOT NULL,
+  evidence_coverage DECIMAL(4,3) NOT NULL,
+  sql_safe   TINYINT NOT NULL,
+  reflection_repair_ok TINYINT NOT NULL,
+  detail     JSON NOT NULL,
+  KEY idx_eval (eval_id),
+  UNIQUE KEY uq_eval_case (eval_id, case_id),
+  CONSTRAINT chk_eval_case_result_intent_ok CHECK (intent_ok IN (0, 1)),
+  CONSTRAINT chk_eval_case_result_anomaly_ok CHECK (anomaly_ok IN (0, 1)),
+  CONSTRAINT chk_eval_case_result_top1_ok CHECK (top1_ok IN (0, 1)),
+  CONSTRAINT chk_eval_case_result_top3_ok CHECK (top3_ok IN (0, 1)),
+  CONSTRAINT chk_eval_case_result_sql_safe CHECK (sql_safe IN (0, 1)),
+  CONSTRAINT chk_eval_case_result_reflection_repair_ok CHECK (reflection_repair_ok IN (0, 1)),
+  CONSTRAINT chk_eval_case_result_evidence_coverage CHECK (evidence_coverage >= 0 AND evidence_coverage <= 1)
 ) ENGINE=InnoDB;
 
 -- ========== 账号与权限（DB 层第二道防线）==========

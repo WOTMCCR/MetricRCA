@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import random
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import create_engine, text
@@ -85,11 +85,12 @@ def main() -> None:
     rng = random.Random(SEED)  # 局部 RNG，确定性来源
     try:
         with engine.begin() as conn:  # 单事务：要么全部重建成功，要么回滚
-            _ensure_p6_schema(conn)
             for table in TABLES_TO_CLEAR:
                 conn.execute(text(f"DELETE FROM {table}"))
+            _ensure_p6_schema(conn)
             _insert_dimensions(conn)
             _insert_metric_definitions(conn)
+            _insert_semantic_memory(conn)
             _insert_business_facts(conn, rng)
             _insert_ground_truth(conn)
     finally:
@@ -113,19 +114,148 @@ def _wait_for_mysql(engine) -> None:
 
 def _ensure_p6_schema(conn) -> None:
     """Apply the P6 trace token usage column to existing local databases."""
-    has_token_usage = conn.execute(
+    _ensure_column(
+        conn,
+        table="trace_step",
+        column="token_usage",
+        ddl="ALTER TABLE trace_step ADD COLUMN token_usage JSON NULL AFTER latency_ms",
+    )
+    _ensure_column(
+        conn,
+        table="agent_run",
+        column="total_tokens",
+        ddl="ALTER TABLE agent_run ADD COLUMN total_tokens INT NULL AFTER error_code",
+    )
+    _ensure_column(
+        conn,
+        table="agent_run",
+        column="total_latency_ms",
+        ddl="ALTER TABLE agent_run ADD COLUMN total_latency_ms INT NULL AFTER total_tokens",
+    )
+    _ensure_column(
+        conn,
+        table="agent_run",
+        column="token_breakdown",
+        ddl="ALTER TABLE agent_run ADD COLUMN token_breakdown JSON NULL AFTER total_latency_ms",
+    )
+    _ensure_column(
+        conn,
+        table="sql_audit",
+        column="audit_key",
+        ddl="ALTER TABLE sql_audit ADD COLUMN audit_key VARCHAR(64) NULL AFTER audit_id",
+    )
+    _ensure_index(
+        conn,
+        table="sql_audit",
+        index="uq_audit_key",
+        ddl="ALTER TABLE sql_audit ADD UNIQUE KEY uq_audit_key (audit_key)",
+    )
+    _ensure_index(
+        conn,
+        table="eval_case_result",
+        index="uq_eval_case",
+        ddl="ALTER TABLE eval_case_result ADD UNIQUE KEY uq_eval_case (eval_id, case_id)",
+    )
+    _ensure_check_constraint(
+        conn,
+        table="eval_case_result",
+        constraint="chk_eval_case_result_intent_ok",
+        ddl="ALTER TABLE eval_case_result ADD CONSTRAINT chk_eval_case_result_intent_ok CHECK (intent_ok IN (0, 1))",
+    )
+    _ensure_check_constraint(
+        conn,
+        table="eval_case_result",
+        constraint="chk_eval_case_result_anomaly_ok",
+        ddl="ALTER TABLE eval_case_result ADD CONSTRAINT chk_eval_case_result_anomaly_ok CHECK (anomaly_ok IN (0, 1))",
+    )
+    _ensure_check_constraint(
+        conn,
+        table="eval_case_result",
+        constraint="chk_eval_case_result_top1_ok",
+        ddl="ALTER TABLE eval_case_result ADD CONSTRAINT chk_eval_case_result_top1_ok CHECK (top1_ok IN (0, 1))",
+    )
+    _ensure_check_constraint(
+        conn,
+        table="eval_case_result",
+        constraint="chk_eval_case_result_top3_ok",
+        ddl="ALTER TABLE eval_case_result ADD CONSTRAINT chk_eval_case_result_top3_ok CHECK (top3_ok IN (0, 1))",
+    )
+    _ensure_check_constraint(
+        conn,
+        table="eval_case_result",
+        constraint="chk_eval_case_result_sql_safe",
+        ddl="ALTER TABLE eval_case_result ADD CONSTRAINT chk_eval_case_result_sql_safe CHECK (sql_safe IN (0, 1))",
+    )
+    _ensure_check_constraint(
+        conn,
+        table="eval_case_result",
+        constraint="chk_eval_case_result_reflection_repair_ok",
+        ddl=(
+            "ALTER TABLE eval_case_result ADD CONSTRAINT chk_eval_case_result_reflection_repair_ok "
+            "CHECK (reflection_repair_ok IN (0, 1))"
+        ),
+    )
+    _ensure_check_constraint(
+        conn,
+        table="eval_case_result",
+        constraint="chk_eval_case_result_evidence_coverage",
+        ddl=(
+            "ALTER TABLE eval_case_result ADD CONSTRAINT chk_eval_case_result_evidence_coverage "
+            "CHECK (evidence_coverage >= 0 AND evidence_coverage <= 1)"
+        ),
+    )
+
+
+def _ensure_column(conn, *, table: str, column: str, ddl: str) -> None:
+    exists = conn.execute(
         text(
             """
             SELECT COUNT(*)
             FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME = 'trace_step'
-              AND COLUMN_NAME = 'token_usage'
+              AND TABLE_NAME = :table
+              AND COLUMN_NAME = :column
             """
-        )
+        ),
+        {"table": table, "column": column},
     ).scalar_one()
-    if int(has_token_usage) == 0:
-        conn.execute(text("ALTER TABLE trace_step ADD COLUMN token_usage JSON NULL AFTER latency_ms"))
+    if int(exists) == 0:
+        conn.execute(text(ddl))
+
+
+def _ensure_index(conn, *, table: str, index: str, ddl: str) -> None:
+    exists = conn.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table
+              AND INDEX_NAME = :index
+            """
+        ),
+        {"table": table, "index": index},
+    ).scalar_one()
+    if int(exists) == 0:
+        conn.execute(text(ddl))
+
+
+def _ensure_check_constraint(conn, *, table: str, constraint: str, ddl: str) -> None:
+    exists = conn.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM information_schema.TABLE_CONSTRAINTS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table
+              AND CONSTRAINT_NAME = :constraint
+              AND CONSTRAINT_TYPE = 'CHECK'
+            """
+        ),
+        {"table": table, "constraint": constraint},
+    ).scalar_one()
+    if int(exists) == 0:
+        conn.execute(text(ddl))
 
 
 def _insert_dimensions(conn) -> None:
@@ -266,6 +396,86 @@ def _insert_metric_definitions(conn) -> None:
         ),
         metric_rows,
     )
+
+
+def _insert_semantic_memory(conn) -> None:
+    rows = conn.execute(
+        text(
+            """
+            SELECT metric_id, display_name, formula, numerator_sql_fragment,
+                   denominator_sql_fragment, higher_is_better, source_table,
+                   allowed_dimensions
+            FROM metric_definition
+            ORDER BY metric_id
+            """
+        )
+    ).mappings().all()
+    conn.execute(
+        text(
+            """
+            INSERT INTO memory_record (
+              memory_id, layer, mem_key, payload, confidence, source,
+              version, ttl_days, created_at
+            )
+            VALUES (
+              :memory_id, :layer, :mem_key, :payload, :confidence, :source,
+              :version, :ttl_days, :created_at
+            )
+            """
+        ),
+        [
+            {
+                "memory_id": f"semantic-{row['metric_id']}",
+                "layer": "semantic",
+                "mem_key": f"{row['metric_id']}|semantic",
+                "payload": json.dumps(
+                    {
+                        "metric_id": row["metric_id"],
+                        "display_name": row["display_name"],
+                        "aliases": _metric_aliases(row),
+                        "formula": row["formula"],
+                        "numerator_sql_fragment": row["numerator_sql_fragment"],
+                        "denominator_sql_fragment": row["denominator_sql_fragment"],
+                        "business_rules": {
+                            "higher_is_better": bool(row["higher_is_better"]),
+                            "source_table": row["source_table"],
+                        },
+                        "higher_is_better": bool(row["higher_is_better"]),
+                        "source_table": row["source_table"],
+                        "allowed_dimensions": json.loads(row["allowed_dimensions"]),
+                        "dimension_meanings": [
+                            {
+                                "dimension": dimension,
+                                "source_column": dimension,
+                                "meaning": f"{dimension} breakdown for {row['metric_id']}",
+                            }
+                            for dimension in json.loads(row["allowed_dimensions"])
+                        ],
+                    },
+                    sort_keys=True,
+                ),
+                "confidence": 1.0,
+                "source": "system_verified",
+                "version": 1,
+                "ttl_days": None,
+                "created_at": datetime_for_seed(),
+            }
+            for row in rows
+        ],
+    )
+
+
+def _metric_aliases(row) -> list[str]:
+    aliases = {
+        str(row["metric_id"]),
+        str(row["display_name"]),
+        str(row["display_name"]).lower(),
+    }
+    return sorted(alias for alias in aliases if alias)
+
+
+def datetime_for_seed():
+    return datetime(2026, 6, 6)
 
 
 def _insert_business_facts(conn, rng: random.Random) -> None:

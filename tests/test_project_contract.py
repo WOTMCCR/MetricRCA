@@ -63,9 +63,9 @@ def test_makefile_targets_match_documented_commands() -> None:
     expected = {
         "up": "docker compose up -d mysql",
         "seed": "python -m metric_rca.data.seed_data",
-        "api": "uvicorn metric_rca.api.main:app --reload",
+        "api": "LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false uvicorn metric_rca.api.main:app --reload",
         "ui": "npm run dev --prefix frontend",
-        "eval": "python -m metric_rca.evals.runner",
+        "eval": "LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false python -m metric_rca.evals.runner",
         "test": "pytest -q",
     }
     for target, command in expected.items():
@@ -84,6 +84,25 @@ def test_makefile_targets_match_documented_commands() -> None:
         assert lines[-1] == command
     makefile = (ROOT / "Makefile").read_text()
     assert "streamlit" not in makefile
+
+
+def test_eval_stream_make_target_passes_eval_id() -> None:
+    result = subprocess.run(
+        ["make", "-n", "eval-stream", "EVAL_ID=eval-predict-test"],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    lines = [
+        line
+        for line in result.stdout.splitlines()
+        if line and not line.startswith("export ") and not line.startswith("make[")
+    ]
+    assert lines[-1] == (
+        "LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false "
+        "python -m metric_rca.evals.runner --stream --eval-id eval-predict-test"
+    )
 
 
 def test_compose_declares_mysql_only_contract() -> None:

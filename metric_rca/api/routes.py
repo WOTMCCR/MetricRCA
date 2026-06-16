@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter
@@ -10,7 +11,11 @@ from fastapi.responses import JSONResponse
 from metric_rca.api.dependencies import ApiDependencies, settings_with_overrides
 from metric_rca.api.schemas import (
     ErrorBody,
+    EvalCaseResultCreateRequest,
+    EvalCaseResultStoreResponse,
     EvalResponse,
+    EvalSummaryCreateRequest,
+    EvalSummaryStoreResponse,
     EvidenceResponse,
     MemoryResponse,
     RunCreateRequest,
@@ -20,6 +25,7 @@ from metric_rca.api.schemas import (
     TraceResponse,
 )
 from metric_rca.evals.models import EvalRuntimeError
+from metric_rca.observability.summary import build_token_summary
 from metric_rca.reporting.projector import (
     build_report_from_persisted_artifacts,
     project_candidates_from_e4,
@@ -41,6 +47,9 @@ def build_router(dependencies: ApiDependencies) -> APIRouter:
             business_today=request.business_today,
             memory_enabled=request.memory_enabled,
             memory_required=request.memory_required,
+            llm_provider=request.llm_provider,
+            llm_model=request.llm_model,
+            llm_api_key=request.llm_api_key,
         )
         try:
             result = dependencies.rca_runner(
@@ -55,6 +64,7 @@ def build_router(dependencies: ApiDependencies) -> APIRouter:
             agent_run = repository.get_agent_run(run_id)
             evidences = repository.get_evidences(run_id)
             tasks = repository.get_operation_tasks(run_id)
+            trace = repository.get_trace_steps(run_id)
         except RuntimeError as exc:
             return _runtime_error_response(exc)
         report = build_report_from_persisted_artifacts(
@@ -75,6 +85,7 @@ def build_router(dependencies: ApiDependencies) -> APIRouter:
             report=report,
             candidates=candidates,
             tasks=tasks,
+            token_summary=build_token_summary(trace),
             links=_run_links(run_id),
         )
 
@@ -90,6 +101,7 @@ def build_router(dependencies: ApiDependencies) -> APIRouter:
                 )
             evidences = repository.get_evidences(run_id)
             tasks = repository.get_operation_tasks(run_id)
+            trace = repository.get_trace_steps(run_id)
         except RuntimeError as exc:
             return _runtime_error_response(exc)
         report = build_report_from_persisted_artifacts(
@@ -112,6 +124,7 @@ def build_router(dependencies: ApiDependencies) -> APIRouter:
                 evidences=evidences,
             ),
             tasks=tasks,
+            token_summary=build_token_summary(trace),
             links=_run_links(run_id),
         )
 
@@ -150,19 +163,9 @@ def build_router(dependencies: ApiDependencies) -> APIRouter:
     @router.get("/api/rca/runs/{run_id}/memory", response_model=MemoryResponse)
     def get_memory(run_id: str) -> MemoryResponse | JSONResponse:
         try:
-            trace = dependencies.get_repository().get_trace_steps(run_id)
+            memory = dependencies.get_repository().get_memory_records_for_run(run_id)
         except RuntimeError as exc:
             return _runtime_error_response(exc)
-        memory = [
-            {
-                "step_id": row.get("step_id"),
-                "node": row.get("node"),
-                "output_summary": row.get("output_summary"),
-                "error_code": row.get("error_code"),
-            }
-            for row in trace
-            if row.get("node") in {"read_memory", "write_memory"}
-        ]
         return MemoryResponse(run_id=run_id, memory=memory)
 
     @router.post("/api/evals/run", response_model=EvalResponse)
@@ -178,6 +181,40 @@ def build_router(dependencies: ApiDependencies) -> APIRouter:
             summary=output["summary"],
             cases=output["cases"],
         )
+
+    @router.post("/api/evals/{eval_id}/case-results", response_model=EvalCaseResultStoreResponse)
+    def create_eval_case_result(
+        eval_id: str,
+        request: EvalCaseResultCreateRequest,
+    ) -> EvalCaseResultStoreResponse | JSONResponse:
+        repository = dependencies.get_repository()
+        try:
+            repository.upsert_eval_case_result({"eval_id": eval_id, **request.model_dump()})
+        except RuntimeError as exc:
+            return _runtime_error_response(exc)
+        return EvalCaseResultStoreResponse(
+            eval_id=eval_id,
+            case_id=request.case_id,
+            status="stored",
+        )
+
+    @router.post("/api/evals/{eval_id}/summary", response_model=EvalSummaryStoreResponse)
+    def upsert_eval_summary(
+        eval_id: str,
+        request: EvalSummaryCreateRequest,
+    ) -> EvalSummaryStoreResponse | JSONResponse:
+        repository = dependencies.get_repository()
+        try:
+            repository.upsert_eval_run_summary(
+                {
+                    "eval_id": eval_id,
+                    "created_at": datetime.now(timezone.utc).replace(tzinfo=None),
+                    "summary": request.summary.model_dump(exclude_none=True),
+                }
+            )
+        except RuntimeError as exc:
+            return _runtime_error_response(exc)
+        return EvalSummaryStoreResponse(eval_id=eval_id, status="stored")
 
     @router.get("/api/evals/{eval_id}", response_model=EvalResponse)
     def get_eval(eval_id: str) -> EvalResponse | JSONResponse:

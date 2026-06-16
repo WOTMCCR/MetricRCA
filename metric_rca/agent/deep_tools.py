@@ -290,14 +290,18 @@ def _rank_from_persisted_e4(
                 message="persisted E4 has no candidates",
             )
         )
-    candidates = _enhance_with_adtributor(
+    candidates, adtributor_audit = _enhance_with_adtributor(
         repository=repository,
         settings=settings,
         run_id=run_id,
         metric_id=metric_id,
         candidates=candidates,
     )
-    candidates = _rank_candidates(candidates)
+    e_rank_id = f"{run_id}:E_rank"
+    candidates = [
+        _candidate_with_rank_evidence(candidate, e_rank_id)
+        for candidate in _rank_candidates(candidates)
+    ]
     selected_candidate = candidates[0]
     sql_text = e4.get("sql_text")
     if not sql_text:
@@ -312,10 +316,13 @@ def _rank_from_persisted_e4(
     e4_summary = dict(e4.get("result_summary") or {})
     e4_summary["selected_candidate"] = selected_candidate.model_dump(mode="json")
     e4_summary["candidates"] = [candidate.model_dump(mode="json") for candidate in candidates]
-    e4_summary["ranker"] = "adtributor_internal" if any(c.explanatory_power is not None for c in candidates) else "v1"
+    e4_summary["ranker"] = (
+        "adtributor_internal" if any(c.explanatory_power is not None for c in candidates) else "v1"
+    )
+    e4_summary.update(adtributor_audit)
     _update_e4_summary(repository=repository, run_id=run_id, evidence_id=e4_id, result_summary=e4_summary)
     evidence = Evidence(
-        evidence_id=f"{run_id}:E_rank",
+        evidence_id=e_rank_id,
         query_spec=QuerySpec(
             metric_id=metric_id,
             time_range=TimeRange(start_date=target_date, end_date=target_date),
@@ -329,6 +336,7 @@ def _rank_from_persisted_e4(
             "ranker": e4_summary["ranker"],
             "selected_candidate": selected_candidate.model_dump(mode="json"),
             "candidates": [c.model_dump(mode="json") for c in candidates],
+            **adtributor_audit,
         },
         data_source=e4["data_source"],
         created_at=datetime.now(timezone.utc).replace(tzinfo=None),
@@ -354,6 +362,7 @@ def _rank_from_persisted_e4(
                 "ranker": e4_summary["ranker"],
                 "selected_candidate": selected_candidate.model_dump(mode="json"),
                 "candidates": [c.model_dump(mode="json") for c in candidates],
+                **adtributor_audit,
             },
             evidence_ids=[evidence.evidence_id],
         ),
@@ -369,10 +378,10 @@ def _enhance_with_adtributor(
     run_id: str,
     metric_id: str,
     candidates: list[RootCauseCandidate],
-) -> list[RootCauseCandidate]:
+) -> tuple[list[RootCauseCandidate], dict[str, str]]:
     elements = _adtributor_elements_from_persisted_evidence(repository=repository, run_id=run_id)
     if not elements:
-        return candidates
+        return candidates, _adtributor_not_applicable("no persisted adtributor elements")
     result = attribute_elements(
         metric_id=metric_id,
         elements=elements,
@@ -380,14 +389,16 @@ def _enhance_with_adtributor(
         t_eep=float(getattr(settings, "adtributor_t_eep", 0.10)),
     )
     if not result.ok:
-        return candidates
+        return candidates, _adtributor_not_applicable(
+            result.error_code or "ADTRIBUTOR_NOT_APPLICABLE"
+        )
     score_by_pair = {
         (score.dimension, str(score.element)): score
         for score in result.element_scores
         if score.explanatory_power > 0
     }
     if not score_by_pair:
-        return candidates
+        return candidates, _adtributor_not_applicable("no positive adtributor scores")
     top_pair_by_dimension: dict[str, tuple[str, str]] = {}
     for pair, score in score_by_pair.items():
         previous = top_pair_by_dimension.get(pair[0])
@@ -439,7 +450,22 @@ def _enhance_with_adtributor(
                 }
             )
         )
-    return enhanced
+    return enhanced, {"adtributor_status": "applied"}
+
+
+def _adtributor_not_applicable(reason: str) -> dict[str, str]:
+    return {
+        "adtributor_status": "not_applicable",
+        "adtributor_error_code": "ADTRIBUTOR_NOT_APPLICABLE",
+        "adtributor_reason": reason,
+    }
+
+
+def _candidate_with_rank_evidence(candidate: RootCauseCandidate, e_rank_id: str) -> RootCauseCandidate:
+    evidence_ids = [*candidate.evidence_ids]
+    if e_rank_id not in evidence_ids:
+        evidence_ids.append(e_rank_id)
+    return candidate.model_copy(update={"evidence_ids": evidence_ids})
 
 
 def _adtributor_pair_rank(score: Any) -> tuple[float, float]:
@@ -453,6 +479,8 @@ def _adtributor_elements_from_persisted_evidence(*, repository: Any, run_id: str
         rows = [row] if row is not None else []
     elements: list[AdtributorElement] = []
     for row in rows:
+        if not isinstance(row, dict) or row.get("guard_status") != "passed":
+            continue
         summary = row.get("result_summary") if isinstance(row, dict) else None
         raw_elements = summary.get("adtributor_elements") if isinstance(summary, dict) else None
         if not isinstance(raw_elements, list):
