@@ -10,14 +10,38 @@ from typing import Any
 import pytest
 
 from metric_rca.config.settings import Settings
-from metric_rca.evals.models import EvalRuntimeError, GroundTruth, PersistedArtifacts
-from metric_rca.evals.runner import _attempt_run_id, _read_artifacts, _run_id, load_cases, run_eval
+from metric_rca.evals.models import EvalRuntimeError, GroundTruth, PersistedArtifacts, RootCauseTruth
+from metric_rca.evals.runner import (
+    MEMORY_TREATMENT_CASES_PATH,
+    _attempt_run_id,
+    _cases_path_for_suite,
+    _eval_summary,
+    _read_artifacts,
+    _run_id,
+    load_cases,
+    run_eval,
+)
 from metric_rca.evals.scorer import (
     dangerous_sql_blocked,
     score_case,
     summarize_memory_retrieval,
     summarize_scores,
 )
+
+PUBLIC_CASES_PATH = Path("metric_rca/evals/regression_public_cases.jsonl")
+PRIVATE_GROUND_TRUTH_PATH = Path("metric_rca/evals/regression_private_ground_truth.jsonl")
+MEMORY_TREATMENT_PRIVATE_GROUND_TRUTH_PATH = Path("metric_rca/evals/memory_treatment_private_ground_truth.jsonl")
+PUBLIC_CASE_FIELDS = {"case_id", "question", "tags"}
+PRIVATE_GROUND_TRUTH_FIELDS = {
+    "case_id",
+    "expected_metric_id",
+    "expected_anomaly",
+    "expected_root_cause_type",
+    "expected_dimension",
+    "expected_element",
+    "expected_business_date",
+}
+ANSWER_BEARING_FIELDS = PRIVATE_GROUND_TRUTH_FIELDS - {"case_id"}
 
 
 def test_eval_loads_cases_and_ground_truth(tmp_path: Path) -> None:
@@ -29,10 +53,187 @@ def test_eval_loads_cases_and_ground_truth(tmp_path: Path) -> None:
 
     assert [case.case_id for case in cases] == ["gmv_paid_ads_drop", "gmv_no_anomaly"]
     assert repo.gt_requests == [["gmv_paid_ads_drop", "gmv_no_anomaly"]]
+    assert repo.gt_scopes == [("regression", "regression")]
+
+
+def test_legacy_cases_path_symbol_is_removed() -> None:
+    with pytest.raises(ImportError):
+        exec("from metric_rca.evals.runner import LEGACY_CASES_PATH", {})
+
+
+def test_eval_writes_grpo_dataset_with_predictions_and_trace_artifacts(tmp_path: Path) -> None:
+    cases_path = _cases_file(tmp_path)
+    predictions_dir = tmp_path / "eval-1"
+    predictions_dir.mkdir(parents=True)
+    (predictions_dir / "predictions.jsonl").write_text(
+        json.dumps(
+            {
+                "case_id": "gmv_paid_ads_drop",
+                "aspect": "outcome",
+                "prediction": {"top1_ok": True},
+                "reasoning": "campaign fixture should select paid ads",
+                "risks": [],
+            }
+        )
+        + "\n"
+    )
+    repo = _EvalRepository()
+
+    run_eval(repository=repo, rca_runner=_fake_runner, cases_path=cases_path, output_dir=tmp_path, eval_id="eval-1")
+
+    dataset_path = tmp_path / "eval-1" / "grpo_dataset" / "trajectories.jsonl"
+    manifest_path = tmp_path / "eval-1" / "grpo_dataset" / "manifest.json"
+    records = [json.loads(line) for line in dataset_path.read_text().splitlines() if line.strip()]
+    manifest = json.loads(manifest_path.read_text())
+    paid_ads_records = [record for record in records if record["case"]["case_id"] == "gmv_paid_ads_drop"]
+    assert manifest["record_count"] == 4
+    assert sorted({record["phase"] for record in records}) == ["baseline", "memory"]
+    assert paid_ads_records[0]["predictions"][0]["aspect"] == "outcome"
+    assert paid_ads_records[0]["trajectory"]["trace_steps"]
+    assert paid_ads_records[0]["judge"]["reward"] == 1.0
+
+
+def test_eval_require_predictions_fails_before_running_cases(tmp_path: Path) -> None:
+    repo = _EvalRepository()
+
+    with pytest.raises(EvalRuntimeError) as exc_info:
+        run_eval(
+            repository=repo,
+            rca_runner=_fake_runner,
+            cases_path=_cases_file(tmp_path),
+            output_dir=tmp_path,
+            eval_id="eval-missing-predictions",
+            require_predictions=True,
+        )
+
+    assert exc_info.value.code == "GRPO_PREDICTIONS_MISSING"
+    assert repo.gt_requests == []
+    assert repo.runner_calls == []
+    assert repo.eval_run_updates == []
+
+
+def test_eval_loader_defaults_to_public_regression_cases_without_expected_fields() -> None:
+    cases = load_cases()
+    public_rows = _read_jsonl(PUBLIC_CASES_PATH)
+
+    assert len(cases) == 28
+    assert [case.case_id for case in cases] == [row["case_id"] for row in public_rows]
+    assert all(set(case.__dict__) == PUBLIC_CASE_FIELDS for case in cases)
+    assert all(ANSWER_BEARING_FIELDS.isdisjoint(case.__dict__) for case in cases)
+
+
+def test_eval_suite_default_case_paths_keep_memory_treatment_isolated() -> None:
+    regression_cases = load_cases(_cases_path_for_suite("regression"))
+    treatment_cases = load_cases(_cases_path_for_suite("memory-treatment"))
+    treatment_private = _read_jsonl(MEMORY_TREATMENT_PRIVATE_GROUND_TRUTH_PATH)
+
+    assert _cases_path_for_suite("acceptance").resolve() == PUBLIC_CASES_PATH.resolve()
+    assert _cases_path_for_suite("memory-treatment").resolve() == MEMORY_TREATMENT_CASES_PATH.resolve()
+    assert [case.case_id for case in treatment_cases] == ["M01_gmv_memory_product_prior"]
+    assert [case.case_id for case in regression_cases] == [row["case_id"] for row in _read_jsonl(PUBLIC_CASES_PATH)]
+    assert all("memory_treatment" in case.tags for case in treatment_cases)
+    assert all(set(row) == PRIVATE_GROUND_TRUTH_FIELDS for row in treatment_private)
+    assert [row["case_id"] for row in treatment_private] == [case.case_id for case in treatment_cases]
+    assert all("question" not in row and "tags" not in row for row in treatment_private)
+
+
+def test_run_eval_uses_settings_eval_suite_for_default_case_selection(tmp_path: Path) -> None:
+    repo = _EvalRepository(gt_element="2", persisted_element="2")
+
+    with pytest.raises(EvalRuntimeError) as exc_info:
+        run_eval(
+            repository=repo,
+            rca_runner=_fake_runner,
+            output_dir=tmp_path,
+            eval_id="eval-memory",
+            settings=Settings(
+                db_dsn="mysql+pymysql://app:app@localhost/db",
+                readonly_db_dsn="mysql+pymysql://reader:reader@localhost/db",
+                llm_provider="openai",
+                llm_model="gpt-test",
+                llm_api_key="key",
+                eval_suite="memory-treatment",
+            ),
+        )
+
+    assert exc_info.value.code == "EVAL_THRESHOLD_NOT_MET"
+    assert repo.gt_requests == [["M01_gmv_memory_product_prior"]]
+    assert repo.gt_scopes == [("memory-treatment", "regression")]
+
+
+def test_run_eval_uses_acceptance_ground_truth_profile_scope(tmp_path: Path) -> None:
+    repo = _EvalRepository()
+
+    with pytest.raises(EvalRuntimeError) as exc_info:
+        run_eval(
+            repository=repo,
+            rca_runner=_fake_runner,
+            cases_path=_cases_file(tmp_path),
+            output_dir=tmp_path,
+            eval_id="eval-acceptance",
+            settings=Settings(
+                db_dsn="mysql+pymysql://app:app@localhost/db",
+                readonly_db_dsn="mysql+pymysql://reader:reader@localhost/db",
+                llm_provider="openai",
+                llm_model="gpt-test",
+                llm_api_key="key",
+                eval_suite="acceptance",
+            ),
+        )
+
+    assert exc_info.value.code == "EVAL_THRESHOLD_NOT_MET"
+    assert repo.gt_scopes == [("regression", "acceptance")]
+
+
+def test_public_regression_cases_have_no_answer_bearing_fields_and_allow_metric_terms() -> None:
+    rows = _read_jsonl(PUBLIC_CASES_PATH)
+
+    assert len(rows) == 28
+    assert all(set(row) == PUBLIC_CASE_FIELDS for row in rows)
+    assert all(ANSWER_BEARING_FIELDS.isdisjoint(row) for row in rows)
+    questions = " ".join(str(row["question"]).lower() for row in rows)
+    for allowed_metric_term in [
+        "gmv",
+        "traffic",
+        "conversion rate",
+        "refund rate",
+        "stockout rate",
+        "complaint rate",
+    ]:
+        assert allowed_metric_term in questions
+
+
+def test_private_regression_ground_truth_matches_public_case_ids() -> None:
+    public_rows = _read_jsonl(PUBLIC_CASES_PATH)
+    private_rows = _read_jsonl(PRIVATE_GROUND_TRUTH_PATH)
+
+    assert len(private_rows) == 28
+    assert all(set(row) == PRIVATE_GROUND_TRUTH_FIELDS for row in private_rows)
+    assert [row["case_id"] for row in private_rows] == [row["case_id"] for row in public_rows]
+    assert all("question" not in row and "tags" not in row for row in private_rows)
+
+
+def test_eval_loader_rejects_answer_bearing_public_case_rows(tmp_path: Path) -> None:
+    path = tmp_path / "public_cases.jsonl"
+    path.write_text(
+        json.dumps(
+            {
+                "case_id": "leaky_case",
+                "question": "Why did GMV move?",
+                "tags": ["regression"],
+                "expected_element": "paid_ads",
+            }
+        )
+    )
+
+    with pytest.raises(EvalRuntimeError) as exc_info:
+        load_cases(path)
+
+    assert exc_info.value.code == "EVAL_CASE_PRIVATE_FIELD_LEAKED"
 
 
 def test_eval_cases_are_natural_questions_without_answer_leakage() -> None:
-    cases = load_cases(Path("metric_rca/evals/cases.jsonl"))
+    cases = load_cases(PUBLIC_CASES_PATH)
     by_id = {case.case_id: case.question.lower() for case in cases}
 
     assert len(cases) == 28
@@ -515,75 +716,74 @@ def test_eval_scores_adtributor_used_and_multi_agent_path() -> None:
     assert score["top1_ok"] == 1
 
 
-def test_eval_requires_dimension_elements_for_c06_c07_c27() -> None:
-    missing = score_case(
-        case_id="C06_gmv_multi_channel_drop",
-        ground_truth=_gt("C06_gmv_multi_channel_drop"),
+def test_eval_multi_cause_scoring_uses_root_causes_json_not_case_id_rules() -> None:
+    ground_truth = _gt(
+        "custom_multi_cause_case",
+        root_causes=(
+            RootCauseTruth("campaign_traffic_drop", "channel", "paid_ads", 0.62),
+            RootCauseTruth("stockout", "category", "electronics", 0.25),
+        ),
+    )
+    artifacts = _artifacts(
+        "run-1",
+        selected=_candidate(),
+        candidates=[
+            _candidate(),
+            _candidate(root_cause_type="stockout", dimension="category", element="electronics", contribution_pct=0.25),
+        ],
+    )
+
+    score = score_case(case_id="not_special_cased", ground_truth=ground_truth, artifacts=artifacts)
+
+    assert score["dominant_top1_ok"] == 1
+    assert score["root_cause_set_recall"] == 1.0
+    assert score["root_cause_set_precision"] == 1.0
+    assert score["weighted_explanation_coverage"] == 1.0
+    assert score["top3_contains_all_major_causes"] == 1
+
+
+def test_eval_scoring_matches_truth_against_candidate_dimension_elements() -> None:
+    ground_truth = _gt(
+        "custom_merchandise_case",
+        root_causes=(RootCauseTruth("aov_drop", "category", "fashion", 1.0),),
+    )
+    candidate = _candidate(
+        root_cause_type="aov_drop",
+        dimension="product",
+        element="142",
+        dimension_elements=[("product", "142"), ("category", "fashion")],
+    )
+
+    score = score_case(
+        case_id="custom_merchandise_case",
+        ground_truth=ground_truth,
+        artifacts=_artifacts("run-1", selected=candidate),
+    )
+
+    assert score["dominant_top1_ok"] == 1
+    assert score["root_cause_set_recall"] == 1.0
+    assert score["top3_contains_all_major_causes"] == 1
+
+
+def test_eval_multi_cause_scoring_penalizes_missing_major_cause_without_case_id_lookup() -> None:
+    ground_truth = _gt(
+        "another_custom_multi_cause_case",
+        root_causes=(
+            RootCauseTruth("campaign_traffic_drop", "channel", "paid_ads", 0.62),
+            RootCauseTruth("stockout", "category", "electronics", 0.25),
+        ),
+    )
+
+    score = score_case(
+        case_id="C07_gmv_category_channel_cross",
+        ground_truth=ground_truth,
         artifacts=_artifacts("run-1", selected=_candidate()),
     )
-    c27_missing = score_case(
-        case_id="C27_composite_cause",
-        ground_truth=_gt("C27_composite_cause", dimension="channel", element="paid_ads"),
-        artifacts=_artifacts(
-            "run-2",
-            selected=_candidate(
-                dimension="channel",
-                element="paid_ads",
-                dimension_elements=[("channel", "paid_ads")],
-            ),
-        ),
-    )
-    present = score_case(
-        case_id="C07_gmv_category_channel_cross",
-        ground_truth=_gt("C07_gmv_category_channel_cross", dimension="channel", element="paid_ads"),
-        artifacts=_artifacts(
-            "run-1",
-            selected=_candidate(
-                dimension="channel",
-                element="paid_ads",
-                dimension_elements=[("channel", "paid_ads"), ("category", "electronics")],
-            ),
-        ),
-    )
-    c27_present = score_case(
-        case_id="C27_composite_cause",
-        ground_truth=_gt("C27_composite_cause", dimension="channel", element="paid_ads"),
-        artifacts=_artifacts(
-            "run-2",
-            selected=_candidate(
-                dimension="channel",
-                element="paid_ads",
-                dimension_elements=[("channel", "paid_ads"), ("category", "electronics")],
-            ),
-        ),
-    )
 
-    assert missing["top1_ok"] == 0
-    assert missing["detail"]["dimension_elements_required"] is True
-    assert c27_missing["top1_ok"] == 0
-    assert c27_missing["detail"]["dimension_elements_required"] is True
-    assert present["top1_ok"] == 1
-    assert c27_present["top1_ok"] == 1
-
-
-def test_eval_c07_requires_exact_channel_category_pair() -> None:
-    wrong_pair = score_case(
-        case_id="C07_gmv_category_channel_cross",
-        ground_truth=_gt("C07_gmv_category_channel_cross", dimension="channel", element="paid_ads"),
-        artifacts=_artifacts(
-            "run-1",
-            selected=_candidate(
-                dimension="channel",
-                element="paid_ads",
-                dimension_elements=[("channel", "paid_ads"), ("category", "fashion")],
-            ),
-        ),
-    )
-
-    assert wrong_pair["top1_ok"] == 0
-    assert ("category", "electronics") in {
-        tuple(item) for item in wrong_pair["detail"]["required_dimension_elements"]
-    }
+    assert score["top1_ok"] == 1
+    assert score["root_cause_set_recall"] == 0.5
+    assert score["weighted_explanation_coverage"] == round(0.62 / 0.87, 6)
+    assert score["top3_contains_all_major_causes"] == 0
 
 
 def test_eval_expected_anomaly_requires_e1_anomaly_evidence() -> None:
@@ -680,6 +880,10 @@ def test_eval_memory_pollution_checks_candidate_list_and_report_claims() -> None
         "result_summary": {
             **e4["result_summary"],
             "candidates": [e4["result_summary"]["selected_candidate"], polluted_candidate],
+            "contribution_set": {
+                **e4["result_summary"]["contribution_set"],
+                "candidates": [e4["result_summary"]["selected_candidate"], polluted_candidate],
+            },
         },
     }
     polluted_report = {
@@ -1120,6 +1324,11 @@ def test_eval_summary_accepts_p7_thresholds() -> None:
                 "anomaly_ok": 1,
                 "top1_ok": 1 if index < 16 else 0,
                 "top3_ok": 1 if index < 18 else 0,
+                "dominant_top1_ok": 1 if index < 16 else 0,
+                "root_cause_set_recall": 1.0,
+                "root_cause_set_precision": 1.0,
+                "weighted_explanation_coverage": 1.0,
+                "top3_contains_all_major_causes": 1 if index < 18 else 0,
                 "evidence_coverage": 1.0,
                 "sql_safe": 1,
                 "reflection_repair_ok": 1,
@@ -1151,13 +1360,22 @@ def test_eval_summary_records_average_tokens_latency_provider_model() -> None:
                 "anomaly_ok": 1,
                 "top1_ok": 1,
                 "top3_ok": 1,
+                "dominant_top1_ok": 1,
+                "root_cause_set_recall": 1.0,
+                "root_cause_set_precision": 1.0,
+                "weighted_explanation_coverage": 1.0,
+                "top3_contains_all_major_causes": 1,
                 "evidence_coverage": 1.0,
                 "sql_safe": 1,
                 "reflection_repair_ok": 1,
                 "report_traceable_ok": 1,
                 "memory_pollution_ok": 1,
                 "no_anomaly_task_ok": 1,
-                "detail": {"token_count": 10 + index * 2, "latency_ms": 100 + index * 50},
+                "detail": {
+                    "token_count": 10 + index * 2,
+                    "latency_ms": 100 + index * 50,
+                    "sql_count": 3 + index,
+                },
             }
         )
 
@@ -1165,6 +1383,8 @@ def test_eval_summary_records_average_tokens_latency_provider_model() -> None:
 
     assert summary["avg_tokens_per_case"] == 11.0
     assert summary["avg_latency_ms_per_case"] == 125.0
+    assert summary["p95_latency_ms"] == 150.0
+    assert summary["p95_sql_count"] == 4.0
 
 
 def test_memory_retrieval_eval_reports_improvement_and_zero_pollution() -> None:
@@ -1183,6 +1403,255 @@ def test_memory_retrieval_eval_reports_improvement_and_zero_pollution() -> None:
     assert summary["memory_disabled_top1_rate"] == 0.5
     assert summary["memory_hit_improvement"] == 0.5
     assert summary["memory_pollution_ok"] is True
+
+
+def test_memory_treatment_suite_requires_enabled_lift_and_memory_read_trace() -> None:
+    disabled = [
+        {
+            "case_id": "memory_case",
+            "intent_ok": 1,
+            "anomaly_ok": 1,
+            "top1_ok": 0,
+            "top3_ok": 0,
+            "dominant_top1_ok": 0,
+            "root_cause_set_recall": 0.0,
+            "root_cause_set_precision": 0.0,
+            "weighted_explanation_coverage": 0.0,
+            "top3_contains_all_major_causes": 0,
+            "evidence_coverage": 1.0,
+            "sql_safe": 1,
+            "reflection_repair_ok": 1,
+            "report_traceable_ok": 1,
+            "memory_pollution_ok": 1,
+            "no_anomaly_task_ok": 1,
+            "detail": {"scenario_family": "memory_treatment"},
+        }
+    ]
+    enabled = [
+        {
+            **disabled[0],
+            "top1_ok": 1,
+            "top3_ok": 1,
+            "dominant_top1_ok": 1,
+            "root_cause_set_recall": 1.0,
+            "root_cause_set_precision": 1.0,
+            "weighted_explanation_coverage": 1.0,
+            "top3_contains_all_major_causes": 1,
+            "detail": {"scenario_family": "memory_treatment", "tool_sequence": ["read_priors"]},
+        }
+    ]
+
+    summary = _eval_summary(
+        case_scores=disabled,
+        memory_case_scores=enabled,
+        settings=Settings(
+            db_dsn="mysql+pymysql://app:app@localhost/db",
+            readonly_db_dsn="mysql+pymysql://reader:reader@localhost/db",
+            llm_provider="openai",
+            llm_model="gpt-test",
+            llm_api_key="key",
+        ),
+        eval_suite="memory-treatment",
+        configured_case_total=1,
+        complete=True,
+    )
+
+    assert summary["memory_treatment_gate"] is True
+    assert summary["memory_disabled_top1_rate"] == 0.0
+    assert summary["memory_enabled_top1_rate"] == 1.0
+    assert summary["thresholds_met"] is True
+
+
+def test_memory_treatment_suite_rejects_enabled_lift_without_memory_read_trace() -> None:
+    disabled = [
+        {
+            "case_id": "memory_case",
+            "intent_ok": 1,
+            "anomaly_ok": 1,
+            "top1_ok": 0,
+            "top3_ok": 0,
+            "dominant_top1_ok": 0,
+            "root_cause_set_recall": 0.0,
+            "root_cause_set_precision": 0.0,
+            "weighted_explanation_coverage": 0.0,
+            "top3_contains_all_major_causes": 0,
+            "evidence_coverage": 1.0,
+            "sql_safe": 1,
+            "reflection_repair_ok": 1,
+            "report_traceable_ok": 1,
+            "memory_pollution_ok": 1,
+            "no_anomaly_task_ok": 1,
+            "detail": {"scenario_family": "memory_treatment"},
+        }
+    ]
+    enabled = [
+        {
+            **disabled[0],
+            "top1_ok": 1,
+            "top3_ok": 1,
+            "dominant_top1_ok": 1,
+            "root_cause_set_recall": 1.0,
+            "root_cause_set_precision": 1.0,
+            "weighted_explanation_coverage": 1.0,
+            "top3_contains_all_major_causes": 1,
+            "detail": {"scenario_family": "memory_treatment", "tool_sequence": ["fetch_related_signal"]},
+        }
+    ]
+
+    summary = _eval_summary(
+        case_scores=disabled,
+        memory_case_scores=enabled,
+        settings=Settings(
+            db_dsn="mysql+pymysql://app:app@localhost/db",
+            readonly_db_dsn="mysql+pymysql://reader:reader@localhost/db",
+            llm_provider="openai",
+            llm_model="gpt-test",
+            llm_api_key="key",
+        ),
+        eval_suite="memory-treatment",
+        configured_case_total=1,
+        complete=True,
+    )
+
+    assert summary["memory_treatment_gate"] is False
+    assert summary["thresholds_met"] is False
+
+
+def test_memory_treatment_suite_rejects_disabled_side_bad_evidence_or_pollution() -> None:
+    disabled = [
+        {
+            "case_id": "memory_case",
+            "intent_ok": 1,
+            "anomaly_ok": 1,
+            "top1_ok": 0,
+            "top3_ok": 0,
+            "dominant_top1_ok": 0,
+            "root_cause_set_recall": 0.0,
+            "root_cause_set_precision": 0.0,
+            "weighted_explanation_coverage": 0.0,
+            "top3_contains_all_major_causes": 0,
+            "evidence_coverage": 0.0,
+            "sql_safe": 1,
+            "reflection_repair_ok": 1,
+            "report_traceable_ok": 1,
+            "memory_pollution_ok": 0,
+            "no_anomaly_task_ok": 1,
+            "detail": {"scenario_family": "memory_treatment"},
+        }
+    ]
+    enabled = [
+        {
+            **disabled[0],
+            "top1_ok": 1,
+            "top3_ok": 1,
+            "dominant_top1_ok": 1,
+            "root_cause_set_recall": 1.0,
+            "root_cause_set_precision": 1.0,
+            "weighted_explanation_coverage": 1.0,
+            "top3_contains_all_major_causes": 1,
+            "evidence_coverage": 1.0,
+            "memory_pollution_ok": 1,
+            "detail": {"scenario_family": "memory_treatment", "tool_sequence": ["read_priors"]},
+        }
+    ]
+
+    summary = _eval_summary(
+        case_scores=disabled,
+        memory_case_scores=enabled,
+        settings=Settings(
+            db_dsn="mysql+pymysql://app:app@localhost/db",
+            readonly_db_dsn="mysql+pymysql://reader:reader@localhost/db",
+            llm_provider="openai",
+            llm_model="gpt-test",
+            llm_api_key="key",
+        ),
+        eval_suite="memory-treatment",
+        configured_case_total=1,
+        complete=True,
+    )
+
+    assert summary["memory_treatment_gate"] is False
+    assert summary["thresholds_met"] is False
+
+
+def test_memory_treatment_suite_rejects_partial_enabled_success() -> None:
+    disabled = [
+        {
+            "case_id": "memory_case_1",
+            "intent_ok": 1,
+            "anomaly_ok": 1,
+            "top1_ok": 0,
+            "top3_ok": 0,
+            "dominant_top1_ok": 0,
+            "root_cause_set_recall": 0.0,
+            "root_cause_set_precision": 0.0,
+            "weighted_explanation_coverage": 0.0,
+            "top3_contains_all_major_causes": 0,
+            "evidence_coverage": 1.0,
+            "sql_safe": 1,
+            "reflection_repair_ok": 1,
+            "report_traceable_ok": 1,
+            "memory_pollution_ok": 1,
+            "no_anomaly_task_ok": 1,
+            "detail": {"scenario_family": "memory_treatment"},
+        },
+        {
+            "case_id": "memory_case_2",
+            "intent_ok": 1,
+            "anomaly_ok": 1,
+            "top1_ok": 0,
+            "top3_ok": 0,
+            "dominant_top1_ok": 0,
+            "root_cause_set_recall": 0.0,
+            "root_cause_set_precision": 0.0,
+            "weighted_explanation_coverage": 0.0,
+            "top3_contains_all_major_causes": 0,
+            "evidence_coverage": 1.0,
+            "sql_safe": 1,
+            "reflection_repair_ok": 1,
+            "report_traceable_ok": 1,
+            "memory_pollution_ok": 1,
+            "no_anomaly_task_ok": 1,
+            "detail": {"scenario_family": "memory_treatment"},
+        },
+    ]
+    enabled = [
+        {
+            **disabled[0],
+            "top1_ok": 1,
+            "top3_ok": 1,
+            "dominant_top1_ok": 1,
+            "root_cause_set_recall": 1.0,
+            "root_cause_set_precision": 1.0,
+            "weighted_explanation_coverage": 1.0,
+            "top3_contains_all_major_causes": 1,
+            "detail": {"scenario_family": "memory_treatment", "tool_sequence": ["read_priors"]},
+        },
+        {
+            **disabled[1],
+            "detail": {"scenario_family": "memory_treatment", "tool_sequence": ["read_priors"]},
+        },
+    ]
+
+    summary = _eval_summary(
+        case_scores=disabled,
+        memory_case_scores=enabled,
+        settings=Settings(
+            db_dsn="mysql+pymysql://app:app@localhost/db",
+            readonly_db_dsn="mysql+pymysql://reader:reader@localhost/db",
+            llm_provider="openai",
+            llm_model="gpt-test",
+            llm_api_key="key",
+        ),
+        eval_suite="memory-treatment",
+        configured_case_total=2,
+        complete=True,
+    )
+
+    assert summary["memory_enabled_top1_rate"] == 0.5
+    assert summary["memory_disabled_top1_rate"] == 0.0
+    assert summary["memory_treatment_gate"] is False
+    assert summary["thresholds_met"] is False
 
 
 def test_eval_on_case_complete_callback_fires_per_case(tmp_path: Path) -> None:
@@ -1565,6 +2034,12 @@ def _cases_file(tmp_path: Path) -> Path:
     return path
 
 
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    assert all(isinstance(row, dict) for row in rows)
+    return rows
+
+
 def _case_id_from_run_id(run_id: str) -> str:
     value = run_id
     if value.endswith("-r2") or value.endswith("-r3"):
@@ -1595,6 +2070,7 @@ def _gt(
     root_cause_type: str | None = "campaign_traffic_drop",
     dimension: str | None = "channel",
     element: str | None = "paid_ads",
+    root_causes: tuple[RootCauseTruth, ...] = (),
 ) -> GroundTruth:
     return GroundTruth(
         case_id=case_id,
@@ -1604,11 +2080,13 @@ def _gt(
         root_cause_type=root_cause_type,
         dimension=dimension,
         element=element,
+        root_causes=root_causes,
     )
 
 
 def _candidate(
     *,
+    root_cause_type: str = "campaign_traffic_drop",
     dimension: str = "channel",
     element: str = "paid_ads",
     contribution_pct: float = 0.9,
@@ -1616,7 +2094,7 @@ def _candidate(
     dimension_elements: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     candidate = {
-        "root_cause_type": "campaign_traffic_drop",
+        "root_cause_type": root_cause_type,
         "dimension": dimension,
         "element": element,
         "contribution_pct": contribution_pct,
@@ -1633,12 +2111,16 @@ def _candidate(
     return candidate
 
 
-def _artifacts(run_id: str, *, selected: dict[str, Any]) -> PersistedArtifacts:
+def _artifacts(run_id: str, *, selected: dict[str, Any], candidates: list[dict[str, Any]] | None = None) -> PersistedArtifacts:
     evidence_ids = [str(value) for value in selected.get("evidence_ids", [])]
     if evidence_ids and all(value.startswith("run-1:") for value in evidence_ids):
         evidence_ids = [f"{run_id}:{value.split(':', maxsplit=1)[1]}" for value in evidence_ids]
     run_selected = {**selected, "evidence_ids": evidence_ids}
-    e4_summary = {"selected_candidate": run_selected, "candidates": [run_selected]}
+    run_candidates = [
+        {**candidate, "evidence_ids": _run_evidence_ids(candidate, run_id)}
+        for candidate in (candidates or [selected])
+    ]
+    e4_summary = _e4_summary(run_selected, candidates=run_candidates)
     if run_selected.get("explanatory_power") is not None:
         e4_summary["ranker"] = "adtributor_internal"
     evidences = [
@@ -1666,6 +2148,28 @@ def _artifacts(run_id: str, *, selected: dict[str, Any]) -> PersistedArtifacts:
         tasks=[{"task_id": f"{run_id}:task"}],
         report=report,
     )
+
+
+def _e4_summary(candidate: dict[str, Any], *, candidates: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    candidate_list = candidates or [candidate]
+    return {
+        "contribution_set": {
+            "selected_candidate": candidate,
+            "candidates": candidate_list,
+            "evidence_ids": list(candidate.get("evidence_ids", [])),
+            "factor_graph": {},
+            "selection_evidence_id": None,
+        },
+        "selected_candidate": candidate,
+        "candidates": candidate_list,
+    }
+
+
+def _run_evidence_ids(candidate: dict[str, Any], run_id: str) -> list[str]:
+    evidence_ids = [str(value) for value in candidate.get("evidence_ids", [])]
+    if evidence_ids and all(value.startswith("run-1:") for value in evidence_ids):
+        return [f"{run_id}:{value.split(':', maxsplit=1)[1]}" for value in evidence_ids]
+    return evidence_ids
 
 
 def _no_anomaly_artifacts(
@@ -1737,10 +2241,18 @@ class _EvalRepository:
         self.eval_runs: list[dict[str, Any]] = []
         self.eval_run_updates: list[dict[str, Any]] = []
         self.case_results: list[dict[str, Any]] = []
+        self.gt_scopes: list[tuple[str | None, str | None]] = []
         self.closed = False
 
-    def get_ground_truth_cases(self, case_ids: list[str]) -> dict[str, dict[str, Any]]:
+    def get_ground_truth_cases(
+        self,
+        case_ids: list[str],
+        *,
+        split: str | None = None,
+        profile: str | None = None,
+    ) -> dict[str, dict[str, Any]]:
         self.gt_requests.append(case_ids)
+        self.gt_scopes.append((split, profile))
         rows = {}
         for case_id in case_ids:
             if case_id in self.missing_gt:

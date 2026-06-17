@@ -24,7 +24,8 @@ from metric_rca.evals.scorer import (
 )
 
 
-DEFAULT_CASES_PATH = Path(__file__).with_name("cases.jsonl")
+DEFAULT_CASES_PATH = Path(__file__).with_name("regression_public_cases.jsonl")
+DEFAULT_PRIVATE_GROUND_TRUTH_PATH = Path(__file__).with_name("regression_private_ground_truth.jsonl")
 DEFAULT_OUTPUT_DIR = Path("eval_out")
 DEFAULT_HTTP_EVAL_MAX_ATTEMPTS = 3
 DEFAULT_HTTP_EVAL_RETRY_SECONDS = 20.0
@@ -45,22 +46,77 @@ REQUIRED_HTTP_CASE_FIELDS = frozenset(
         "expected_business_date",
     }
 )
+PUBLIC_HTTP_CASE_FIELDS = frozenset({"case_id", "question", "tags"})
+PRIVATE_HTTP_GROUND_TRUTH_FIELDS = frozenset(
+    {
+        "case_id",
+        "expected_metric_id",
+        "expected_anomaly",
+        "expected_root_cause_type",
+        "expected_dimension",
+        "expected_element",
+        "expected_business_date",
+    }
+)
 
 
 def load_http_cases(path: Path = DEFAULT_CASES_PATH) -> list[dict[str, Any]]:
     cases: list[dict[str, Any]] = []
+    public_rows: list[dict[str, Any]] = []
     for line_number, line in enumerate(path.read_text().splitlines(), start=1):
         if not line.strip():
             continue
         payload = json.loads(line)
-        if not isinstance(payload, dict) or not REQUIRED_HTTP_CASE_FIELDS <= set(payload):
+        if not isinstance(payload, dict):
             raise EvalRuntimeError("EVAL_CASE_INVALID", f"invalid HTTP eval case at line {line_number}")
-        if not isinstance(payload["case_id"], str) or not isinstance(payload["question"], str):
-            raise EvalRuntimeError("EVAL_CASE_INVALID", f"invalid HTTP eval case at line {line_number}")
-        cases.append(payload)
+        if REQUIRED_HTTP_CASE_FIELDS <= set(payload):
+            if not isinstance(payload["case_id"], str) or not isinstance(payload["question"], str):
+                raise EvalRuntimeError("EVAL_CASE_INVALID", f"invalid HTTP eval case at line {line_number}")
+            cases.append(payload)
+            continue
+        if set(payload) == PUBLIC_HTTP_CASE_FIELDS:
+            public_rows.append(payload)
+            continue
+        raise EvalRuntimeError("EVAL_CASE_INVALID", f"invalid HTTP eval case at line {line_number}")
+    if public_rows and cases:
+        raise EvalRuntimeError("EVAL_CASE_INVALID", "mixed public and combined HTTP eval cases")
+    if public_rows:
+        cases = _merge_public_cases_with_private_ground_truth(public_rows, DEFAULT_PRIVATE_GROUND_TRUTH_PATH)
     if not cases:
         raise EvalRuntimeError("EVAL_CASE_INVALID", "no HTTP eval cases configured")
     return cases
+
+
+def _merge_public_cases_with_private_ground_truth(
+    public_rows: list[dict[str, Any]],
+    private_ground_truth_path: Path,
+) -> list[dict[str, Any]]:
+    ground_truth_by_id: dict[str, dict[str, Any]] = {}
+    for line_number, line in enumerate(private_ground_truth_path.read_text().splitlines(), start=1):
+        if not line.strip():
+            continue
+        payload = json.loads(line)
+        if not isinstance(payload, dict) or set(payload) != PRIVATE_HTTP_GROUND_TRUTH_FIELDS:
+            raise EvalRuntimeError("EVAL_CASE_INVALID", f"invalid private HTTP ground truth at line {line_number}")
+        case_id = payload.get("case_id")
+        if not isinstance(case_id, str) or not case_id:
+            raise EvalRuntimeError("EVAL_CASE_INVALID", f"invalid HTTP eval case at line {line_number}")
+        ground_truth_by_id[case_id] = payload
+
+    merged: list[dict[str, Any]] = []
+    for row in public_rows:
+        case_id = str(row["case_id"])
+        ground_truth = ground_truth_by_id.get(case_id)
+        if ground_truth is None:
+            raise EvalRuntimeError("EVAL_GROUND_TRUTH_MISSING", case_id)
+        merged.append(
+            {
+                "case_id": case_id,
+                "question": row["question"],
+                **{key: value for key, value in ground_truth.items() if key != "case_id"},
+            }
+        )
+    return merged
 
 
 def run_http_eval(

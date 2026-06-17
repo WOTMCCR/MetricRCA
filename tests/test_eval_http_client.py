@@ -492,7 +492,9 @@ def test_eval_http_client_source_does_not_import_backend_runner_or_repositories(
     assert "repositories" not in source
 
 
-def test_cases_jsonl_embeds_expected_fields_for_http_eval() -> None:
+def test_public_cases_keep_expected_fields_private_for_http_eval() -> None:
+    from metric_rca.evals.client import load_http_cases
+
     required = {
         "expected_metric_id",
         "expected_anomaly",
@@ -501,14 +503,25 @@ def test_cases_jsonl_embeds_expected_fields_for_http_eval() -> None:
         "expected_element",
         "expected_business_date",
     }
-    rows = [
+    public_rows = [
         json.loads(line)
-        for line in Path("metric_rca/evals/cases.jsonl").read_text().splitlines()
+        for line in Path("metric_rca/evals/regression_public_cases.jsonl").read_text().splitlines()
         if line.strip()
     ]
+    private_rows = [
+        json.loads(line)
+        for line in Path("metric_rca/evals/regression_private_ground_truth.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    loaded_cases = load_http_cases()
 
-    assert len(rows) == 28
-    assert all(required <= set(row) for row in rows)
+    assert len(public_rows) == 28
+    assert len(private_rows) == 28
+    assert len(loaded_cases) == 28
+    assert all(set(row) == {"case_id", "question", "tags"} for row in public_rows)
+    assert all(required.isdisjoint(row) for row in public_rows)
+    assert [case["case_id"] for case in loaded_cases] == [row["case_id"] for row in public_rows]
+    assert all(required <= set(case) for case in loaded_cases)
 
 
 def test_makefile_has_eval_http_target() -> None:

@@ -41,6 +41,9 @@ def build_report_from_persisted_artifacts(
     summary = e4.get("result_summary") or {}
     if not isinstance(summary, dict):
         return None
+    runtime_version = int(agent_run.get("runtime_version") or 3)
+    if runtime_version >= 3 and not isinstance(summary.get("contribution_set"), dict):
+        return None
 
     top_candidate = project_candidate_from_e4(summary)
     numeric_claims = numeric_claims_from_e4(summary, str(e4.get("evidence_id") or ""))
@@ -78,7 +81,8 @@ def project_candidate_from_e4(e4_result_summary: dict[str, Any]) -> dict[str, An
 
 
 def project_candidates_from_e4(e4_result_summary: dict[str, Any]) -> list[dict[str, Any]]:
-    candidates = e4_result_summary.get("candidates")
+    contribution_set = e4_result_summary.get("contribution_set")
+    candidates = contribution_set.get("candidates") if isinstance(contribution_set, dict) else None
     if not isinstance(candidates, list):
         return []
 
@@ -162,10 +166,13 @@ def _no_anomaly_report(
 
 
 def _selected_candidate(e4_result_summary: dict[str, Any]) -> dict[str, Any] | None:
-    selected = e4_result_summary.get("selected_candidate")
-    if not isinstance(selected, dict):
-        return None
-    return selected
+    contribution_set = e4_result_summary.get("contribution_set")
+    if isinstance(contribution_set, dict):
+        selected = contribution_set.get("selected_candidate")
+        if not isinstance(selected, dict):
+            return None
+        return selected
+    return None
 
 
 def _evidence_ids(candidate: dict[str, Any] | None) -> list[str]:

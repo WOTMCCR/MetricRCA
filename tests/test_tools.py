@@ -199,6 +199,31 @@ class RejectingRenderer:
         return SQLPlan(sql="SELECT * FROM fact_order", sql_hash="bad")
 
 
+def _with_contribution_set(summary: dict[str, Any]) -> dict[str, Any]:
+    selected = summary.get("selected_candidate")
+    if not isinstance(selected, dict):
+        return summary
+    candidates = summary.get("candidates")
+    if not isinstance(candidates, list):
+        candidates = [selected]
+    evidence_ids: list[str] = []
+    for candidate in [selected, *candidates]:
+        for evidence_id in candidate.get("evidence_ids", []):
+            if evidence_id not in evidence_ids:
+                evidence_ids.append(evidence_id)
+    return {
+        **summary,
+        "contribution_set": {
+            "selected_candidate": selected,
+            "candidates": candidates,
+            "evidence_ids": evidence_ids,
+            "factor_graph": {},
+            "selection_evidence_id": None,
+        },
+        "candidates": candidates,
+    }
+
+
 class FailingExecutionRepository(SpyRepository):
     def __init__(self, error: Exception) -> None:
         super().__init__()
@@ -207,6 +232,22 @@ class FailingExecutionRepository(SpyRepository):
     def execute_plan(self, plan: SQLPlan, *, run_id: str):
         self.executed.append(plan)
         raise self.error
+
+
+class EmptyContributionRepository(SpyRepository):
+    def __init__(self, *, empty_side: str) -> None:
+        super().__init__()
+        self.empty_side = empty_side
+
+    def execute_plan(self, plan: SQLPlan, *, run_id: str):
+        if "GROUP BY fact_order.channel" in plan.sql:
+            is_baseline = "business_date IN" in plan.sql
+            if (self.empty_side == "current" and not is_baseline) or (
+                self.empty_side == "baseline" and is_baseline
+            ):
+                self.executed.append(plan)
+                return type("QueryResult", (), {"rows": [], "row_count": 0, "latency_ms": 1})()
+        return super().execute_plan(plan, run_id=run_id)
 
 
 class FailingEvidenceRepository(SpyRepository):
@@ -1026,7 +1067,56 @@ def test_calculate_contribution_emits_e4_from_current_run_evidence() -> None:
         "run-1:E4",
     ]
     assert result.evidences[0].result_summary["selected_candidate"]["element"] == "paid_ads"
+    contribution_set = result.evidences[0].result_summary["contribution_set"]
+    assert contribution_set["selected_candidate"] == result.evidences[0].result_summary["selected_candidate"]
+    assert contribution_set["candidates"] == result.evidences[0].result_summary["candidates"]
+    assert contribution_set["evidence_ids"] == ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"]
+    assert contribution_set["factor_graph"]["decomposition"]["largest_drop_factor"] == "uv"
     assert any("fact_traffic" in plan.sql for plan in repo.executed)
+
+
+def test_calculate_contribution_empty_current_data_fails_typed_without_e4() -> None:
+    repo = EmptyContributionRepository(empty_side="current")
+
+    result = calculate_contribution(
+        CalculateContributionArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            dimension="channel",
+            element="paid_ads",
+            evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == "NO_CURRENT_DATA"
+    assert result.candidates == []
+    assert "run-1:E4" not in repo.persisted_evidence
+
+
+def test_calculate_contribution_empty_baseline_data_fails_typed_without_e4() -> None:
+    repo = EmptyContributionRepository(empty_side="baseline")
+
+    result = calculate_contribution(
+        CalculateContributionArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            dimension="channel",
+            element="paid_ads",
+            evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == "INSUFFICIENT_BASELINE_DATA"
+    assert result.candidates == []
+    assert "run-1:E4" not in repo.persisted_evidence
 
 
 def test_calculate_contribution_accepts_selected_non_top_candidate_with_signal_evidence() -> None:
@@ -1371,6 +1461,9 @@ def test_rank_root_causes_invokes_internal_adtributor_and_updates_e4() -> None:
             }
         },
     }
+    repo.persisted_evidence["run-1:E4"]["result_summary"] = _with_contribution_set(
+        repo.persisted_evidence["run-1:E4"]["result_summary"]
+    )
     deps = SimpleNamespace(
         repository=repo,
         metric_service=StaticMetricService(),
@@ -1393,6 +1486,58 @@ def test_rank_root_causes_invokes_internal_adtributor_and_updates_e4() -> None:
     assert repo.evidence_rows[-1]["result_summary"]["selected_candidate"]["explanatory_power"] is not None
     forbidden_alias = "E" + "_adt"
     assert all(not evidence_id.endswith(f":{forbidden_alias}") for evidence_id in repo.persisted_evidence)
+
+
+def test_rank_root_causes_uses_contribution_set_when_legacy_selected_candidate_disagrees() -> None:
+    repo = SpyRepository()
+    paid_ads = {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "contribution_pct": 0.8,
+        "signal_severity": 0.8,
+        "evidence_support": 1.0,
+        "reflection_factor": 1.0,
+        "eng_confidence": 0.8,
+        "verdict": "confirmed",
+        "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"],
+    }
+    organic = {**paid_ads, "element": "organic"}
+    repo.persisted_evidence["run-1:E4"] = {
+        "evidence_id": "run-1:E4",
+        "run_id": "run-1",
+        "query_spec": {},
+        "sql_text": "SELECT order_amount FROM fact_order WHERE business_date = :target_date LIMIT 1000",
+        "sql_hash": "e4" * 32,
+        "guard_status": "passed",
+        "data_source": "fact_order",
+        "result_summary": {
+            "selected_candidate": paid_ads,
+            "candidates": [paid_ads],
+            "contribution_set": {
+                "selected_candidate": organic,
+                "candidates": [organic],
+                "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4"],
+                "factor_graph": {},
+                "selection_evidence_id": None,
+            },
+        },
+    }
+    deps = SimpleNamespace(
+        repository=repo,
+        metric_service=StaticMetricService(),
+        renderer=None,
+        settings=Settings(db_dsn="sqlite://", readonly_db_dsn="sqlite://"),
+        trace_writer=None,
+    )
+    rank_tool = next(tool for tool in build_metric_rca_tools(dependencies=deps, run_id="run-1") if tool.name == "rank_root_causes")
+
+    result = rank_tool.invoke({"metric_id": "gmv", "target_date": date(2026, 6, 5)})
+
+    assert result["observation"]["ok"] is True
+    selected = repo.persisted_evidence["run-1:E4"]["result_summary"]["selected_candidate"]
+    assert selected["element"] == "organic"
+    assert repo.evidence_rows[-1]["result_summary"]["selected_candidate"]["element"] == "organic"
 
 
 def test_rank_root_causes_preserves_signal_verified_selection_when_adtributor_applies() -> None:
@@ -1465,6 +1610,9 @@ def test_rank_root_causes_preserves_signal_verified_selection_when_adtributor_ap
             ],
         },
     }
+    repo.persisted_evidence["run-1:E4"]["result_summary"] = _with_contribution_set(
+        repo.persisted_evidence["run-1:E4"]["result_summary"]
+    )
     deps = SimpleNamespace(
         repository=repo,
         metric_service=StaticMetricService(),
@@ -1521,6 +1669,9 @@ def test_rank_root_causes_ignores_rejected_adtributor_evidence() -> None:
             }
         },
     }
+    repo.persisted_evidence["run-1:E4"]["result_summary"] = _with_contribution_set(
+        repo.persisted_evidence["run-1:E4"]["result_summary"]
+    )
     deps = SimpleNamespace(
         repository=repo,
         metric_service=StaticMetricService(),
@@ -1564,6 +1715,9 @@ def test_rank_root_causes_records_adtributor_not_applicable_without_silent_fallb
             }
         },
     }
+    repo.persisted_evidence["run-1:E4"]["result_summary"] = _with_contribution_set(
+        repo.persisted_evidence["run-1:E4"]["result_summary"]
+    )
     deps = SimpleNamespace(
         repository=repo,
         metric_service=StaticMetricService(),
@@ -1644,6 +1798,9 @@ def test_rank_root_causes_preserves_e4_selection_when_adtributor_not_applicable(
             ],
         },
     }
+    repo.persisted_evidence["run-1:E4"]["result_summary"] = _with_contribution_set(
+        repo.persisted_evidence["run-1:E4"]["result_summary"]
+    )
     deps = SimpleNamespace(
         repository=repo,
         metric_service=StaticMetricService(),
@@ -1685,6 +1842,9 @@ def test_rank_root_causes_requires_persisted_e4_sql_text() -> None:
             }
         },
     }
+    repo.persisted_evidence["run-1:E4"]["result_summary"] = _with_contribution_set(
+        repo.persisted_evidence["run-1:E4"]["result_summary"]
+    )
     deps = SimpleNamespace(
         repository=repo,
         metric_service=StaticMetricService(),

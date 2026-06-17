@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any
 
-from metric_rca.domain.models import Evidence, Observation, QuerySpec, RootCauseCandidate, TimeRange
+from metric_rca.domain.models import ContributionSet, Evidence, Observation, QuerySpec, RootCauseCandidate, TimeRange
 from metric_rca.runtime.tool_models import ToolExecutionResult
 from metric_rca.services.adtributor_service import AdtributorElement, attribute_elements
 from metric_rca.services.attribution_service import rank_root_causes as _rank_candidates
@@ -23,18 +23,18 @@ def rank_from_persisted_e4(
     e4 = repository.get_evidence(run_id=run_id, evidence_id=e4_id)
     if e4 is None:
         return _error("rank_root_causes", "ATTRIBUTION_COVERAGE_LOW", "E4 evidence is required before ranking")
-    candidates = [
-        RootCauseCandidate.model_validate(candidate)
-        for candidate in (e4.get("result_summary") or {}).get("candidates", [])
-    ]
-    if not candidates:
-        selected = (e4.get("result_summary") or {}).get("selected_candidate")
-        if isinstance(selected, dict):
-            candidates = [RootCauseCandidate.model_validate(selected)]
-    if not candidates:
-        return _error("rank_root_causes", "ATTRIBUTION_COVERAGE_LOW", "persisted E4 has no candidates")
     e4_summary = dict(e4.get("result_summary") or {})
-    persisted_selected_candidate = _persisted_selected_candidate(e4_summary)
+    contribution_set = _load_canonical_contribution_set(e4_summary)
+    if isinstance(contribution_set, str):
+        return _error(
+            "rank_root_causes",
+            contribution_set,
+            "persisted E4 contribution_set is required and must match derived projection fields",
+        )
+    candidates = list(contribution_set.candidates)
+    if not candidates:
+        return _error("rank_root_causes", "ATTRIBUTION_COVERAGE_LOW", "persisted E4 contribution_set has no candidates")
+    persisted_selected_candidate = contribution_set.selected_candidate
     candidates, adtributor_audit = _enhance_with_adtributor(
         repository=repository,
         settings=settings,
@@ -71,8 +71,14 @@ def rank_from_persisted_e4(
     sql_text = e4.get("sql_text")
     if not sql_text:
         return _error("rank_root_causes", "EVIDENCE_MISSING", "persisted E4 sql_text is required before ranking")
-    e4_summary["selected_candidate"] = selected_candidate.model_dump(mode="json")
-    e4_summary["candidates"] = [candidate.model_dump(mode="json") for candidate in candidates]
+    contribution_set = _with_ranked_contribution_set(
+        contribution_set=contribution_set,
+        selected_candidate=selected_candidate,
+        candidates=candidates,
+    )
+    e4_summary["contribution_set"] = contribution_set.model_dump(mode="json")
+    e4_summary["selected_candidate"] = contribution_set.selected_candidate.model_dump(mode="json")
+    e4_summary["candidates"] = [candidate.model_dump(mode="json") for candidate in contribution_set.candidates]
     e4_summary["ranker"] = "adtributor_internal" if any(c.explanatory_power is not None for c in candidates) else "v1"
     e4_summary.update(adtributor_audit)
     _update_e4_summary(repository=repository, run_id=run_id, evidence_id=e4_id, result_summary=e4_summary)
@@ -89,8 +95,9 @@ def rank_from_persisted_e4(
         result_summary={
             "metric_id": metric_id,
             "ranker": e4_summary["ranker"],
-            "selected_candidate": selected_candidate.model_dump(mode="json"),
-            "candidates": [c.model_dump(mode="json") for c in candidates],
+            "contribution_set": contribution_set.model_dump(mode="json"),
+            "selected_candidate": contribution_set.selected_candidate.model_dump(mode="json"),
+            "candidates": [c.model_dump(mode="json") for c in contribution_set.candidates],
             **adtributor_audit,
         },
         data_source=e4["data_source"],
@@ -115,22 +122,45 @@ def rank_from_persisted_e4(
             ok=True,
             payload={
                 "ranker": e4_summary["ranker"],
-                "selected_candidate": selected_candidate.model_dump(mode="json"),
-                "candidates": [c.model_dump(mode="json") for c in candidates],
+                "contribution_set": contribution_set.model_dump(mode="json"),
+                "selected_candidate": contribution_set.selected_candidate.model_dump(mode="json"),
+                "candidates": [c.model_dump(mode="json") for c in contribution_set.candidates],
                 **adtributor_audit,
             },
             evidence_ids=[evidence.evidence_id],
         ),
         evidence_ids=[evidence.evidence_id],
-        candidates=candidates,
+        candidates=contribution_set.candidates,
     )
 
 
-def _persisted_selected_candidate(e4_summary: dict[str, Any]) -> RootCauseCandidate | None:
-    selected = e4_summary.get("selected_candidate")
-    if not isinstance(selected, dict):
-        return None
-    return RootCauseCandidate.model_validate(selected)
+def _load_canonical_contribution_set(e4_summary: dict[str, Any]) -> ContributionSet | str:
+    raw = e4_summary.get("contribution_set")
+    if not isinstance(raw, dict):
+        return "CONTRIBUTION_SET_MISSING"
+    return ContributionSet.model_validate(raw)
+
+
+def _with_ranked_contribution_set(
+    *,
+    contribution_set: ContributionSet,
+    selected_candidate: RootCauseCandidate,
+    candidates: list[RootCauseCandidate],
+) -> ContributionSet:
+    evidence_ids = _ordered_unique(
+        [
+            *contribution_set.evidence_ids,
+            *selected_candidate.evidence_ids,
+            *[evidence_id for candidate in candidates for evidence_id in candidate.evidence_ids],
+        ]
+    )
+    return contribution_set.model_copy(
+        update={
+            "selected_candidate": selected_candidate,
+            "candidates": candidates,
+            "evidence_ids": evidence_ids,
+        }
+    )
 
 
 def _same_candidate_element(left: RootCauseCandidate, right: RootCauseCandidate) -> bool:
@@ -299,6 +329,15 @@ def _adtributor_elements_from_persisted_evidence(*, repository: Any, run_id: str
 
 def _update_e4_summary(*, repository: Any, run_id: str, evidence_id: str, result_summary: dict[str, Any]) -> None:
     repository.update_evidence_result_summary(run_id=run_id, evidence_id=evidence_id, result_summary=result_summary)
+
+
+def _ordered_unique(values: list[str]) -> list[str]:
+    unique: list[str] = []
+    for value in values:
+        text = str(value)
+        if text not in unique:
+            unique.append(text)
+    return unique
 
 
 def _error(action_name: str, error_code: str, message: str) -> ToolExecutionResult:
