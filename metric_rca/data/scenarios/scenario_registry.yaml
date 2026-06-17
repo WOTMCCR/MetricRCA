@@ -3,7 +3,7 @@ suites:
   regression:
     description: v3 iteration 4 regression eval slice with public questions and private answers.
     seed_profile: regression
-    case_count: 28
+    case_count: 44
     public_cases_file: ../../evals/regression_public_cases.jsonl
     private_ground_truth_file: ../../evals/regression_private_ground_truth.jsonl
     data_slice:
@@ -13,7 +13,7 @@ suites:
   acceptance:
     description: Opt-in acceptance data profile with production-scale cardinality; currently reuses regression questions until blind cases land.
     seed_profile: acceptance
-    case_count: 28
+    case_count: 44
     public_cases_file: ../../evals/regression_public_cases.jsonl
     private_ground_truth_file: ../../evals/regression_private_ground_truth.jsonl
     data_slice:
@@ -40,7 +40,7 @@ suites:
   stress:
     description: Larger deterministic stress data profile for performance checks.
     seed_profile: stress
-    case_count: 28
+    case_count: 44
     public_cases_file: ../../evals/regression_public_cases.jsonl
     private_ground_truth_file: ../../evals/regression_private_ground_truth.jsonl
     data_slice:

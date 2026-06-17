@@ -15,7 +15,7 @@ from uuid import uuid4
 
 import httpx
 
-from metric_rca.evals.models import EvalRuntimeError, GroundTruth, PersistedArtifacts
+from metric_rca.evals.models import EvalRuntimeError, GroundTruth, PersistedArtifacts, RootCauseTruth
 from metric_rca.evals.scorer import (
     dangerous_sql_blocked,
     score_case,
@@ -46,6 +46,7 @@ REQUIRED_HTTP_CASE_FIELDS = frozenset(
         "expected_business_date",
     }
 )
+OPTIONAL_HTTP_CASE_FIELDS = frozenset({"root_causes"})
 PUBLIC_HTTP_CASE_FIELDS = frozenset({"case_id", "question", "tags"})
 PRIVATE_HTTP_GROUND_TRUTH_FIELDS = frozenset(
     {
@@ -58,7 +59,8 @@ PRIVATE_HTTP_GROUND_TRUTH_FIELDS = frozenset(
         "expected_business_date",
     }
 )
-ANSWER_BEARING_HTTP_FIELDS = PRIVATE_HTTP_GROUND_TRUTH_FIELDS - {"case_id"}
+OPTIONAL_PRIVATE_HTTP_GROUND_TRUTH_FIELDS = frozenset({"root_causes"})
+ANSWER_BEARING_HTTP_FIELDS = (PRIVATE_HTTP_GROUND_TRUTH_FIELDS | OPTIONAL_PRIVATE_HTTP_GROUND_TRUTH_FIELDS) - {"case_id"}
 
 
 def load_http_cases(path: Path = DEFAULT_CASES_PATH) -> list[dict[str, Any]]:
@@ -94,7 +96,11 @@ def _merge_public_cases_with_private_ground_truth(
         if not line.strip():
             continue
         payload = json.loads(line)
-        if not isinstance(payload, dict) or set(payload) != PRIVATE_HTTP_GROUND_TRUTH_FIELDS:
+        if not isinstance(payload, dict) or not (
+            PRIVATE_HTTP_GROUND_TRUTH_FIELDS
+            <= set(payload)
+            <= PRIVATE_HTTP_GROUND_TRUTH_FIELDS | OPTIONAL_PRIVATE_HTTP_GROUND_TRUTH_FIELDS
+        ):
             raise EvalRuntimeError("EVAL_CASE_INVALID", f"invalid private HTTP ground truth at line {line_number}")
         case_id = payload.get("case_id")
         if not isinstance(case_id, str) or not case_id:
@@ -609,7 +615,38 @@ def _ground_truth_from_http_case(case: dict[str, Any]) -> GroundTruth:
         root_cause_type=_optional_text(case["expected_root_cause_type"]),
         dimension=_optional_text(case["expected_dimension"]),
         element=_optional_text(case["expected_element"]),
+        root_causes=tuple(_root_causes_from_http_case(case)),
     )
+
+
+def _root_causes_from_http_case(case: dict[str, Any]) -> list[RootCauseTruth]:
+    raw = case.get("root_causes")
+    if raw in (None, ""):
+        if not bool(case.get("expected_anomaly")):
+            return []
+        return [
+            RootCauseTruth(
+                root_cause_type=str(case.get("expected_root_cause_type")),
+                dimension=_optional_text(case.get("expected_dimension")),
+                element=_optional_text(case.get("expected_element")),
+                weight=1.0,
+            )
+        ]
+    if not isinstance(raw, list):
+        raise EvalRuntimeError("EVAL_GROUND_TRUTH_INVALID", "root_causes must be a list")
+    causes: list[RootCauseTruth] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            raise EvalRuntimeError("EVAL_GROUND_TRUTH_INVALID", "root_causes entries must be objects")
+        causes.append(
+            RootCauseTruth(
+                root_cause_type=str(item.get("root_cause_type")),
+                dimension=_optional_text(item.get("dimension")),
+                element=_optional_text(item.get("element")),
+                weight=float(item.get("weight", 1.0)),
+            )
+        )
+    return causes
 
 
 def _metric_id_from_run(run: dict[str, Any]) -> str | None:

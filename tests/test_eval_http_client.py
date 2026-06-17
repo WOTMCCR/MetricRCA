@@ -517,13 +517,14 @@ def test_public_cases_keep_expected_fields_private_for_http_eval() -> None:
     ]
     loaded_cases = load_http_cases()
 
-    assert len(public_rows) == 28
-    assert len(private_rows) == 28
-    assert len(loaded_cases) == 28
+    assert len(public_rows) == 44
+    assert len(private_rows) == 44
+    assert len(loaded_cases) == 44
     assert all(set(row) == {"case_id", "question", "tags"} for row in public_rows)
     assert all(required.isdisjoint(row) for row in public_rows)
     assert [case["case_id"] for case in loaded_cases] == [row["case_id"] for row in public_rows]
     assert all(required <= set(case) for case in loaded_cases)
+    assert any(isinstance(case.get("root_causes"), list) and len(case["root_causes"]) >= 2 for case in loaded_cases)
 
 
 def test_eval_http_client_rejects_answer_bearing_combined_case_rows(tmp_path: Path) -> None:

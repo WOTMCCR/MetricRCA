@@ -1402,6 +1402,210 @@ def _insert_ground_truth(conn, *, seed: int, seed_profile: str) -> None:
             "element": "organic",
         },
         {
+            "case_id": "MC01_gmv_multi_cause_overall",
+            "business_date": MULTI_CAUSE_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_causes": [
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.48},
+                {"root_cause_type": "stockout", "dimension": "category", "element": "electronics", "weight": 0.32},
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "affiliate", "weight": 0.20},
+            ],
+        },
+        {
+            "case_id": "MC02_uv_multi_channel_drop",
+            "business_date": LAGGED_OBSERVE_DATE,
+            "metric_id": "uv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_causes": [
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.50},
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "social", "weight": 0.35},
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "affiliate", "weight": 0.15},
+            ],
+        },
+        {
+            "case_id": "MC03_cvr_multi_signal_drop",
+            "business_date": MULTI_CAUSE_DATE,
+            "metric_id": "pay_cvr",
+            "expected_anomaly": 1,
+            "root_cause_type": "conversion_drop",
+            "dimension": "channel",
+            "element": "affiliate",
+            "root_causes": [
+                {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "affiliate", "weight": 0.65},
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.35},
+            ],
+        },
+        {
+            "case_id": "MC04_gmv_weak_set",
+            "business_date": MULTI_CAUSE_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "affiliate",
+            "root_causes": [
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "affiliate", "weight": 0.55},
+                {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "affiliate", "weight": 0.45},
+            ],
+        },
+        {
+            "case_id": "MC05_gmv_lag_stockout_mix",
+            "business_date": LAGGED_OBSERVE_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "social",
+            "root_causes": [
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "social", "weight": 0.45},
+                {"root_cause_type": "stockout", "dimension": "category", "element": "electronics", "weight": 0.35},
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.20},
+            ],
+        },
+        {
+            "case_id": "MC06_net_gmv_multi_driver",
+            "business_date": MULTI_CAUSE_DATE,
+            "metric_id": "net_gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_causes": [
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.50},
+                {"root_cause_type": "stockout", "dimension": "category", "element": "electronics", "weight": 0.30},
+                {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "affiliate", "weight": 0.20},
+            ],
+        },
+        {
+            "case_id": "MC07_uv_weak_multi_driver",
+            "business_date": LAGGED_OBSERVE_DATE,
+            "metric_id": "uv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "social",
+            "root_causes": [
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "social", "weight": 0.45},
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "affiliate", "weight": 0.30},
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.25},
+            ],
+        },
+        {
+            "case_id": "MC08_gmv_channel_category_mix",
+            "business_date": MULTI_CAUSE_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "stockout",
+            "dimension": "category",
+            "element": "electronics",
+            "root_causes": [
+                {"root_cause_type": "stockout", "dimension": "category", "element": "electronics", "weight": 0.40},
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.35},
+                {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "affiliate", "weight": 0.25},
+            ],
+        },
+        {
+            "case_id": "IX01_gmv_channel_category_interaction",
+            "business_date": INTERACTION_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "interaction_channel_category",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_causes": [
+                {"root_cause_type": "interaction_channel_category", "dimension": "channel", "element": "paid_ads", "weight": 1.0},
+            ],
+        },
+        {
+            "case_id": "IX02_gmv_interaction_discovery",
+            "business_date": INTERACTION_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "interaction_channel_category",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_causes": [
+                {"root_cause_type": "interaction_channel_category", "dimension": "channel", "element": "paid_ads", "weight": 1.0},
+            ],
+        },
+        {
+            "case_id": "IX03_uv_interaction_cell",
+            "business_date": INTERACTION_DATE,
+            "metric_id": "uv",
+            "expected_anomaly": 1,
+            "root_cause_type": "interaction_channel_category",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_causes": [
+                {"root_cause_type": "interaction_channel_category", "dimension": "channel", "element": "paid_ads", "weight": 1.0},
+            ],
+        },
+        {
+            "case_id": "IX04_gmv_interaction_no_single_driver",
+            "business_date": INTERACTION_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "interaction_channel_category",
+            "dimension": "category",
+            "element": "electronics",
+            "root_causes": [
+                {"root_cause_type": "interaction_channel_category", "dimension": "category", "element": "electronics", "weight": 1.0},
+            ],
+        },
+        {
+            "case_id": "LG01_gmv_lagged_social",
+            "business_date": LAGGED_OBSERVE_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "social",
+            "root_causes": [
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "social", "weight": 1.0},
+            ],
+        },
+        {
+            "case_id": "LG02_uv_lagged_social_discovery",
+            "business_date": LAGGED_OBSERVE_DATE,
+            "metric_id": "uv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "social",
+            "root_causes": [
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "social", "weight": 1.0},
+            ],
+        },
+        {
+            "case_id": "WK01_gmv_weak_affiliate_boundary",
+            "business_date": MULTI_CAUSE_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "affiliate",
+            "root_causes": [
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "affiliate", "weight": 1.0},
+            ],
+        },
+        {
+            "case_id": "WK02_gmv_no_anomaly_weak",
+            "business_date": GMV_NO_ANOMALY_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 0,
+            "root_cause_type": "no_anomaly",
+            "dimension": None,
+            "element": None,
+            "root_causes": [],
+        },
+        {
             "case_id": "M01_gmv_memory_product_prior",
             "split": "memory-treatment",
             "business_date": TARGET_DATE,
@@ -1432,7 +1636,12 @@ def _ground_truth_row_with_metadata(row: dict[str, object], *, seed: int, seed_p
     row = _project_ground_truth_for_profile(row=row, seed_profile=seed_profile)
     expected_anomaly = bool(row["expected_anomaly"])
     root_causes: list[dict[str, object]] = []
-    if expected_anomaly:
+    explicit_root_causes = row.get("root_causes")
+    if explicit_root_causes is not None:
+        if not isinstance(explicit_root_causes, list) or not all(isinstance(item, dict) for item in explicit_root_causes):
+            raise ValueError("GROUND_TRUTH_ROOT_CAUSES_INVALID")
+        root_causes = explicit_root_causes
+    elif expected_anomaly:
         root_causes = [
             {
                 "root_cause_type": row["root_cause_type"],

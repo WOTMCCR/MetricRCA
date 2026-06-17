@@ -38,6 +38,9 @@ TARGET_DATE = date(2026, 6, 5)
 GMV_NO_ANOMALY_DATE = date(2026, 6, 4)
 BORDERLINE_DATE = date(2026, 6, 3)
 SPIKE_DATE = date(2026, 6, 2)
+MULTI_CAUSE_DATE = date(2026, 6, 1)
+INTERACTION_DATE = date(2026, 5, 31)
+LAGGED_OBSERVE_DATE = date(2026, 6, 1)
 SCENARIO_DIR = Path("metric_rca/data/scenarios")
 PUBLIC_CASES_PATH = Path("metric_rca/evals/regression_public_cases.jsonl")
 PRIVATE_GROUND_TRUTH_PATH = Path("metric_rca/evals/regression_private_ground_truth.jsonl")
@@ -72,6 +75,119 @@ EXPECTED_GROUND_TRUTH = {
     "C26_ambiguous_intent": ("gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", TARGET_DATE),
     "C27_composite_cause": ("gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", TARGET_DATE),
     "C28_multi_day_drift": ("gmv", 1, "campaign_traffic_drop", "channel", "organic", TARGET_DATE),
+    "MC01_gmv_multi_cause_overall": ("gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", MULTI_CAUSE_DATE),
+    "MC02_uv_multi_channel_drop": ("uv", 1, "campaign_traffic_drop", "channel", "paid_ads", LAGGED_OBSERVE_DATE),
+    "MC03_cvr_multi_signal_drop": ("pay_cvr", 1, "conversion_drop", "channel", "affiliate", MULTI_CAUSE_DATE),
+    "MC04_gmv_weak_set": ("gmv", 1, "campaign_traffic_drop", "channel", "affiliate", MULTI_CAUSE_DATE),
+    "MC05_gmv_lag_stockout_mix": ("gmv", 1, "campaign_traffic_drop", "channel", "social", LAGGED_OBSERVE_DATE),
+    "MC06_net_gmv_multi_driver": ("net_gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", MULTI_CAUSE_DATE),
+    "MC07_uv_weak_multi_driver": ("uv", 1, "campaign_traffic_drop", "channel", "social", LAGGED_OBSERVE_DATE),
+    "MC08_gmv_channel_category_mix": ("gmv", 1, "stockout", "category", "electronics", MULTI_CAUSE_DATE),
+    "IX01_gmv_channel_category_interaction": (
+        "gmv",
+        1,
+        "interaction_channel_category",
+        "channel",
+        "paid_ads",
+        INTERACTION_DATE,
+    ),
+    "IX02_gmv_interaction_discovery": (
+        "gmv",
+        1,
+        "interaction_channel_category",
+        "channel",
+        "paid_ads",
+        INTERACTION_DATE,
+    ),
+    "IX03_uv_interaction_cell": (
+        "uv",
+        1,
+        "interaction_channel_category",
+        "channel",
+        "paid_ads",
+        INTERACTION_DATE,
+    ),
+    "IX04_gmv_interaction_no_single_driver": (
+        "gmv",
+        1,
+        "interaction_channel_category",
+        "category",
+        "electronics",
+        INTERACTION_DATE,
+    ),
+    "LG01_gmv_lagged_social": ("gmv", 1, "campaign_traffic_drop", "channel", "social", LAGGED_OBSERVE_DATE),
+    "LG02_uv_lagged_social_discovery": ("uv", 1, "campaign_traffic_drop", "channel", "social", LAGGED_OBSERVE_DATE),
+    "WK01_gmv_weak_affiliate_boundary": (
+        "gmv",
+        1,
+        "campaign_traffic_drop",
+        "channel",
+        "affiliate",
+        MULTI_CAUSE_DATE,
+    ),
+    "WK02_gmv_no_anomaly_weak": ("gmv", 0, "no_anomaly", None, None, GMV_NO_ANOMALY_DATE),
+}
+EXPECTED_WEIGHTED_ROOT_CAUSES = {
+    "MC01_gmv_multi_cause_overall": [
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.48},
+        {"root_cause_type": "stockout", "dimension": "category", "element": "electronics", "weight": 0.32},
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "affiliate", "weight": 0.2},
+    ],
+    "MC02_uv_multi_channel_drop": [
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.5},
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "social", "weight": 0.35},
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "affiliate", "weight": 0.15},
+    ],
+    "MC03_cvr_multi_signal_drop": [
+        {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "affiliate", "weight": 0.65},
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.35},
+    ],
+    "MC04_gmv_weak_set": [
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "affiliate", "weight": 0.55},
+        {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "affiliate", "weight": 0.45},
+    ],
+    "MC05_gmv_lag_stockout_mix": [
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "social", "weight": 0.45},
+        {"root_cause_type": "stockout", "dimension": "category", "element": "electronics", "weight": 0.35},
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.2},
+    ],
+    "MC06_net_gmv_multi_driver": [
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.5},
+        {"root_cause_type": "stockout", "dimension": "category", "element": "electronics", "weight": 0.3},
+        {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "affiliate", "weight": 0.2},
+    ],
+    "MC07_uv_weak_multi_driver": [
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "social", "weight": 0.45},
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "affiliate", "weight": 0.3},
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.25},
+    ],
+    "MC08_gmv_channel_category_mix": [
+        {"root_cause_type": "stockout", "dimension": "category", "element": "electronics", "weight": 0.4},
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.35},
+        {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "affiliate", "weight": 0.25},
+    ],
+    "IX01_gmv_channel_category_interaction": [
+        {"root_cause_type": "interaction_channel_category", "dimension": "channel", "element": "paid_ads", "weight": 1.0},
+    ],
+    "IX02_gmv_interaction_discovery": [
+        {"root_cause_type": "interaction_channel_category", "dimension": "channel", "element": "paid_ads", "weight": 1.0},
+    ],
+    "IX03_uv_interaction_cell": [
+        {"root_cause_type": "interaction_channel_category", "dimension": "channel", "element": "paid_ads", "weight": 1.0},
+    ],
+    "IX04_gmv_interaction_no_single_driver": [
+        {"root_cause_type": "interaction_channel_category", "dimension": "category", "element": "electronics", "weight": 1.0},
+    ],
+    "LG01_gmv_lagged_social": [
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "social", "weight": 1.0},
+    ],
+    "LG02_uv_lagged_social_discovery": [
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "social", "weight": 1.0},
+    ],
+    "WK01_gmv_weak_affiliate_boundary": [
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "affiliate", "weight": 1.0},
+    ],
+    "WK02_gmv_no_anomaly_weak": [],
 }
 EXPECTED_MEMORY_TREATMENT_GROUND_TRUTH = {
     "M01_gmv_memory_product_prior": ("gmv", 1, "aov_drop", "product", "2", TARGET_DATE),
@@ -136,7 +252,7 @@ def test_seed_profile_metadata_files_define_regression_data_slice(monkeypatch) -
 
     regression = registry["suites"]["regression"]
     assert regression["seed_profile"] == "regression"
-    assert regression["case_count"] == 28
+    assert regression["case_count"] == 44
     assert (SCENARIO_DIR / regression["public_cases_file"]).resolve() == PUBLIC_CASES_PATH.resolve()
     assert (SCENARIO_DIR / regression["private_ground_truth_file"]).resolve() == PRIVATE_GROUND_TRUTH_PATH.resolve()
     assert regression["data_slice"] == {
@@ -151,7 +267,19 @@ def test_seed_profile_metadata_files_define_regression_data_slice(monkeypatch) -
     assert {row["case_id"] for row in private_rows} == set(EXPECTED_GROUND_TRUTH)
     private_by_id = {row["case_id"]: row for row in private_rows}
     for case_id, (metric_id, expected_anomaly, root_cause, dimension, element, business_date) in EXPECTED_GROUND_TRUTH.items():
-        assert private_by_id[case_id] == {
+        row = private_by_id[case_id]
+        assert {
+            key: row[key]
+            for key in [
+                "case_id",
+                "expected_metric_id",
+                "expected_anomaly",
+                "expected_root_cause_type",
+                "expected_dimension",
+                "expected_element",
+                "expected_business_date",
+            ]
+        } == {
             "case_id": case_id,
             "expected_metric_id": metric_id,
             "expected_anomaly": bool(expected_anomaly),
@@ -160,6 +288,10 @@ def test_seed_profile_metadata_files_define_regression_data_slice(monkeypatch) -
             "expected_element": element,
             "expected_business_date": business_date.isoformat(),
         }
+        if case_id in EXPECTED_WEIGHTED_ROOT_CAUSES:
+            assert row["root_causes"] == EXPECTED_WEIGHTED_ROOT_CAUSES[case_id]
+        else:
+            assert "root_causes" not in row
 
     acceptance = registry["suites"]["acceptance"]
     assert acceptance["seed_profile"] == "acceptance"
@@ -467,7 +599,7 @@ def test_seed_metric_definitions_and_ground_truth_cases() -> None:
                 ).mappings()
             }
             assert set(cases) == set(EXPECTED_GROUND_TRUTH)
-            assert len(cases) == 28
+            assert len(cases) == 44
             for case_id, (metric_id, expected_anomaly, root_cause, dimension, element, business_date) in EXPECTED_GROUND_TRUTH.items():
                 assert cases[case_id]["metric_id"] == metric_id
                 assert cases[case_id]["expected_anomaly"] == expected_anomaly
@@ -479,7 +611,9 @@ def test_seed_metric_definitions_and_ground_truth_cases() -> None:
                 assert cases[case_id]["split"] == "regression"
                 assert cases[case_id]["profile"] == "regression"
                 root_causes = _json_value(cases[case_id]["root_causes"])
-                if expected_anomaly:
+                if case_id in EXPECTED_WEIGHTED_ROOT_CAUSES:
+                    assert root_causes == EXPECTED_WEIGHTED_ROOT_CAUSES[case_id]
+                elif expected_anomaly:
                     assert root_causes == [
                         {
                             "root_cause_type": root_cause,

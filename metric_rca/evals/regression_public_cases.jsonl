@@ -26,3 +26,19 @@
 {"case_id":"C26_ambiguous_intent","question":"Something seems off with sales","tags":["e2","ambiguous","discovery"]}
 {"case_id":"C27_composite_cause","question":"What caused the overall store GMV decline yesterday?","tags":["e3","composite","discovery"]}
 {"case_id":"C28_multi_day_drift","question":"GMV has been declining since the weekend, what's happening?","tags":["e3","multi_day","discovery"]}
+{"case_id":"MC01_gmv_multi_cause_overall","question":"Why did overall GMV fall on June 1?","tags":["phase_c","multi_cause","discovery"]}
+{"case_id":"MC02_uv_multi_channel_drop","question":"Why did site traffic fall on June 1?","tags":["phase_c","multi_cause","discovery"]}
+{"case_id":"MC03_cvr_multi_signal_drop","question":"Why did conversion rate weaken on June 1?","tags":["phase_c","multi_cause","discovery"]}
+{"case_id":"MC04_gmv_weak_set","question":"Why did GMV softness remain hard to pin down on June 1?","tags":["phase_c","multi_cause","weak_signal","discovery"]}
+{"case_id":"MC05_gmv_lag_stockout_mix","question":"What explains the June 1 GMV decline after the weekend?","tags":["phase_c","multi_cause","lagged","discovery"]}
+{"case_id":"MC06_net_gmv_multi_driver","question":"Why did net GMV from paid ads deteriorate on June 1?","tags":["phase_c","multi_cause","specified_slice"]}
+{"case_id":"MC07_uv_weak_multi_driver","question":"Why did traffic look broadly soft on June 1?","tags":["phase_c","multi_cause","weak_signal","discovery"]}
+{"case_id":"MC08_gmv_channel_category_mix","question":"Why did the June 1 sales decline appear across more than one slice?","tags":["phase_c","multi_cause","discovery"]}
+{"case_id":"IX01_gmv_channel_category_interaction","question":"Why did GMV fall for that campaign-category slice on May 31?","tags":["phase_c","interaction","cross_dimension","specified_slice"]}
+{"case_id":"IX02_gmv_interaction_discovery","question":"Why did overall GMV fall on May 31?","tags":["phase_c","interaction","cross_dimension","discovery"]}
+{"case_id":"IX03_uv_interaction_cell","question":"Why did traffic collapse in the focused segment on May 31?","tags":["phase_c","interaction","cross_dimension","specified_slice"]}
+{"case_id":"IX04_gmv_interaction_no_single_driver","question":"Why did the May 31 GMV drop look larger than the individual drilldowns suggested?","tags":["phase_c","interaction","cross_dimension","discovery"]}
+{"case_id":"LG01_gmv_lagged_social","question":"Why did social GMV fall on June 1 after the weekend campaign change?","tags":["phase_c","lagged","campaign","specified_slice"]}
+{"case_id":"LG02_uv_lagged_social_discovery","question":"Why did traffic fall on June 1 after the weekend?","tags":["phase_c","lagged","campaign","discovery"]}
+{"case_id":"WK01_gmv_weak_affiliate_boundary","question":"Was the affiliate GMV softness on June 1 meaningful?","tags":["phase_c","weak_signal","boundary","specified_slice"]}
+{"case_id":"WK02_gmv_no_anomaly_weak","question":"Was overall GMV normal on June 4 despite small channel noise?","tags":["phase_c","weak_signal","no_anomaly"]}

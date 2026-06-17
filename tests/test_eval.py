@@ -41,7 +41,9 @@ PRIVATE_GROUND_TRUTH_FIELDS = {
     "expected_element",
     "expected_business_date",
 }
+OPTIONAL_PRIVATE_GROUND_TRUTH_FIELDS = {"root_causes"}
 ANSWER_BEARING_FIELDS = PRIVATE_GROUND_TRUTH_FIELDS - {"case_id"}
+REGRESSION_CASE_COUNT = 44
 
 
 def test_eval_loads_cases_and_ground_truth(tmp_path: Path) -> None:
@@ -116,7 +118,7 @@ def test_eval_loader_defaults_to_public_regression_cases_without_expected_fields
     cases = load_cases()
     public_rows = _read_jsonl(PUBLIC_CASES_PATH)
 
-    assert len(cases) == 28
+    assert len(cases) == REGRESSION_CASE_COUNT
     assert [case.case_id for case in cases] == [row["case_id"] for row in public_rows]
     assert all(set(case.__dict__) == PUBLIC_CASE_FIELDS for case in cases)
     assert all(ANSWER_BEARING_FIELDS.isdisjoint(case.__dict__) for case in cases)
@@ -188,7 +190,7 @@ def test_run_eval_uses_acceptance_ground_truth_profile_scope(tmp_path: Path) -> 
 def test_public_regression_cases_have_no_answer_bearing_fields_and_allow_metric_terms() -> None:
     rows = _read_jsonl(PUBLIC_CASES_PATH)
 
-    assert len(rows) == 28
+    assert len(rows) == REGRESSION_CASE_COUNT
     assert all(set(row) == PUBLIC_CASE_FIELDS for row in rows)
     assert all(ANSWER_BEARING_FIELDS.isdisjoint(row) for row in rows)
     questions = " ".join(str(row["question"]).lower() for row in rows)
@@ -207,10 +209,58 @@ def test_private_regression_ground_truth_matches_public_case_ids() -> None:
     public_rows = _read_jsonl(PUBLIC_CASES_PATH)
     private_rows = _read_jsonl(PRIVATE_GROUND_TRUTH_PATH)
 
-    assert len(private_rows) == 28
-    assert all(set(row) == PRIVATE_GROUND_TRUTH_FIELDS for row in private_rows)
+    assert len(private_rows) == REGRESSION_CASE_COUNT
+    assert all(PRIVATE_GROUND_TRUTH_FIELDS <= set(row) <= PRIVATE_GROUND_TRUTH_FIELDS | OPTIONAL_PRIVATE_GROUND_TRUTH_FIELDS for row in private_rows)
     assert [row["case_id"] for row in private_rows] == [row["case_id"] for row in public_rows]
     assert all("question" not in row and "tags" not in row for row in private_rows)
+
+
+def test_phase_c_complex_cases_cover_required_families_with_weighted_root_causes() -> None:
+    public_rows = _read_jsonl(PUBLIC_CASES_PATH)
+    private_rows = _read_jsonl(PRIVATE_GROUND_TRUTH_PATH)
+    private_by_id = {row["case_id"]: row for row in private_rows}
+    new_case_ids = [row["case_id"] for row in public_rows if "phase_c" in row["tags"]]
+
+    assert len(new_case_ids) == 16
+    families = {tag for row in public_rows if row["case_id"] in new_case_ids for tag in row["tags"]}
+    assert {"multi_cause", "interaction", "lagged", "weak_signal"} <= families
+
+    multi_cause_rows = [private_by_id[case_id] for case_id in new_case_ids if case_id.startswith("MC")]
+    assert len(multi_cause_rows) >= 4
+    for row in multi_cause_rows:
+        root_causes = row.get("root_causes")
+        assert isinstance(root_causes, list)
+        assert len(root_causes) >= 2
+        assert round(sum(float(cause["weight"]) for cause in root_causes), 6) == 1.0
+        assert all({"root_cause_type", "dimension", "element", "weight"} <= set(cause) for cause in root_causes)
+
+
+def test_seed_ground_truth_preserves_explicit_multi_cause_weights() -> None:
+    from metric_rca.data.seed_data import _ground_truth_row_with_metadata
+
+    row = _ground_truth_row_with_metadata(
+        {
+            "case_id": "MC00_phase_c_multi_cause",
+            "business_date": date(2026, 6, 1),
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_causes": [
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.6},
+                {"root_cause_type": "stockout", "dimension": "category", "element": "electronics", "weight": 0.4},
+            ],
+        },
+        seed=20260606,
+        seed_profile="regression",
+    )
+
+    root_causes = json.loads(row["root_causes"])
+    assert root_causes == [
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.6},
+        {"root_cause_type": "stockout", "dimension": "category", "element": "electronics", "weight": 0.4},
+    ]
 
 
 def test_eval_loader_rejects_answer_bearing_public_case_rows(tmp_path: Path) -> None:
@@ -236,7 +286,7 @@ def test_eval_cases_are_natural_questions_without_answer_leakage() -> None:
     cases = load_cases(PUBLIC_CASES_PATH)
     by_id = {case.case_id: case.question.lower() for case in cases}
 
-    assert len(cases) == 28
+    assert len(cases) == REGRESSION_CASE_COUNT
     assert all("metric_id=" not in question for question in by_id.values())
     discovery_forbidden = {
         "stockout",
