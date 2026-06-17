@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_base_url: str | None = None
     llm_structured_output_method: Literal["json_schema", "json_mode", "function_calling"] = "json_schema"
-    llm_temperature: float = 0.0
+    llm_temperature: float | None = None
     agent_tracing_enabled: bool = False
     agent_trace_group_id: str | None = None
     eval_llm_max_attempts: int = Field(default=3, ge=1)

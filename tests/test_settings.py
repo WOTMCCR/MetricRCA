@@ -42,7 +42,7 @@ def test_settings_defaults_and_required_dsn_failure(monkeypatch: pytest.MonkeyPa
     assert settings.llm_api_key is None
     assert settings.llm_base_url is None
     assert settings.llm_structured_output_method == "json_schema"
-    assert settings.llm_temperature == 0.0
+    assert settings.llm_temperature is None
     assert settings.agent_tracing_enabled is False
     assert settings.agent_trace_group_id is None
     assert settings.multi_agent_enabled is False

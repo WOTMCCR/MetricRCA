@@ -13,6 +13,7 @@ from metric_rca.data.seed_data import main as seed_main
 from metric_rca.domain.models import MetricDefinition
 from metric_rca.intelligence.agent_runtime import AgentRuntimeError
 from metric_rca.repositories.metadata_repository import MetadataRepository
+from metric_rca.runtime.plan_compiler import RcaPlanCompiler
 from metric_rca.services.intent_planner import LLMIntentPlanner, IntentPlanner, _LLMIntentOutput, build_system_prompt
 from metric_rca.services.metric_service import MetricService, MetricServiceError, ParsedIntent
 
@@ -33,11 +34,17 @@ class _FakeAgentRuntime:
         return output
 
 
-def _metric(metric_id: str, *, dimensions: list[str] | None = None) -> MetricDefinition:
+def _metric(
+    metric_id: str,
+    *,
+    dimensions: list[str] | None = None,
+    family: str = "gmv_family",
+) -> MetricDefinition:
     return MetricDefinition(
         metric_id=metric_id,
         display_name=f"Test {metric_id}",
         formula="test formula",
+        metric_family=family,
         higher_is_better=True,
         allowed_dimensions=dimensions or ["channel", "category"],
         source_table="fact_order",
@@ -61,6 +68,7 @@ class FakeMetadataRepository:
             "source_table": metric.source_table,
             "allowed_dimensions": metric.allowed_dimensions,
             "formula": metric.formula,
+            "metric_family": metric.metric_family,
         }
 
     def list_metrics(self) -> list[MetricDefinition]:
@@ -150,12 +158,12 @@ def test_metric_service_runtime_reads_mutated_persisted_metadata(monkeypatch: py
                 text(
                     """
                     INSERT INTO metric_definition (
-                      metric_id, display_name, formula, numerator_sql_fragment,
+                      metric_id, display_name, formula, metric_family, numerator_sql_fragment,
                       denominator_sql_fragment, higher_is_better, source_table,
                       allowed_dimensions
                     )
                     VALUES (
-                      :metric_id, 'Temporary Runtime Metric', 'sum(test)', NULL,
+                      :metric_id, 'Temporary Runtime Metric', 'sum(test)', 'gmv_family', NULL,
                       NULL, 1, 'fact_order', '["channel"]'
                     )
                     """
@@ -200,12 +208,12 @@ def test_drop_metric_from_metadata_repo_raises_metric_not_found() -> None:
                 text(
                     """
                     INSERT INTO metric_definition (
-                      metric_id, display_name, formula, numerator_sql_fragment,
+                      metric_id, display_name, formula, metric_family, numerator_sql_fragment,
                       denominator_sql_fragment, higher_is_better, source_table,
                       allowed_dimensions
                     )
                     VALUES (
-                      :metric_id, 'Temporary Drop Metric', 'sum(test)', NULL,
+                      :metric_id, 'Temporary Drop Metric', 'sum(test)', 'gmv_family', NULL,
                       NULL, 1, 'fact_order', '["channel"]'
                     )
                     """
@@ -241,6 +249,37 @@ def test_metadata_repo_get_metric_definition_returns_typed_model() -> None:
         engine.dispose()
 
 
+def test_seeded_metric_family_drives_plan_compiler_routing() -> None:
+    seed_main()
+    settings = get_settings()
+    engine = create_engine(str(settings.db_dsn), pool_pre_ping=True)
+    try:
+        repo = MetadataRepository(engine)
+        compiler = RcaPlanCompiler(metric_service=repo)
+
+        cvr_plan = compiler.compile(
+            run_id="run-cvr",
+            parsed_intent=ParsedIntent(
+                metric_id="pay_cvr",
+                target_date=date(2026, 6, 5),
+                question_family="pay_cvr_drop",
+            ),
+        )
+        gmv_plan = compiler.compile(
+            run_id="run-gmv",
+            parsed_intent=ParsedIntent(
+                metric_id="gmv",
+                target_date=date(2026, 6, 5),
+                question_family="gmv_drop",
+            ),
+        )
+
+        assert cvr_plan.family == "rate_family"
+        assert gmv_plan.family == "gmv_family"
+    finally:
+        engine.dispose()
+
+
 def test_mutate_schema_context_in_metadata_repo_changes_runtime_output_and_error() -> None:
     seed_main()
     settings = get_settings()
@@ -253,12 +292,12 @@ def test_mutate_schema_context_in_metadata_repo_changes_runtime_output_and_error
                 text(
                     """
                     INSERT INTO metric_definition (
-                      metric_id, display_name, formula, numerator_sql_fragment,
+                      metric_id, display_name, formula, metric_family, numerator_sql_fragment,
                       denominator_sql_fragment, higher_is_better, source_table,
                       allowed_dimensions
                     )
                     VALUES (
-                      :metric_id, 'Temporary Schema Metric', 'sum(test)', NULL,
+                      :metric_id, 'Temporary Schema Metric', 'sum(test)', 'gmv_family', NULL,
                       NULL, 1, 'fact_order', '["channel"]'
                     )
                     """

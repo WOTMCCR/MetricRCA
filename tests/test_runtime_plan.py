@@ -4,9 +4,29 @@ from datetime import date
 
 import pytest
 
+from metric_rca.domain.models import MetricDefinition
 from metric_rca.runtime.evidence_graph import EvidenceGraph
 from metric_rca.runtime.plan_compiler import PlanCompilerError, RcaPlanCompiler
 from metric_rca.services.metric_contracts import ParsedIntent
+
+
+def _compiler(*, family: str = "gmv_family") -> RcaPlanCompiler:
+    return RcaPlanCompiler(metric_service=_MetricCatalog(family))
+
+
+class _MetricCatalog:
+    def __init__(self, family: str) -> None:
+        self.family = family
+
+    def get_metric_definition(self, metric_id: str) -> MetricDefinition:
+        return MetricDefinition(
+            metric_id=metric_id,
+            display_name=metric_id,
+            formula="test",
+            metric_family=self.family,
+            source_table="fact_order",
+            allowed_dimensions=["channel", "category", "device", "product"],
+        )
 
 
 def test_plan_compiler_builds_explicit_slice_chain() -> None:
@@ -18,7 +38,7 @@ def test_plan_compiler_builds_explicit_slice_chain() -> None:
         element="paid_ads",
     )
 
-    plan = RcaPlanCompiler().compile(run_id="run-1", parsed_intent=parsed)
+    plan = _compiler().compile(run_id="run-1", parsed_intent=parsed)
 
     assert [action.kind for action in plan.actions] == [
         "detect_anomaly",
@@ -30,6 +50,7 @@ def test_plan_compiler_builds_explicit_slice_chain() -> None:
     assert plan.explicit_scope == {"channel": "paid_ads"}
     assert plan.actions[2].args["signal_type"] == "campaign"
     assert plan.actions[2].args["element"] == "paid_ads"
+    assert plan.actions[2].produces == ["E3"]
     assert plan.actions[3].requires == ["E1", "E2_channel", "E3"]
 
 
@@ -40,7 +61,7 @@ def test_plan_compiler_builds_broad_uv_discovery_from_metric_policy() -> None:
         question_family="uv_drop",
     )
 
-    plan = RcaPlanCompiler().compile(run_id="run-1", parsed_intent=parsed)
+    plan = _compiler().compile(run_id="run-1", parsed_intent=parsed)
 
     assert [action.args.get("dimension") for action in plan.actions if action.kind == "drilldown_dimension"] == [
         "channel"
@@ -59,7 +80,7 @@ def test_plan_compiler_builds_refund_discovery_even_with_nonstandard_strategy() 
         analysis_strategy="channel_first",
     )
 
-    plan = RcaPlanCompiler().compile(run_id="run-1", parsed_intent=parsed)
+    plan = _compiler(family="rate_family").compile(run_id="run-1", parsed_intent=parsed)
 
     drilldowns = [action.args.get("dimension") for action in plan.actions if action.kind == "drilldown_dimension"]
     assert drilldowns == ["product"]
@@ -78,7 +99,7 @@ def test_plan_compiler_builds_broad_gmv_product_first_with_all_required_drilldow
         analysis_strategy="product_first",
     )
 
-    plan = RcaPlanCompiler().compile(run_id="run-1", parsed_intent=parsed)
+    plan = _compiler().compile(run_id="run-1", parsed_intent=parsed)
 
     drilldowns = [action.args.get("dimension") for action in plan.actions if action.kind == "drilldown_dimension"]
     assert drilldowns == ["channel", "category", "product"]
@@ -97,7 +118,7 @@ def test_plan_compiler_builds_signal_first_gmv_without_hardcoded_element() -> No
         analysis_strategy="signal_first",
     )
 
-    plan = RcaPlanCompiler().compile(run_id="run-1", parsed_intent=parsed)
+    plan = _compiler().compile(run_id="run-1", parsed_intent=parsed)
 
     signal_action = next(action for action in plan.actions if action.kind == "fetch_related_signal")
     contribution_action = next(action for action in plan.actions if action.kind == "calculate_contribution")
@@ -119,7 +140,7 @@ def test_plan_compiler_fails_fast_when_unscoped_metric_has_no_discovery_policy()
     )
 
     with pytest.raises(PlanCompilerError) as excinfo:
-        RcaPlanCompiler().compile(run_id="run-1", parsed_intent=parsed)
+        _compiler().compile(run_id="run-1", parsed_intent=parsed)
 
     assert excinfo.value.code == "DISCOVERY_POLICY_MISSING"
 

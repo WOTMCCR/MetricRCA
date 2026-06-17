@@ -154,6 +154,16 @@ def _ensure_p6_schema(conn) -> None:
     )
     _ensure_column(
         conn,
+        table="metric_definition",
+        column="metric_family",
+        ddl=(
+            "ALTER TABLE metric_definition ADD COLUMN metric_family VARCHAR(32) "
+            "NOT NULL AFTER formula"
+        ),
+    )
+    _drop_column_default(conn, table="metric_definition", column="metric_family")
+    _ensure_column(
+        conn,
         table="sql_audit",
         column="audit_key",
         ddl="ALTER TABLE sql_audit ADD COLUMN audit_key VARCHAR(64) NULL AFTER audit_id",
@@ -237,6 +247,24 @@ def _ensure_column(conn, *, table: str, column: str, ddl: str) -> None:
         conn.execute(text(ddl))
 
 
+def _drop_column_default(conn, *, table: str, column: str) -> None:
+    column_default = conn.execute(
+        text(
+            """
+            SELECT COLUMN_DEFAULT
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table
+              AND COLUMN_NAME = :column
+            LIMIT 1
+            """
+        ),
+        {"table": table, "column": column},
+    ).scalar_one_or_none()
+    if column_default is not None:
+        conn.execute(text(f"ALTER TABLE {table} ALTER COLUMN {column} DROP DEFAULT"))
+
+
 def _ensure_index(conn, *, table: str, index: str, ddl: str) -> None:
     exists = conn.execute(
         text(
@@ -316,6 +344,7 @@ def _insert_metric_definitions(conn) -> None:
             "metric_id": "gmv",
             "display_name": "GMV",
             "formula": "sum(order_amount where is_paid=1)",
+            "metric_family": "gmv_family",
             "numerator_sql_fragment": "SUM(order_amount)",
             "denominator_sql_fragment": None,
             "higher_is_better": 1,
@@ -326,6 +355,7 @@ def _insert_metric_definitions(conn) -> None:
             "metric_id": "net_gmv",
             "display_name": "Net GMV",
             "formula": "sum(order_amount-refund_amount where is_paid=1)",
+            "metric_family": "gmv_family",
             "numerator_sql_fragment": "SUM(order_amount-refund_amount)",
             "denominator_sql_fragment": None,
             "higher_is_better": 1,
@@ -336,6 +366,7 @@ def _insert_metric_definitions(conn) -> None:
             "metric_id": "pay_cvr",
             "display_name": "Pay CVR",
             "formula": "sum(pay_user_cnt)/sum(uv)",
+            "metric_family": "rate_family",
             "numerator_sql_fragment": "SUM(pay_user_cnt)",
             "denominator_sql_fragment": "SUM(uv)",
             "higher_is_better": 1,
@@ -346,6 +377,7 @@ def _insert_metric_definitions(conn) -> None:
             "metric_id": "refund_rate",
             "display_name": "Refund Rate",
             "formula": "sum(refund_amount)/sum(order_amount)",
+            "metric_family": "rate_family",
             "numerator_sql_fragment": "SUM(refund_amount)",
             "denominator_sql_fragment": "SUM(order_amount)",
             "higher_is_better": 0,  # 退款率越低越好
@@ -356,6 +388,7 @@ def _insert_metric_definitions(conn) -> None:
             "metric_id": "uv",
             "display_name": "UV",
             "formula": "sum(uv)",
+            "metric_family": "gmv_family",
             "numerator_sql_fragment": "SUM(uv)",
             "denominator_sql_fragment": None,
             "higher_is_better": 1,
@@ -366,6 +399,7 @@ def _insert_metric_definitions(conn) -> None:
             "metric_id": "aov",
             "display_name": "AOV",
             "formula": "sum(order_amount where is_paid=1)/count(paid orders)",
+            "metric_family": "gmv_family",
             "numerator_sql_fragment": "SUM(order_amount)",
             "denominator_sql_fragment": "COUNT(order_id)",
             "higher_is_better": 1,
@@ -376,6 +410,7 @@ def _insert_metric_definitions(conn) -> None:
             "metric_id": "stockout_rate",
             "display_name": "Stockout Rate",
             "formula": "sum(stockout_hours)/sum(avail_hours)",
+            "metric_family": "rate_family",
             "numerator_sql_fragment": "SUM(stockout_hours)",
             "denominator_sql_fragment": "SUM(avail_hours)",
             "higher_is_better": 0,
@@ -386,6 +421,7 @@ def _insert_metric_definitions(conn) -> None:
             "metric_id": "complaint_rate",
             "display_name": "Complaint Rate",
             "formula": "sum(is_complaint)/count(ticket_id)",
+            "metric_family": "rate_family",
             "numerator_sql_fragment": "SUM(is_complaint)",
             "denominator_sql_fragment": "COUNT(ticket_id)",
             "higher_is_better": 0,
@@ -397,12 +433,12 @@ def _insert_metric_definitions(conn) -> None:
         text(
             """
             INSERT INTO metric_definition (
-              metric_id, display_name, formula, numerator_sql_fragment,
+              metric_id, display_name, formula, metric_family, numerator_sql_fragment,
               denominator_sql_fragment, higher_is_better, source_table,
               allowed_dimensions
             )
             VALUES (
-              :metric_id, :display_name, :formula, :numerator_sql_fragment,
+              :metric_id, :display_name, :formula, :metric_family, :numerator_sql_fragment,
               :denominator_sql_fragment, :higher_is_better, :source_table,
               :allowed_dimensions
             )
@@ -416,7 +452,7 @@ def _insert_semantic_memory(conn) -> None:
     rows = conn.execute(
         text(
             """
-            SELECT metric_id, display_name, formula, numerator_sql_fragment,
+            SELECT metric_id, display_name, formula, metric_family, numerator_sql_fragment,
                    denominator_sql_fragment, higher_is_better, source_table,
                    allowed_dimensions
             FROM metric_definition
@@ -448,6 +484,7 @@ def _insert_semantic_memory(conn) -> None:
                         "display_name": row["display_name"],
                         "aliases": _metric_aliases(row),
                         "formula": row["formula"],
+                        "metric_family": row["metric_family"],
                         "numerator_sql_fragment": row["numerator_sql_fragment"],
                         "denominator_sql_fragment": row["denominator_sql_fragment"],
                         "business_rules": {

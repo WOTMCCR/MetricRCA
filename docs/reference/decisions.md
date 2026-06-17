@@ -1,13 +1,210 @@
-## ADL-0041: Production follow-ups for sync AgentRuntime and metadata-driven planning
+## ADL-0045: Signal-first intent priority for multi-day GMV drift framing
 
 | 字段 | 值 |
 |------|------|
 | 日期 | 2026-06-17 |
 | 状态 | accepted |
+| 关联迭代 | GPT nano provider validation |
+| 影响范围 | LLM intent planner prompt, RCA signal selection |
+
+### 背景与场景
+
+`gpt-5-nano` validation passed intent and anomaly checks for C28
+`GMV has been declining since the weekend`, but sometimes selected the generic
+channel top contributor path. That made `fetch_related_signal` bind to paid ads
+instead of the intended organic channel signal anomaly. The expected behavior is
+still a single configured target-date RCA, but with signal-first channel element
+selection for multi-day drift wording.
+
+### 决策
+
+The intent planner prompt now explicitly maps unscoped GMV multi-day drift
+framing such as "has been declining", "since the weekend", and "over the
+weekend" to `analysis_strategy=signal_first`. The prompt also states that the
+target date remains the configured single run target date while signal-first
+discovery selects the channel element with the strongest related signal anomaly.
+
+### 理由
+
+This preserves the LLM-first intent boundary and keeps all downstream execution
+deterministic. The PlanCompiler already has a `signal_first` policy that uses
+the structured intent to select the signal-anomalous channel element; no runtime
+question-text matching is needed.
+
+### 被否决的方案
+
+- Adding a runtime branch for "since the weekend": this would be a forbidden
+  Python natural-language mapper.
+- Making rank_root_causes infer multi-day context: the ranker consumes evidence
+  and should not reinterpret original user wording.
+
+---
+
+## ADL-0044: Product-first intent priority for merchandise sales questions
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-17 |
+| 状态 | accepted |
+| 关联迭代 | GPT nano provider validation |
+| 影响范围 | LLM intent planner prompt, RCA plan selection |
+
+### 背景与场景
+
+`gpt-5-nano` provider validation exposed an intent instability for broad GMV
+questions that use merchandise wording. The question "Why did yesterday's GMV
+decline in merchandise sales?" kept the correct metric but sometimes selected a
+channel-first strategy, causing the deterministic plan to fetch campaign
+signals first and rank a channel/campaign cause over the expected product/AOV
+cause.
+
+### 决策
+
+The intent planner prompt now states that product, merchandise, SKU, item,
+price, AOV, basket-size, and average-order-value wording takes priority over
+broad store/channel defaults. Those questions should use
+`analysis_strategy=product_first` unless the user explicitly says merchandising
+was stable or explicitly asks about channel/campaign traffic.
+
+### 理由
+
+This keeps natural-language semantic resolution inside the LLM intent planner,
+as required by the architecture red lines, while making the structured intent
+less provider-sensitive. The deterministic PlanCompiler continues to consume
+only `ParsedIntent` and metadata-backed policy; no Python keyword mapper was
+added.
+
+### 被否决的方案
+
+- Adding a Python branch for "merchandise sales": this would violate the
+  LLM-first intent boundary.
+- Changing the ranker to prefer product for this phrase: the ranker does not
+  receive natural language and should not encode question wording.
+
+---
+
+## ADL-0043: Explicit LLM temperature only
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-17 |
+| 状态 | accepted |
+| 关联迭代 | OpenAI Agents SDK provider compatibility |
+| 影响范围 | Settings, AgentRuntimeConfig, OpenAIAgentsRuntime |
+
+### 背景与场景
+
+Provider compatibility testing with OpenAI `gpt-5-nano` showed that the model
+rejects an explicit `temperature` request parameter. MetricRCA previously
+defaulted `llm_temperature` to `0.0`, which made the runtime send a parameter
+that was not required for deterministic intent parsing and is unsupported by
+some provider/model combinations.
+
+### 决策
+
+`Settings.llm_temperature` now defaults to `None`. The runtime passes no
+temperature value unless the operator explicitly configures
+`METRIC_RCA_LLM_TEMPERATURE`. Explicit temperature values are still threaded into
+`AgentRuntimeConfig` and the Agents SDK model settings unchanged.
+
+### 理由
+
+Omitting an optional provider parameter is not a fallback path: the model,
+provider, key, structured-output method, and tracing configuration remain
+explicit and fail-fast. It avoids rejecting otherwise valid OpenAI models while
+preserving operator control for providers that support deterministic temperature
+configuration.
+
+### 被否决的方案
+
+- Hardcoding a model-name allowlist for temperature support: this would add a
+  runtime provider heuristic that must track external model behavior.
+- Catching the provider error and retrying without temperature: this would be a
+  silent fallback and would hide unsupported configuration from tests and ops.
+
+---
+
+## ADL-0042: Async AgentRuntime and metadata-backed plan family routing
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-17 |
+| 状态 | accepted |
+| 关联迭代 | OpenAI Agents SDK migration post-review fixes |
+| 影响范围 | AgentRuntime, OpenAIAgentsRuntime, metric_definition, RcaPlanCompiler, runtime tooling |
+
+### 背景与场景
+
+Post-review P1 findings identified two production-readiness gaps. First,
+`OpenAIAgentsRuntime.run_structured()` used the Agents SDK sync runner, which is
+valid for the current synchronous eval path but unsafe as the only supported
+contract for async hosts. Second, `RcaPlanCompiler` classified metric families
+with an in-code rate metric set, requiring runtime code edits for catalog growth.
+
+The review also noted maintainability debt in runtime dependency typing and the
+large `sdk_tools.py` ranking section.
+
+### 决策
+
+`AgentRuntime` now exposes both `run_structured()` and `arun_structured()`.
+`OpenAIAgentsRuntime.arun_structured()` calls the SDK async `Runner.run()` path
+directly; sync callers continue to use `Runner.run_sync()` through
+`run_structured()`.
+
+`metric_definition` now carries `metric_family` as DB-backed metadata. The
+metadata repository hydrates it into `MetricDefinition`, and
+`RcaPlanCompiler` requires a metric metadata provider rather than maintaining a
+hardcoded `RATE_FAMILY_METRICS` list. The legacy subagent router was updated to
+read the same metadata field.
+
+`RcaPlanCompiler` no longer abbreviates dimensions through a static
+`_dimension_prefix()` map for planned E3 outputs. Planned E3 outputs declare
+only the stable `E3` family alias; persisted concrete E3 evidence aliases remain
+produced by the tool layer for backwards-compatible evidence matching.
+
+The `metric_family` metadata column is `NOT NULL` without a DB default. Seed and
+test rows must provide it explicitly so missing family metadata fails at the
+metadata boundary instead of silently routing to a default family.
+
+Runtime dependency bags are now documented with Protocols, and persisted E4
+ranking/adtributor logic moved from `runtime/sdk_tools.py` to
+`runtime/ranking.py`.
+
+### 理由
+
+The async method keeps SDK event-loop semantics explicit without requiring
+RunService to become async. Metadata-backed family routing aligns plan
+compilation with the project red line that metric facts come from DB-backed
+metadata, while keeping natural-language intent mapping in the LLM prompt.
+
+The ranking extraction is behavior-preserving but makes tool registration and
+ranking easier to review independently. E4 summary update persistence is now a
+required repository method instead of a row-mutation compatibility path.
+
+### 被否决的方案
+
+- Wrapping `Runner.run_sync()` in an async helper: it preserves the event-loop
+  hazard instead of removing it.
+- Inferring rate family from metric names, suffixes, or question family text:
+  this would replace one hardcoded route with another runtime heuristic.
+- Adding a default metric family in `MetricDefinition`: this would mask missing
+  metadata instead of failing at the boundary.
+
+---
+
+## ADL-0041: Production follow-ups for sync AgentRuntime and metadata-driven planning
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-17 |
+| 状态 | superseded by ADL-0042 |
 | 关联迭代 | OpenAI Agents SDK migration post-review |
 | 影响范围 | AgentRuntime, OpenAIAgentsRuntime, RcaPlanCompiler |
 
 ### 背景与场景
+
+This entry records the initial post-review follow-up decision. ADL-0042 later
+implemented these follow-ups in code.
 
 Post-migration review accepted the Phase B result but flagged production follow-ups:
 `OpenAIAgentsRuntime.run_structured()` currently calls `Runner.run_sync()`, which

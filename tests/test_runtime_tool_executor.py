@@ -516,6 +516,7 @@ class _MetricService:
             metric_id=metric_id,
             display_name=metric_id,
             formula="metric_value",
+            metric_family="gmv_family",
             source_table="fact_order",
             allowed_dimensions=["channel", "product"],
             higher_is_better=True,

@@ -29,6 +29,11 @@ class StaticMetricService:
                 metric_id=metric_id,
                 display_name=metric_id,
                 formula="test",
+                metric_family=(
+                    "rate_family"
+                    if metric_id in {"pay_cvr", "refund_rate", "stockout_rate", "complaint_rate"}
+                    else "gmv_family"
+                ),
                 higher_is_better=metric_id not in {"refund_rate", "stockout_rate", "complaint_rate"},
                 allowed_dimensions=["channel", "category", "device", "product", "warehouse"],
                 source_table=source_table,

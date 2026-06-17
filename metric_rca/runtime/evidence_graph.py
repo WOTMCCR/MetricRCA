@@ -58,6 +58,5 @@ class EvidenceGraph(StrictModel):
     @classmethod
     def from_repository(cls, *, run_id: str, repository: Any) -> EvidenceGraph:
         graph = cls(run_id=run_id)
-        if hasattr(repository, "get_evidences"):
-            graph.add_ids([row["evidence_id"] for row in repository.get_evidences(run_id)])
+        graph.add_ids([row["evidence_id"] for row in repository.get_evidences(run_id)])
         return graph

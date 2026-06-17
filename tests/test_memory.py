@@ -9,11 +9,23 @@ from sqlalchemy import create_engine, text
 
 from metric_rca.agent.reflection import verify_reflection
 from metric_rca.config.settings import Settings
-from metric_rca.domain.models import Evidence, RootCauseCandidate
+from metric_rca.domain.models import Evidence, MetricDefinition, RootCauseCandidate
 from metric_rca.guardrails.query_spec import build_query_spec
 from metric_rca.runtime.plan_compiler import RcaPlanCompiler
 from metric_rca.runtime.plan_models import CasePrior
 from metric_rca.services.metric_contracts import ParsedIntent
+
+
+class _MetricCatalog:
+    def get_metric_definition(self, metric_id: str) -> MetricDefinition:
+        return MetricDefinition(
+            metric_id=metric_id,
+            display_name=metric_id,
+            formula="test",
+            metric_family="gmv_family",
+            source_table="fact_order",
+            allowed_dimensions=["channel", "category", "device", "product"],
+        )
 
 
 def test_memory_repo_is_real_not_reexport_shell() -> None:
@@ -365,7 +377,7 @@ def test_plan_compiler_keeps_memory_hints_without_skipping_evidence_chain() -> N
         source_memory_ids=["mem-1"],
     )
 
-    plan = RcaPlanCompiler().compile(
+    plan = RcaPlanCompiler(metric_service=_MetricCatalog()).compile(
         run_id="run-1",
         parsed_intent=ParsedIntent(
             metric_id="gmv",

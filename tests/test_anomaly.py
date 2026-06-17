@@ -16,6 +16,7 @@ def _metric(metric_id: str = "gmv", *, higher_is_better: bool = True) -> MetricD
         metric_id=metric_id,
         display_name=metric_id,
         formula="test",
+        metric_family="gmv_family",
         higher_is_better=higher_is_better,
         allowed_dimensions=["channel", "category", "device", "product"],
         source_table="fact_order",
@@ -39,6 +40,7 @@ class FakeMetadataRepository:
             "source_table": metric.source_table,
             "allowed_dimensions": metric.allowed_dimensions,
             "formula": metric.formula,
+            "metric_family": metric.metric_family,
         }
 
     def list_metrics(self) -> list[MetricDefinition]:

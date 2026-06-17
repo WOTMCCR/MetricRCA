@@ -20,6 +20,7 @@ def test_phase1_domain_models_exist_and_forbid_extra_fields() -> None:
             metric_id="gmv",
             display_name="GMV",
             formula="sum(order_amount)",
+            metric_family="gmv_family",
             source_table="fact_order",
         ),
         models.Dimension(dim_id="channel", column="channel", table="fact_order"),

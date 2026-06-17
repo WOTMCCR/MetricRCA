@@ -111,6 +111,23 @@ def test_run_service_fails_plan_execution_errors_with_typed_code() -> None:
     assert trace.finished[-1] == ("run-1", "failed", "EVIDENCE_MISSING")
 
 
+def test_run_service_fails_invalid_reflection_contract_without_empty_payload_fallback() -> None:
+    parsed = ParsedIntent(metric_id="gmv", target_date=date(2026, 6, 5), question_family="gmv_drop")
+    trace = _TraceWriter()
+
+    result = RunService(
+        dependencies=_Dependencies(metric_service=_MetricService(parsed), trace_writer=trace),
+        plan_compiler=_PlanCompiler(_plan("run-1")),
+        plan_executor=_PlanExecutor(ExecutionResult(status="succeeded")),
+        report_projector=lambda run_id, status: {"run_id": run_id, "status": status},
+        reflection_verifier=lambda run_id, repair_count, parsed_intent: object(),
+    ).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "REFLECTION_OUTPUT_INVALID"
+    assert trace.finished[-1] == ("run-1", "failed", "REFLECTION_OUTPUT_INVALID")
+
+
 def _plan(run_id: str) -> RcaPlan:
     return RcaPlan(
         run_id=run_id,

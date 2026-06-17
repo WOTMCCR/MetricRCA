@@ -41,20 +41,7 @@ class OpenAIAgentsRuntime:
         output_type: type[StructuredOutputT],
         max_turns: int = 1,
     ) -> StructuredOutputT:
-        agent_output_type: type[Any] = output_type
-        agent_instructions = instructions
-        if self._config.structured_output_method == "json_mode":
-            agent_output_type = str
-            agent_instructions = _instructions_with_json_schema(
-                instructions=instructions,
-                output_type=output_type,
-            )
-
-        agent = Agent(
-            name=name,
-            instructions=agent_instructions,
-            output_type=agent_output_type,
-        )
+        agent = self._build_agent(name=name, instructions=instructions, output_type=output_type)
         try:
             result = self._runner.run_sync(
                 agent,
@@ -68,9 +55,62 @@ class OpenAIAgentsRuntime:
             raise AgentRuntimeError("LLM_REQUIRED_UNAVAILABLE", "agent request failed") from exc
         except AgentsException as exc:
             raise AgentRuntimeError("LLM_REQUIRED_UNAVAILABLE", "agent runtime request failed") from exc
+        return self._coerce_final_output(result.final_output, output_type)
+
+    async def arun_structured(
+        self,
+        *,
+        name: str,
+        instructions: str,
+        user_input: str,
+        output_type: type[StructuredOutputT],
+        max_turns: int = 1,
+    ) -> StructuredOutputT:
+        agent = self._build_agent(name=name, instructions=instructions, output_type=output_type)
+        try:
+            result = await self._runner.run(
+                agent,
+                user_input,
+                max_turns=max_turns,
+                run_config=self._run_config,
+            )
+        except ModelBehaviorError as exc:
+            raise AgentRuntimeError("MODEL_BEHAVIOR_ERROR", "agent returned invalid structured output") from exc
+        except OpenAIError as exc:
+            raise AgentRuntimeError("LLM_REQUIRED_UNAVAILABLE", "agent request failed") from exc
+        except AgentsException as exc:
+            raise AgentRuntimeError("LLM_REQUIRED_UNAVAILABLE", "agent runtime request failed") from exc
+        return self._coerce_final_output(result.final_output, output_type)
+
+    def _build_agent(
+        self,
+        *,
+        name: str,
+        instructions: str,
+        output_type: type[StructuredOutputT],
+    ) -> Agent[Any]:
+        agent_output_type: type[Any] = output_type
+        agent_instructions = instructions
         if self._config.structured_output_method == "json_mode":
-            return _validate_json_text(result.final_output, output_type)
-        return result.final_output
+            agent_output_type = str
+            agent_instructions = _instructions_with_json_schema(
+                instructions=instructions,
+                output_type=output_type,
+            )
+        return Agent(
+            name=name,
+            instructions=agent_instructions,
+            output_type=agent_output_type,
+        )
+
+    def _coerce_final_output(
+        self,
+        final_output: object,
+        output_type: type[StructuredOutputT],
+    ) -> StructuredOutputT:
+        if self._config.structured_output_method == "json_mode":
+            return _validate_json_text(final_output, output_type)
+        return final_output  # type: ignore[return-value]
 
 
 def _build_run_config(config: AgentRuntimeConfig) -> RunConfig:

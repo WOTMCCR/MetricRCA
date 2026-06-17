@@ -7,11 +7,9 @@ from typing import Any, Literal
 from pydantic import Field
 
 from metric_rca.agent.prompts import EXPERT_SYSTEM_PROMPT
-from metric_rca.domain.models import PHASE1_METRICS, StrictModel
+from metric_rca.domain.models import StrictModel
 
 
-GMV_FAMILY_METRICS = frozenset({"gmv", "net_gmv", "uv", "aov"})
-RATE_FAMILY_METRICS = frozenset({"pay_cvr", "refund_rate", "stockout_rate", "complaint_rate"})
 EXPERT_FAMILIES = frozenset({"gmv_family", "rate_family"})
 
 
@@ -33,14 +31,12 @@ class RunOutcome(StrictModel):
     reflection_notes: list[str] = Field(default_factory=list)
 
 
-def route_metric_family(metric_id: str) -> str:
-    if metric_id not in PHASE1_METRICS:
-        raise SubagentScopeError("METRIC_NOT_FOUND", f"metric is not supported: {metric_id}")
-    if metric_id in GMV_FAMILY_METRICS:
-        return "gmv_family"
-    if metric_id in RATE_FAMILY_METRICS:
-        return "rate_family"
-    raise SubagentScopeError("METRIC_NOT_FOUND", f"metric has no P9 expert family: {metric_id}")
+def route_metric_family(metric_id: str, *, metric_service: Any) -> str:
+    definition = metric_service.get_metric_definition(metric_id)
+    family = getattr(definition, "metric_family", None)
+    if family in EXPERT_FAMILIES:
+        return str(family)
+    raise SubagentScopeError("METRIC_METADATA_INVALID", f"metric has no expert family: {metric_id}")
 
 
 def build_subagents(*, settings: Any, tools: list[Any], middleware: list[Any]) -> list[dict[str, Any]]:
@@ -70,7 +66,6 @@ def _family_prompt(family: str) -> str:
     if family == "gmv_family":
         guidance = """
 Family guidance for gmv_family:
-- Supported target metrics: gmv, net_gmv, uv, aov.
 - Treat GMV as UV x CVR x AOV when interpreting contribution evidence.
 - For net_gmv, preserve the net_gmv = gmv - refund_amount chain and validate the dominant side with tools.
 - For AOV/product-first cases, use product inventory/merchandise evidence before concluding aov_drop.
@@ -78,7 +73,6 @@ Family guidance for gmv_family:
     elif family == "rate_family":
         guidance = """
 Family guidance for rate_family:
-- Supported target metrics: pay_cvr, refund_rate, stockout_rate, complaint_rate.
 - Direction matters: pay_cvr down is bad; refund_rate, stockout_rate, and complaint_rate up are bad.
 - Broad pay_cvr or conversion-rate questions should inspect device first and use conversion evidence for the strongest device candidate.
 - Broad refund_rate questions should inspect product first and use refund_quality evidence for the strongest product candidate.

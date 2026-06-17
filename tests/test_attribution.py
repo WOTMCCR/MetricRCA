@@ -20,6 +20,7 @@ def _metric(metric_id: str = "gmv", *, higher_is_better: bool = True) -> MetricD
         metric_id=metric_id,
         display_name=metric_id,
         formula="test",
+        metric_family="gmv_family",
         higher_is_better=higher_is_better,
         allowed_dimensions=["channel", "category", "device", "product"],
         source_table="fact_order",

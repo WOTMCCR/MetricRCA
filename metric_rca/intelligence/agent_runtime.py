@@ -59,6 +59,17 @@ class AgentRuntime(Protocol):
     ) -> StructuredOutputT:
         ...
 
+    async def arun_structured(
+        self,
+        *,
+        name: str,
+        instructions: str,
+        user_input: str,
+        output_type: type[StructuredOutputT],
+        max_turns: int = 1,
+    ) -> StructuredOutputT:
+        ...
+
 
 def create_agent_runtime(config: AgentRuntimeConfig) -> AgentRuntime:
     """Build the configured runtime adapter without exposing SDK types upstream."""

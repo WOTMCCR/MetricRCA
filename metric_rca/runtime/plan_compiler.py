@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from metric_rca.business.discovery_policy import DiscoveryPolicy, discovery_policy_from_intent
 from metric_rca.runtime.plan_models import CasePrior, RcaAction, RcaPlan
 from metric_rca.services.metric_contracts import ParsedIntent
 
 
-RATE_FAMILY_METRICS = frozenset({"pay_cvr", "refund_rate", "stockout_rate", "complaint_rate"})
+class MetricMetadataProvider(Protocol):
+    def get_metric_definition(self, metric_id: str) -> Any:
+        ...
 
 
 class PlanCompilerError(ValueError):
@@ -19,6 +21,9 @@ class PlanCompilerError(ValueError):
 
 
 class RcaPlanCompiler:
+    def __init__(self, *, metric_service: MetricMetadataProvider | None = None) -> None:
+        self._metric_service = metric_service
+
     def compile(
         self,
         *,
@@ -50,12 +55,21 @@ class RcaPlanCompiler:
             metric_id=parsed_intent.metric_id,
             target_date=parsed_intent.target_date,
             question_family=parsed_intent.question_family,
-            family=_metric_family(parsed_intent.metric_id),
+            family=self._metric_family(parsed_intent.metric_id),
             explicit_scope=explicit_scope,
             actions=actions,
             budget=budget or {"max_steps": 8, "max_query": 12, "max_drilldown_depth": 3},
             memory_hints=memory_hints or [],
         )
+
+    def _metric_family(self, metric_id: str) -> str:
+        if self._metric_service is None:
+            raise PlanCompilerError("METRIC_METADATA_REQUIRED", "plan compiler requires metric metadata")
+        definition = self._metric_service.get_metric_definition(metric_id)
+        family = getattr(definition, "metric_family", None)
+        if family not in {"gmv_family", "rate_family"}:
+            raise PlanCompilerError("METRIC_METADATA_INVALID", "metric_family must be gmv_family or rate_family")
+        return str(family)
 
 
 def _explicit_actions(
@@ -90,7 +104,7 @@ def _explicit_actions(
                 "filters": filters,
             },
             requires=["E1", f"E2_{dimension}"],
-            produces=[f"E3_{_dimension_prefix(dimension)}_{element}"],
+            produces=["E3"],
         ),
         RcaAction(
             action_id="A4",
@@ -153,7 +167,7 @@ def _broad_actions(parsed_intent: ParsedIntent, policy: DiscoveryPolicy) -> list
                 "element_selection": policy.element_selection,
             },
             requires=["E1", f"E2_{signal_dimension}"],
-            produces=[f"E3_{_dimension_prefix(signal_dimension)}"],
+            produces=["E3"],
             dynamic=policy.first_signal_element is None,
         )
     )
@@ -201,11 +215,6 @@ def _explicit_dimension_element(parsed_intent: ParsedIntent) -> tuple[str | None
         return next(iter(parsed_intent.filters.items()))
     return None, None
 
-
-def _metric_family(metric_id: str) -> str:
-    return "rate_family" if metric_id in RATE_FAMILY_METRICS else "gmv_family"
-
-
 def _signal_type_for_metric_dimension(metric_id: str, dimension: str) -> str:
     from metric_rca.business.signal_policy import select_signal_type_for_metric_dimension
 
@@ -213,13 +222,3 @@ def _signal_type_for_metric_dimension(metric_id: str, dimension: str) -> str:
         return select_signal_type_for_metric_dimension(metric_id=metric_id, dimension=dimension)
     except ValueError as exc:
         raise PlanCompilerError("SIGNAL_POLICY_MISSING", "signal policy missing for metric/dimension") from exc
-
-
-def _dimension_prefix(dimension: str) -> str:
-    return {
-        "channel": "ch",
-        "category": "cat",
-        "device": "dev",
-        "product": "prod",
-        "warehouse": "wh",
-    }.get(dimension, dimension)

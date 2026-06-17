@@ -85,6 +85,7 @@ EXPECTED_COLUMNS = {
         "metric_id": "varchar",
         "display_name": "varchar",
         "formula": "varchar",
+        "metric_family": "varchar",
         "numerator_sql_fragment": "varchar",
         "denominator_sql_fragment": "varchar",
         "higher_is_better": "tinyint",
@@ -230,6 +231,19 @@ def test_schema_has_exact_phase1_tables_columns_and_indexes() -> None:
                 assert actual_for_table == set(expected_columns), table
                 for column, data_type in expected_columns.items():
                     assert columns[(table, column)] == data_type
+
+            metric_family_default = conn.execute(
+                text(
+                    """
+                    SELECT COLUMN_DEFAULT
+                    FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'metric_definition'
+                      AND COLUMN_NAME = 'metric_family'
+                    """
+                )
+            ).scalar_one()
+            assert metric_family_default is None
 
             primary_keys = {
                 row.TABLE_NAME

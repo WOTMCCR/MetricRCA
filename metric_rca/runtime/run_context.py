@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any
+
+from metric_rca.runtime.dependencies import RuntimeRepository
 
 
 def _default_budget() -> dict[str, int]:
@@ -18,7 +19,7 @@ class RunContext:
     target_date: date
     explicit_scope: dict[str, str] = field(default_factory=dict)
     budget: dict[str, int] = field(default_factory=_default_budget)
-    repository: Any | None = None
+    repository: RuntimeRepository | None = None
     step_count: int = 0
     query_count: int = 0
     drilldown_depth: int = 0

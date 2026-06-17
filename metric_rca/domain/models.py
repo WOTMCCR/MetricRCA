@@ -57,6 +57,7 @@ class MetricDefinition(StrictModel):
     metric_id: str
     display_name: str
     formula: str
+    metric_family: Literal["gmv_family", "rate_family"]
     numerator_sql_fragment: str | None = None
     denominator_sql_fragment: str | None = None
     higher_is_better: bool = True

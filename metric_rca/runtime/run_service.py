@@ -11,6 +11,7 @@ from metric_rca.domain.models import Evidence, QuerySpec, RootCauseCandidate
 from metric_rca.observability.summary import build_token_summary
 from metric_rca.observability.trace import TraceWriteError
 from metric_rca.reporting.projector import build_report_from_persisted_artifacts
+from metric_rca.runtime.dependencies import RuntimeDependencies
 from metric_rca.runtime.plan_compiler import RcaPlanCompiler
 from metric_rca.runtime.plan_compiler import PlanCompilerError
 from metric_rca.runtime.plan_executor import RcaPlanExecutor
@@ -27,14 +28,14 @@ class RunService:
     def __init__(
         self,
         *,
-        dependencies: Any,
+        dependencies: RuntimeDependencies,
         plan_compiler: Any | None = None,
         plan_executor: Any | None = None,
         reflection_verifier: ReflectionVerifier | None = None,
         report_projector: ReportProjector | None = None,
     ) -> None:
         self.dependencies = dependencies
-        self._plan_compiler = plan_compiler or RcaPlanCompiler()
+        self._plan_compiler = plan_compiler or RcaPlanCompiler(metric_service=dependencies.metric_service)
         self._plan_executor = plan_executor or RcaPlanExecutor(
             tool_executor=ToolExecutor(dependencies=dependencies),
             trace_writer=dependencies.trace_writer,
@@ -87,7 +88,12 @@ class RunService:
             return self._fail(resolved_run_id, question, execution.error_code or "PLAN_EXECUTION_FAILED")
 
         reflection = self._reflection_verifier(resolved_run_id, 0, parsed_intent)
-        if execution.status == "succeeded" and not getattr(reflection, "passed", False):
+        try:
+            reflection_passed = _reflection_passed(reflection)
+            reflection_payload = _reflection_payload(reflection)
+        except RuntimeError as exc:
+            return self._fail(resolved_run_id, question, _code_from_exception(exc, "REFLECTION_OUTPUT_INVALID"))
+        if execution.status == "succeeded" and not reflection_passed:
             return self._fail(resolved_run_id, question, "REFLECTION_REPAIR_FAILED")
 
         status = "no_anomaly" if execution.status == "no_anomaly" else "succeeded"
@@ -110,7 +116,7 @@ class RunService:
             "question": question,
             "status": status,
             "error_code": None,
-            "reflection": reflection.model_dump(mode="json") if hasattr(reflection, "model_dump") else {},
+            "reflection": reflection_payload,
             "report": report,
         }
 
@@ -258,6 +264,25 @@ def _code_from_exception(exc: BaseException, default: str) -> str:
     return default
 
 
+def _reflection_passed(reflection: Any) -> bool:
+    passed = getattr(reflection, "passed", None)
+    if not isinstance(passed, bool):
+        raise RuntimeError("REFLECTION_OUTPUT_INVALID: reflection must expose boolean passed")
+    return passed
+
+
+def _reflection_payload(reflection: Any) -> dict[str, Any]:
+    if isinstance(reflection, dict):
+        return reflection
+    model_dump = getattr(reflection, "model_dump", None)
+    if not callable(model_dump):
+        raise RuntimeError("REFLECTION_OUTPUT_INVALID: reflection must expose model_dump")
+    payload = model_dump(mode="json")
+    if not isinstance(payload, dict):
+        raise RuntimeError("REFLECTION_OUTPUT_INVALID: reflection model_dump must return dict")
+    return payload
+
+
 def build_runtime_dependencies(
     *,
     settings: Settings | None = None,
@@ -266,7 +291,7 @@ def build_runtime_dependencies(
     renderer: Any | None = None,
     trace_writer: Any | None = None,
     memory_repo: Any | None = None,
-) -> Any:
+) -> RuntimeDependencies:
     from metric_rca.agent.runner import build_dependencies
 
     _ = datetime.now(timezone.utc)

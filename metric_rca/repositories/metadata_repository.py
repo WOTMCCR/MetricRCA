@@ -78,6 +78,7 @@ class MetadataRepository:
             "source_table": definition.source_table,
             "allowed_dimensions": definition.allowed_dimensions,
             "formula": definition.formula,
+            "metric_family": definition.metric_family,
         }
 
     def list_metrics(self) -> list[MetricDefinition]:
@@ -86,7 +87,7 @@ class MetadataRepository:
                 conn.execute(
                     text(
                         """
-                        SELECT metric_id, display_name, formula, numerator_sql_fragment,
+                        SELECT metric_id, display_name, formula, metric_family, numerator_sql_fragment,
                                denominator_sql_fragment, higher_is_better, source_table,
                                allowed_dimensions
                         FROM metric_definition
@@ -113,7 +114,7 @@ class MetadataRepository:
                 conn.execute(
                     text(
                         """
-                        SELECT metric_id, display_name, formula, numerator_sql_fragment,
+                        SELECT metric_id, display_name, formula, metric_family, numerator_sql_fragment,
                                denominator_sql_fragment, higher_is_better, source_table,
                                allowed_dimensions
                         FROM metric_definition
@@ -147,6 +148,7 @@ class MetadataRepository:
             metric_id=row["metric_id"],
             display_name=row["display_name"],
             formula=row["formula"],
+            metric_family=row["metric_family"],
             numerator_sql_fragment=row["numerator_sql_fragment"],
             denominator_sql_fragment=row["denominator_sql_fragment"],
             higher_is_better=bool(row["higher_is_better"]),

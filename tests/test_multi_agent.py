@@ -2,12 +2,33 @@ from __future__ import annotations
 
 from datetime import date
 
+from metric_rca.domain.models import MetricDefinition
+from metric_rca.agent.subagents import route_metric_family
 from metric_rca.runtime.plan_compiler import RcaPlanCompiler
 from metric_rca.services.metric_contracts import ParsedIntent
 
 
+def _compiler(*, family: str) -> RcaPlanCompiler:
+    return RcaPlanCompiler(metric_service=_MetricCatalog(family))
+
+
+class _MetricCatalog:
+    def __init__(self, family: str) -> None:
+        self.family = family
+
+    def get_metric_definition(self, metric_id: str) -> MetricDefinition:
+        return MetricDefinition(
+            metric_id=metric_id,
+            display_name=metric_id,
+            formula="test",
+            metric_family=self.family,
+            source_table="fact_order",
+            allowed_dimensions=["channel", "category", "device", "product"],
+        )
+
+
 def test_plan_compiler_routes_gmv_metrics_to_gmv_family() -> None:
-    plan = RcaPlanCompiler().compile(
+    plan = _compiler(family="gmv_family").compile(
         run_id="run-1",
         parsed_intent=ParsedIntent(
             metric_id="gmv",
@@ -25,7 +46,7 @@ def test_plan_compiler_routes_gmv_metrics_to_gmv_family() -> None:
 
 
 def test_plan_compiler_routes_rate_metrics_to_rate_family() -> None:
-    plan = RcaPlanCompiler().compile(
+    plan = _compiler(family="rate_family").compile(
         run_id="run-1",
         parsed_intent=ParsedIntent(
             metric_id="pay_cvr",
@@ -40,8 +61,25 @@ def test_plan_compiler_routes_rate_metrics_to_rate_family() -> None:
     ]
 
 
+def test_plan_compiler_family_comes_from_metric_metadata_not_metric_id_list() -> None:
+    plan = _compiler(family="rate_family").compile(
+        run_id="run-1",
+        parsed_intent=ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            question_family="gmv_drop",
+        ),
+    )
+
+    assert plan.family == "rate_family"
+
+
+def test_legacy_subagent_route_family_comes_from_metric_metadata() -> None:
+    assert route_metric_family("custom_metric", metric_service=_MetricCatalog("rate_family")) == "rate_family"
+
+
 def test_rate_family_refund_policy_uses_metric_fallback_for_nonstandard_strategy() -> None:
-    plan = RcaPlanCompiler().compile(
+    plan = _compiler(family="rate_family").compile(
         run_id="run-1",
         parsed_intent=ParsedIntent(
             metric_id="refund_rate",

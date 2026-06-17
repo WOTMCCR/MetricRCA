@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from metric_rca.intelligence.agent_runtime import AgentRuntimeConfig
 from metric_rca.intelligence.agent_runtime import AgentRuntimeError
 from metric_rca.intelligence.openai_agents_runtime import OpenAIAgentsRuntime, _build_run_config
@@ -59,6 +61,32 @@ def test_openai_agents_runtime_threads_timeout_and_retries_into_sdk_client(monke
     assert captured["max_retries"] == 0
 
 
+def test_openai_agents_runtime_omits_temperature_when_not_configured() -> None:
+    run_config = _build_run_config(
+        AgentRuntimeConfig(
+            provider="openai",
+            model="gpt-5-nano",
+            api_key="openai-key",
+        )
+    )
+
+    assert run_config.model_settings.temperature is None
+
+
+def test_openai_agents_runtime_preserves_explicit_temperature() -> None:
+    run_config = _build_run_config(
+        AgentRuntimeConfig(
+            provider="deepseek",
+            model="deepseek-chat",
+            api_key="deepseek-key",
+            base_url="https://api.deepseek.com",
+            temperature=0.0,
+        )
+    )
+
+    assert run_config.model_settings.temperature == 0.0
+
+
 def test_openai_agents_runtime_json_mode_validates_text_output() -> None:
     class FakeResult:
         final_output = (
@@ -108,6 +136,67 @@ def test_openai_agents_runtime_json_mode_validates_text_output() -> None:
     assert output.analysis_strategy == "channel_first"
 
 
+def test_openai_agents_runtime_async_path_uses_sdk_async_runner() -> None:
+    expected = _LLMIntentOutput(
+        error_code=None,
+        metric_id="gmv",
+        target_date="2026-06-05",
+        question_family="gmv_drop",
+        analysis_strategy="channel_first",
+        dimension=None,
+        element=None,
+        filters=[],
+    )
+
+    class FakeResult:
+        final_output = expected
+
+    class FakeRunner:
+        async_calls: list[dict[str, object]] = []
+        sync_calls = 0
+
+        @classmethod
+        async def run(cls, agent: object, user_input: str, *, max_turns: int, run_config: object) -> FakeResult:
+            cls.async_calls.append(
+                {
+                    "agent": agent,
+                    "user_input": user_input,
+                    "max_turns": max_turns,
+                    "run_config": run_config,
+                }
+            )
+            return FakeResult()
+
+        @classmethod
+        def run_sync(cls, agent: object, user_input: str, *, max_turns: int, run_config: object) -> FakeResult:
+            cls.sync_calls += 1
+            raise AssertionError("async runtime path must not call Runner.run_sync")
+
+    runtime = OpenAIAgentsRuntime(
+        AgentRuntimeConfig(
+            provider="deepseek",
+            model="deepseek-chat",
+            api_key="deepseek-key",
+            base_url="https://api.deepseek.com",
+        ),
+        runner=FakeRunner,
+    )
+
+    output = asyncio.run(
+        runtime.arun_structured(
+            name="metric_rca_intent_agent",
+            instructions="Parse intent.",
+            user_input="Something seems off with sales",
+            output_type=_LLMIntentOutput,
+            max_turns=1,
+        )
+    )
+
+    assert output == expected
+    assert len(FakeRunner.async_calls) == 1
+    assert FakeRunner.sync_calls == 0
+
+
 def test_openai_agents_runtime_json_mode_rejects_invalid_json() -> None:
     class FakeResult:
         final_output = "not json"
@@ -140,3 +229,71 @@ def test_openai_agents_runtime_json_mode_rejects_invalid_json() -> None:
         assert exc.code == "MODEL_BEHAVIOR_ERROR"
     else:
         raise AssertionError("invalid json must raise AgentRuntimeError")
+
+
+def test_openai_agents_runtime_json_mode_rejects_non_text_output() -> None:
+    class FakeResult:
+        final_output = {"metric_id": "gmv"}
+
+    class FakeRunner:
+        @classmethod
+        def run_sync(cls, agent: object, user_input: str, *, max_turns: int, run_config: object) -> FakeResult:
+            return FakeResult()
+
+    runtime = OpenAIAgentsRuntime(
+        AgentRuntimeConfig(
+            provider="deepseek",
+            model="deepseek-chat",
+            api_key="deepseek-key",
+            base_url="https://api.deepseek.com",
+            structured_output_method="json_mode",
+        ),
+        runner=FakeRunner,
+    )
+
+    try:
+        runtime.run_structured(
+            name="metric_rca_intent_agent",
+            instructions="Parse intent.",
+            user_input="Something seems off with sales",
+            output_type=_LLMIntentOutput,
+            max_turns=1,
+        )
+    except AgentRuntimeError as exc:
+        assert exc.code == "MODEL_BEHAVIOR_ERROR"
+    else:
+        raise AssertionError("non-text json_mode output must raise AgentRuntimeError")
+
+
+def test_openai_agents_runtime_json_mode_rejects_schema_mismatch() -> None:
+    class FakeResult:
+        final_output = '{"metric_id": "gmv"}'
+
+    class FakeRunner:
+        @classmethod
+        def run_sync(cls, agent: object, user_input: str, *, max_turns: int, run_config: object) -> FakeResult:
+            return FakeResult()
+
+    runtime = OpenAIAgentsRuntime(
+        AgentRuntimeConfig(
+            provider="deepseek",
+            model="deepseek-chat",
+            api_key="deepseek-key",
+            base_url="https://api.deepseek.com",
+            structured_output_method="json_mode",
+        ),
+        runner=FakeRunner,
+    )
+
+    try:
+        runtime.run_structured(
+            name="metric_rca_intent_agent",
+            instructions="Parse intent.",
+            user_input="Something seems off with sales",
+            output_type=_LLMIntentOutput,
+            max_turns=1,
+        )
+    except AgentRuntimeError as exc:
+        assert exc.code == "MODEL_BEHAVIOR_ERROR"
+    else:
+        raise AssertionError("schema-mismatched json_mode output must raise AgentRuntimeError")

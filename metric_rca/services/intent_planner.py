@@ -60,9 +60,19 @@ RULES:
 - Use analysis_strategy={stable_merch_strategy} when an unscoped target KPI question should
   first verify the strongest channel campaign movement because merchandising is
   stated as stable or not the likely driver.
+- Use analysis_strategy={stable_merch_strategy} for unscoped GMV questions that
+  describe a multi-day drift or temporal run-up such as "has been declining",
+  "since the weekend", or "over the weekend". In those cases the RCA target_date
+  is still the configured single run target date, but the discovery strategy
+  should select the channel element with the strongest related signal anomaly.
 - Use analysis_strategy=product_first when an unscoped target KPI question should
   first verify product/inventory movement, including merchandise sales, price, or
   average-order-value wording.
+- Product/merchandise/price wording takes priority over broad store/channel
+  defaults. If a GMV question says "merchandise sales", product, SKU, item,
+  price, AOV, basket size, or average order value, use
+  analysis_strategy=product_first unless the user explicitly says merchandising
+  was stable or explicitly asks about channel/campaign traffic.
 - dimension MUST be one of the supported dimensions or null.
 - element and filter values MUST come from the supported dimension values when values are listed.
 - If the question contains explicit "dimension=value" text, treat it as a required filter.

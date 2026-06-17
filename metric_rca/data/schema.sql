@@ -95,6 +95,7 @@ CREATE TABLE metric_definition (
   metric_id    VARCHAR(32) PRIMARY KEY,
   display_name VARCHAR(64) NOT NULL,
   formula      VARCHAR(255) NOT NULL,
+  metric_family VARCHAR(32) NOT NULL,
   numerator_sql_fragment VARCHAR(255),
   denominator_sql_fragment VARCHAR(255),
   higher_is_better TINYINT NOT NULL DEFAULT 1,
