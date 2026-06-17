@@ -14,6 +14,10 @@ from datetime import date
 TARGET_DATE = date(2026, 6, 5)  # 固定目标日（昨天），4 个异常 case 注入于此
 BORDERLINE_DATE = date(2026, 6, 3)  # 弱 paid_ads 波动，预期不触发异常
 SPIKE_DATE = date(2026, 6, 2)  # paid_ads 正向 spike，用于正向异常 eval
+MULTI_CAUSE_DATE = date(2026, 6, 1)
+INTERACTION_DATE = date(2026, 5, 31)
+LAGGED_DATE = date(2026, 5, 30)
+LAGGED_OBSERVE_DATE = date(2026, 6, 1)
 QUALITY_PRODUCT_ID = 1  # refund_rate_product_quality case 注入的问题商品
 
 
@@ -89,7 +93,7 @@ def stockout_hours(*, business_date: date, category: str, warehouse_index: int) 
 def refund_multiplier(*, business_date: date, product_id: int, category: str | None = None) -> float:
     """单笔退款概率；目标日问题商品退款率飙升（refund_rate_product_quality）。"""
     if business_date == TARGET_DATE and product_id == QUALITY_PRODUCT_ID:
-        return 0.75
+        return 0.95
     if business_date == TARGET_DATE and category == "fashion":
         return 0.42
     return 0.04
@@ -118,7 +122,45 @@ def support_ticket_count(*, business_date: date, product_id: int, category: str 
 def order_amount_multiplier(*, business_date: date, category: str, product_id: int) -> float:
     """目标日价格/AOV 类异常：只改变事实订单金额，不改变 DDL 或指标口径。"""
     if business_date == TARGET_DATE and category == "fashion":
-        return 0.16
+        return 0.03
     if business_date == TARGET_DATE and product_id == 2:
-        return 0.18
+        return 0.03
     return 1.0
+
+
+def multi_cause_traffic_multiplier(*, business_date: date, channel: str, category: str) -> tuple[float, float]:
+    if business_date == MULTI_CAUSE_DATE and channel == "paid_ads":
+        return 0.55, 1.0
+    return 1.0, 1.0
+
+
+def multi_cause_stockout_hours(*, business_date: date, category: str) -> float | None:
+    if business_date == MULTI_CAUSE_DATE and category == "electronics":
+        return 12.0
+    return None
+
+
+def interaction_multiplier(*, business_date: date, channel: str, category: str) -> tuple[float, float]:
+    if business_date != INTERACTION_DATE:
+        return 1.0, 1.0
+    if channel == "paid_ads" and category == "electronics":
+        return 0.30, 1.0
+    uv_multiplier = 0.95 if channel == "paid_ads" else 1.0
+    pay_user_multiplier = 0.97 if category == "electronics" else 1.0
+    return uv_multiplier, pay_user_multiplier
+
+
+def lagged_campaign_multiplier(*, business_date: date, channel: str) -> tuple[float, float, float, float]:
+    if channel != "social":
+        return 1.0, 1.0, 1.0, 1.0
+    if business_date == LAGGED_DATE:
+        return 0.15, 0.10, 1.0, 1.0
+    if business_date == LAGGED_OBSERVE_DATE:
+        return 1.0, 1.0, 0.35, 1.0
+    return 1.0, 1.0, 1.0, 1.0
+
+
+def weak_signal_multiplier(*, business_date: date, channel: str) -> tuple[float, float]:
+    if business_date == MULTI_CAUSE_DATE and channel == "affiliate":
+        return 0.82, 0.85
+    return 1.0, 1.0

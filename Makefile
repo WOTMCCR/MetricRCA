@@ -28,7 +28,7 @@ eval:
 	python -m metric_rca.evals.runner
 
 eval-regression:
-	METRIC_RCA_EVAL_SUITE=regression python -m metric_rca.evals.runner
+	METRIC_RCA_EVAL_SUITE=regression python -m metric_rca.evals.runner $(if $(EVAL_ID),--eval-id $(EVAL_ID),)
 
 eval-blind:
 	METRIC_RCA_EVAL_SUITE=blind python -m metric_rca.evals.runner
