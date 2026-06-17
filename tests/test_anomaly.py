@@ -161,6 +161,27 @@ def test_detect_anomaly_no_anomaly_returns_no_anomaly_observation() -> None:
     assert result.error_code == "NO_ANOMALY_DETECTED"
 
 
+def test_detect_anomaly_flags_positive_magnitude_spike() -> None:
+    result = detect_anomaly_from_rows(
+        current_rows=[{"metric_value": 250.0}],
+        baseline_rows=[
+            {"business_date": date(2026, 5, 29), "metric_value": 100.0},
+            {"business_date": date(2026, 5, 22), "metric_value": 101.0},
+            {"business_date": date(2026, 5, 15), "metric_value": 99.0},
+            {"business_date": date(2026, 5, 8), "metric_value": 100.0},
+        ],
+        metric_definition=_metric("gmv", higher_is_better=True),
+        thresh_pct=0.15,
+        z_thresh=2.0,
+    )
+
+    assert result.ok is True
+    assert result.is_anomaly is True
+    assert result.bad_direction is False
+    assert result.delta_pct > 1.0
+    assert result.z_score > 2.0
+
+
 def test_detect_anomaly_sample_n_lt_3_returns_insufficient_baseline_data() -> None:
     result = detect_anomaly_from_rows(
         current_rows=[{"metric_value": 50.0}],

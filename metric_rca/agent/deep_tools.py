@@ -290,6 +290,8 @@ def _rank_from_persisted_e4(
                 message="persisted E4 has no candidates",
             )
         )
+    e4_summary = dict(e4.get("result_summary") or {})
+    persisted_selected_candidate = _persisted_selected_candidate(e4_summary)
     candidates, adtributor_audit = _enhance_with_adtributor(
         repository=repository,
         settings=settings,
@@ -298,11 +300,26 @@ def _rank_from_persisted_e4(
         candidates=candidates,
     )
     e_rank_id = f"{run_id}:E_rank"
-    candidates = [
+    ranked_candidates = [
         _candidate_with_rank_evidence(candidate, e_rank_id)
         for candidate in _rank_candidates(candidates)
     ]
-    selected_candidate = candidates[0]
+    if adtributor_audit.get("adtributor_status") == "applied":
+        candidates = ranked_candidates
+        selected_candidate = candidates[0]
+    elif persisted_selected_candidate is not None:
+        selected_candidate = _candidate_with_rank_evidence(persisted_selected_candidate, e_rank_id)
+        candidates = [
+            selected_candidate,
+            *[
+                candidate
+                for candidate in ranked_candidates
+                if not _same_candidate_element(candidate, selected_candidate)
+            ],
+        ]
+    else:
+        candidates = ranked_candidates
+        selected_candidate = candidates[0]
     sql_text = e4.get("sql_text")
     if not sql_text:
         return ToolObservationOut(
@@ -313,7 +330,6 @@ def _rank_from_persisted_e4(
                 message="persisted E4 sql_text is required before ranking",
             )
         )
-    e4_summary = dict(e4.get("result_summary") or {})
     e4_summary["selected_candidate"] = selected_candidate.model_dump(mode="json")
     e4_summary["candidates"] = [candidate.model_dump(mode="json") for candidate in candidates]
     e4_summary["ranker"] = (
@@ -368,6 +384,21 @@ def _rank_from_persisted_e4(
         ),
         evidence_ids=[evidence.evidence_id],
         candidates=candidates,
+    )
+
+
+def _persisted_selected_candidate(e4_summary: dict[str, Any]) -> RootCauseCandidate | None:
+    selected = e4_summary.get("selected_candidate")
+    if not isinstance(selected, dict):
+        return None
+    return RootCauseCandidate.model_validate(selected)
+
+
+def _same_candidate_element(left: RootCauseCandidate, right: RootCauseCandidate) -> bool:
+    return (
+        left.dimension == right.dimension
+        and str(left.element) == str(right.element)
+        and left.root_cause_type == right.root_cause_type
     )
 
 

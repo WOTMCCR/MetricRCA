@@ -78,6 +78,43 @@ def test_reflection_low_attribution_coverage_returns_ATTRIBUTION_COVERAGE_LOW() 
     assert issue.suggested_action.args["metric_id"] == "gmv"
 
 
+def test_reflection_accepts_majority_rate_candidate_with_matching_signal() -> None:
+    candidate = _candidate(
+        root_cause_type="conversion_drop",
+        dimension="device",
+        element="mobile",
+        contribution_pct=0.5120661916800736,
+        verdict="likely",
+        evidence_ids=["run-1:E1", "run-1:E2_device", "run-1:E3_dev_mobile", "run-1:E4", "run-1:E_rank"],
+    )
+    evidences = [
+        _evidence("run-1:E1", metric_id="pay_cvr"),
+        _evidence("run-1:E2_device", metric_id="pay_cvr"),
+        _evidence(
+            "run-1:E3_dev_mobile",
+            metric_id="pay_cvr",
+            summary={
+                "signal_type": "conversion",
+                "signal_metric_id": "pay_cvr",
+                "dimension": "device",
+                "element": "mobile",
+                "value": 0.0092,
+            },
+        ),
+        _evidence("run-1:E4", metric_id="pay_cvr", summary={"selected_candidate": candidate.model_dump(mode="json")}),
+        _evidence("run-1:E_rank", metric_id="pay_cvr", summary={"selected_candidate": candidate.model_dump(mode="json")}),
+    ]
+    state = _state(
+        metric_id="pay_cvr",
+        candidates=[candidate],
+        evidences=evidences,
+    )
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
+
+    assert result.passed is True
+
+
 def test_reflection_no_anomaly_cannot_have_operation_task() -> None:
     state = {
         "run_id": "run-1",

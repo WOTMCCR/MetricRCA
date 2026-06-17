@@ -64,11 +64,16 @@ RULES:
 - element and filter values MUST come from the supported dimension values when values are listed.
 - If the question contains explicit "dimension=value" text, treat it as a required filter.
   Do not ignore explicit dimension values.
-- target_date must be business_today minus one day.
+- Resolve target_date against BUSINESS TODAY. "yesterday" is business_today
+  minus one day; "two days ago" is business_today minus two days; "on the Nth"
+  means that day in the current business month; "since the weekend" maps to
+  the most recent completed business day before BUSINESS TODAY when a single
+  RCA target date is required.
 - If the question does not match any family, set error_code to PARSE_FAILED and intent to null.
 - If the question mentions an unsupported metric, set error_code to METRIC_NOT_FOUND and intent to null.
 - If the question mentions an unsupported dimension, set error_code to DIMENSION_NOT_ALLOWED and intent to null.
-- If the question mentions a date range other than yesterday, set error_code to DATE_RANGE_INVALID and intent to null.
+- If the question requests a true multi-day range that cannot be represented as
+  one target business date, set error_code to DATE_RANGE_INVALID and intent to null.
 - For supported questions, set error_code to null and fill all intent fields.
 - filters MUST be an array of objects with dimension and value keys.
 - Output one top-level JSON object with exactly these keys:
@@ -84,6 +89,10 @@ RULES:
   cause mechanisms or related signals unless the user explicitly asks for that
   metric rate itself.
 - Treat "conversion rate" and "CVR" as the pay conversion KPI, metric_id=pay_cvr.
+- Treat "traffic", "visitors", and "UV" as the unique visitor KPI,
+  metric_id=uv and question_family=uv_drop, when uv is in the supported metrics.
+- Treat "sales", "revenue", and "turnover" as GMV, metric_id=gmv, unless the
+  user explicitly says net revenue or net GMV.
 - Treat "net GMV", "net revenue", and "GMV after refunds" as the net GMV KPI,
   metric_id=net_gmv, when net_gmv is in the supported metrics.
 - Treat "stockout rate" as metric_id=stockout_rate, not as a GMV cause.
@@ -91,8 +100,9 @@ RULES:
   the phrase to the supported value exactly.
 {dimension_value_examples}
 - Treat business paraphrases such as "fell", "fall", "decline", "below
-  expectation", "normal seasonal range", "merchandise sales", "across the
-  store", and "despite stable merchandising" as supported drop/anomaly
+  expectation", "normal seasonal range", "seems off", "looks wrong",
+  "is abnormal", "merchandise sales", "across the store", and "despite stable
+  merchandising" as supported drop/anomaly
   questions when they mention a
   supported KPI such as GMV. For example, "Why did yesterday's GMV decline in
   merchandise sales?" is metric_id=gmv, question_family=gmv_drop,

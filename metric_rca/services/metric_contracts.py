@@ -12,6 +12,7 @@ from metric_rca.domain.models import StrictModel
 
 QuestionFamily = Literal[
     "gmv_drop",
+    "uv_drop",
     "net_gmv_drop",
     "pay_cvr_drop",
     "refund_rate_increase",

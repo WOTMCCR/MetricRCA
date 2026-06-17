@@ -29,6 +29,24 @@ _ORGANIC_CHANNEL_ELEMENT = "org" "anic"
 
 
 _UNSCOPED_DISCOVERY_POLICIES = {
+    ("uv", "uv_drop", "standard"): DiscoveryPolicy(
+        required_drilldowns=("channel",),
+        first_signal_dimension="channel",
+        first_signal_type="campaign",
+        enforce_first_signal_top_candidate=True,
+    ),
+    ("pay_cvr", "pay_cvr_drop", "standard"): DiscoveryPolicy(
+        required_drilldowns=("device",),
+        first_signal_dimension="device",
+        first_signal_type="conversion",
+        enforce_first_signal_top_candidate=True,
+    ),
+    ("refund_rate", "refund_rate_increase", "standard"): DiscoveryPolicy(
+        required_drilldowns=("product",),
+        first_signal_dimension="product",
+        first_signal_type="refund_quality",
+        enforce_first_signal_top_candidate=True,
+    ),
     ("gmv", "gmv_drop", "standard"): DiscoveryPolicy(
         required_drilldowns=GMV_DISCOVERY_REQUIRED_DRILLDOWNS,
         first_signal_dimension="channel",

@@ -117,6 +117,24 @@ def test_attribution_distributed_drop_still_returns_candidates_for_adtributor_ra
     assert {candidate.verdict for candidate in result.candidates} == {"likely"}
 
 
+def test_attribution_uses_relative_element_severity_when_contribution_is_close() -> None:
+    result = compute_dimension_contribution(
+        metric_definition=_metric("uv"),
+        dimension="channel",
+        current_rows=[
+            {"channel": "paid_ads", "metric_value": 889.0},
+            {"channel": "organic", "metric_value": 403.0},
+        ],
+        baseline_rows=_baseline("channel", {"paid_ads": 2332.5, "organic": 1748.25}),
+        evidence_ids=["run-1:E1"],
+        top_threshold=0.60,
+    )
+
+    assert result.ok is True
+    assert result.candidates[0].element == "organic"
+    assert result.candidates[0].signal_severity > result.candidates[1].signal_severity
+
+
 def test_root_cause_mapping_uses_config_override(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = Settings(
         db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",

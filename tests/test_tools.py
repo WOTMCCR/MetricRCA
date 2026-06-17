@@ -721,6 +721,7 @@ def test_fetch_related_signal_covers_campaign_inventory_conversion_refund_qualit
     repo = SpyRepository()
     scenarios = [
         ("campaign", "gmv", "channel", "paid_ads", "E2_channel", "E3_ch_paid_ads"),
+        ("campaign", "uv", "channel", "organic", "E2_channel", "E3_ch_organic"),
         ("inventory", "gmv", "category", "electronics", "E2_category", "E3_cat_electronics"),
         ("conversion", "pay_cvr", "device", "mobile", "E2_device", "E3_dev_mobile"),
         ("refund_quality", "refund_rate", "product", "1", "E2_product", "E3_prod_1"),
@@ -1497,6 +1498,75 @@ def test_rank_root_causes_records_adtributor_not_applicable_without_silent_fallb
         "run-1:E4",
         "run-1:E_rank",
     ]
+
+
+def test_rank_root_causes_preserves_e4_selection_when_adtributor_not_applicable() -> None:
+    repo = SpyRepository()
+    repo.persisted_evidence["run-1:E4"] = {
+        "evidence_id": "run-1:E4",
+        "run_id": "run-1",
+        "query_spec": {},
+        "sql_text": "SELECT SUM(pay_user_cnt) FROM fact_traffic WHERE business_date = :target_date LIMIT 1000",
+        "sql_hash": "e4" * 32,
+        "guard_status": "passed",
+        "data_source": "fact_traffic",
+        "result_summary": {
+            "selected_candidate": {
+                "root_cause_type": "conversion_drop",
+                "dimension": "channel",
+                "element": "social",
+                "contribution_pct": 0.28,
+                "signal_severity": 0.87,
+                "evidence_support": 1.0,
+                "reflection_factor": 1.0,
+                "eng_confidence": 0.24,
+                "verdict": "likely",
+                "evidence_ids": ["run-1:E1", "run-1:E2_channel", "run-1:E3_ch_social", "run-1:E4"],
+            },
+            "candidates": [
+                {
+                    "root_cause_type": "conversion_drop",
+                    "dimension": "channel",
+                    "element": "paid_ads",
+                    "contribution_pct": 0.28,
+                    "signal_severity": 0.28,
+                    "evidence_support": 1.0,
+                    "reflection_factor": 1.0,
+                    "eng_confidence": 0.28,
+                    "verdict": "likely",
+                    "evidence_ids": ["run-1:E1", "run-1:E2_channel", "run-1:E3_ch_social", "run-1:E4"],
+                },
+                {
+                    "root_cause_type": "conversion_drop",
+                    "dimension": "channel",
+                    "element": "social",
+                    "contribution_pct": 0.28,
+                    "signal_severity": 0.87,
+                    "evidence_support": 1.0,
+                    "reflection_factor": 1.0,
+                    "eng_confidence": 0.24,
+                    "verdict": "likely",
+                    "evidence_ids": ["run-1:E1", "run-1:E2_channel", "run-1:E3_ch_social", "run-1:E4"],
+                },
+            ],
+        },
+    }
+    deps = SimpleNamespace(
+        repository=repo,
+        metric_service=StaticMetricService(),
+        renderer=None,
+        settings=Settings(db_dsn="sqlite://", readonly_db_dsn="sqlite://"),
+        trace_writer=None,
+    )
+    rank_tool = next(tool for tool in build_metric_rca_tools(dependencies=deps, run_id="run-1") if tool.name == "rank_root_causes")
+
+    result = rank_tool.invoke({"metric_id": "pay_cvr", "target_date": date(2026, 6, 5)})
+
+    assert result["observation"]["ok"] is True
+    assert result["observation"]["payload"]["adtributor_status"] == "not_applicable"
+    assert result["observation"]["payload"]["selected_candidate"]["element"] == "social"
+    assert repo.persisted_evidence["run-1:E4"]["result_summary"]["selected_candidate"]["element"] == "social"
+    assert repo.evidence_rows[-1]["result_summary"]["selected_candidate"]["element"] == "social"
 
 
 def test_rank_root_causes_requires_persisted_e4_sql_text() -> None:

@@ -66,6 +66,17 @@ None.
 
 No incidents recorded.
 
+### 2026-06-16 Phase B bounded preflight refresh
+
+- Branch `codex/b-eval-optimization` was created from clean `main`.
+- `uv` is available at `/home/ccr/.local/bin/uv`; `uv venv .venv` completed against Python 3.12.3 and warned that `.venv` already existed.
+- `uv pip install -e .` refreshed the editable `metric-rca==0.1.0` install.
+- PyPI, npm registry, and GitHub were reachable through the current proxy environment.
+- `PATH=.venv/bin:$PATH python -m pip check` reported no broken requirements.
+- `PATH=.venv/bin:$PATH python -m pytest --version` reported pytest 8.4.2.
+- `PATH=.venv/bin:$PATH make -n test` resolved to `pytest -q`.
+- `npm run test --prefix frontend -- --run --reporter=dot --passWithNoTests` passed 12 tests.
+
 ### 2026-06-15 P8 bounded preflight refresh
 
 - Project, `/tmp`, and home directories are writable by permission checks.

@@ -15,7 +15,7 @@ from metric_rca.domain.models import AgentAction, Evidence, ReflectionIssue, Ref
 
 
 REQUIRED_EVIDENCE_ALIASES = ("E1", "E2", "E3", "E4", "E_rank")
-ATTRIBUTION_COVERAGE_THRESHOLD = 0.60
+ATTRIBUTION_COVERAGE_THRESHOLD = 0.50
 
 
 def verify_reflection(

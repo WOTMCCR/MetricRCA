@@ -86,6 +86,19 @@ After the first successful fetch_related_signal creates an E3-family evidence
 id, immediately call calculate_contribution for that same element. Do not fetch
 signals for additional elements before E4; rank_root_causes uses persisted
 drilldown evidence for multi-element and cross-dimension Adtributor ranking.
+For broad pay_cvr or conversion-rate questions with no explicit slice, start
+with drilldown_dimension for device, then fetch_related_signal with
+signal_type=conversion for the strongest device candidate, then
+calculate_contribution for that same device element. Do not use campaign for a
+pay_cvr target metric.
+For broad refund_rate or refund-rate questions with no explicit slice, start
+with drilldown_dimension for product, then fetch_related_signal with
+signal_type=refund_quality for the strongest product candidate, then
+calculate_contribution for that same product element.
+For broad uv or traffic questions with no explicit slice, start with
+drilldown_dimension for channel, then fetch_related_signal with
+signal_type=campaign for the strongest channel candidate, then
+calculate_contribution for that same channel element.
 Use these signal_type choices for explicit slices:
 - channel -> campaign
 - category with GMV/stockout context -> inventory

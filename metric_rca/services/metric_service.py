@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 import re
 from typing import TYPE_CHECKING
 
@@ -148,8 +148,8 @@ def _validate_parsed_intent(
         if expected_metric not in supported_metrics:
             raise MetricServiceError("METRIC_NOT_FOUND", f"metric not found: {expected_metric}")
         raise MetricServiceError("PARSE_FAILED", "question family does not match metric")
-    if parsed.target_date != business_today - timedelta(days=1):
-        raise MetricServiceError("DATE_RANGE_INVALID", "only yesterday is supported")
+    if parsed.target_date >= business_today:
+        raise MetricServiceError("DATE_RANGE_INVALID", "target_date must be before business_today")
     if parsed.dimension is not None and parsed.dimension not in supported_dimensions:
         raise MetricServiceError("DIMENSION_NOT_ALLOWED", f"dimension not allowed: {parsed.dimension}")
     if parsed.dimension is not None and parsed.element is not None:

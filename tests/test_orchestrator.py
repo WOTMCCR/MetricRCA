@@ -11,6 +11,7 @@ from langchain_core.outputs import LLMResult
 from metric_rca.agent.deep_tools import EXPOSED_TOOL_NAMES
 from metric_rca.agent.deep_tools import PLANNING_TOOL_NAME, TOOL_ARG_SCHEMAS
 from metric_rca.agent.factory import create_metric_rca_agent
+from metric_rca.agent.prompts import EXPERT_SYSTEM_PROMPT
 from metric_rca.agent.runner import AgentDependencies, RunOrchestrator, run_rca
 from metric_rca.services.metric_contracts import ParsedIntent
 from metric_rca.observability.trace import TraceWriter
@@ -268,6 +269,20 @@ def test_orchestrator_standard_gmv_policy_uses_channel_campaign_first_signal() -
     assert policy.enforce_first_signal_top_candidate is True
     assert "parsed analysis_strategy: standard" in captured["content"]
     assert "first_signal=channel:campaign" in captured["content"]
+
+
+def test_expert_prompt_guides_broad_rate_family_discovery() -> None:
+    prompt = EXPERT_SYSTEM_PROMPT
+
+    assert "broad pay_cvr or conversion-rate questions" in prompt
+    assert "drilldown_dimension for device" in prompt
+    assert "signal_type=conversion" in prompt
+    assert "broad refund_rate or refund-rate questions" in prompt
+    assert "drilldown_dimension for product" in prompt
+    assert "signal_type=refund_quality" in prompt
+    assert "broad uv or traffic questions" in prompt
+    assert "drilldown_dimension for channel" in prompt
+    assert "signal_type=campaign" in prompt
 
 
 def test_orchestrator_seeds_first_signal_element_from_parsed_intent() -> None:

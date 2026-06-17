@@ -28,13 +28,13 @@ encode the docs, then make the implementation pass those tests.
 
 ## Environment
 
-- Last preflight refresh: 2026-06-15T17:32:00+08:00; see `docs/env-setup.md`.
+- Last preflight refresh: 2026-06-16T23:09:37+08:00; see `docs/env-setup.md`.
 - Runtime available: Python 3.12.3, Node v20.19.6, npm 10.8.2, GNU Make 4.3.
 - Network: GitHub, npm registry, and PyPI reachable through current environment.
 - Proxy: `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and lowercase variants are set to localhost proxy ports; `NO_PROXY` includes localhost loopback addresses.
 - Local service traffic must avoid proxy leakage; for Python `httpx` local calls use `trust_env=False`.
 - Project is in WSL on a native Linux path.
-- Python dependencies are installed in project-local `.venv`; use `PATH=.venv/bin:$PATH make seed`, `PATH=.venv/bin:$PATH make test`, and `PATH=.venv/bin:$PATH python -m pytest ...` so Makefile `python` resolves correctly.
+- Python dependencies are installed in project-local `.venv`; `uv` is available and `uv pip install -e .` refreshed the editable install on 2026-06-16. Use `PATH=.venv/bin:$PATH make seed`, `PATH=.venv/bin:$PATH make test`, and `PATH=.venv/bin:$PATH python -m pytest ...` so Makefile `python` resolves correctly.
 - Frontend dependencies are installed under `frontend/node_modules`; `npm run test --prefix frontend -- --run --reporter=dot --passWithNoTests` starts successfully.
 
 ## Strict Implementation Contract

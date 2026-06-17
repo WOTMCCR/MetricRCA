@@ -57,6 +57,14 @@ class FakeMetadataRepository:
         return {"channel": ["paid_ads"], "category": ["electronics"], "device": ["mobile"]}.get(dimension, [])
 
 
+class StaticIntentPlanner:
+    def __init__(self, parsed: ParsedIntent) -> None:
+        self.parsed = parsed
+
+    def parse(self, *args, **kwargs) -> ParsedIntent:
+        return self.parsed
+
+
 def _live_settings() -> Settings:
     api_key = os.getenv("METRIC_RCA_LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
     if not api_key or api_key == "test-key":
@@ -314,6 +322,45 @@ def test_parse_question_rejects_element_not_present_in_metadata_dimension_values
     assert exc_info.value.code == "DIMENSION_NOT_ALLOWED"
 
 
+def test_parse_question_accepts_llm_resolved_past_business_date() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv")]),
+        settings=_settings_without_llm_key(),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 3),
+            question_family="gmv_drop",
+            analysis_strategy="standard",
+        )
+    )
+
+    parsed = service.parse_question("Was GMV abnormal two days ago?", business_today=date(2026, 6, 6))
+
+    assert parsed.target_date == date(2026, 6, 3)
+
+
+def test_parse_question_rejects_llm_resolved_current_or_future_business_date() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv")]),
+        settings=_settings_without_llm_key(),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 6),
+            question_family="gmv_drop",
+            analysis_strategy="standard",
+        )
+    )
+
+    with pytest.raises(MetricServiceError) as exc_info:
+        service.parse_question("Why did GMV change today?", business_today=date(2026, 6, 6))
+
+    assert exc_info.value.code == "DATE_RANGE_INVALID"
+
+
 def test_no_keyword_parsing_in_metric_service() -> None:
     source = (ROOT / "metric_rca" / "services" / "metric_service.py").read_text()
     forbidden = ['in text', 'if "gmv"', 'if "refund"', "_dimension_from_text", "_element_from_text"]
@@ -358,6 +405,26 @@ def test_intent_planner_prompt_includes_net_gmv_slice_examples() -> None:
     assert "metric_id=net_gmv" in prompt
     assert "paid ads -> paid_ads" in prompt
     assert "question_family=net_gmv_drop" in prompt
+
+
+def test_intent_planner_prompt_includes_phase_b_alias_date_and_ambiguity_guidance() -> None:
+    prompt = build_system_prompt(
+        business_today=date(2026, 6, 6),
+        supported_metrics=["gmv", "net_gmv", "uv"],
+        supported_dimensions=["channel"],
+        supported_dimension_values={"channel": ["paid_ads"]},
+        supported_families=["gmv_drop", "net_gmv_drop", "uv_drop"],
+    )
+
+    assert "traffic" in prompt
+    assert "metric_id=uv" in prompt
+    assert "question_family=uv_drop" in prompt
+    assert "sales" in prompt
+    assert "metric_id=gmv" in prompt
+    assert "two days ago" in prompt
+    assert "on the Nth" in prompt
+    assert "since the weekend" in prompt
+    assert "seems off" in prompt
 
 
 def test_llm_intent_planner_maps_langchain_invocation_error_to_typed_error() -> None:

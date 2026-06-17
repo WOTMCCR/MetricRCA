@@ -80,6 +80,8 @@ Family guidance for gmv_family:
 Family guidance for rate_family:
 - Supported target metrics: pay_cvr, refund_rate, stockout_rate, complaint_rate.
 - Direction matters: pay_cvr down is bad; refund_rate, stockout_rate, and complaint_rate up are bad.
+- Broad pay_cvr or conversion-rate questions should inspect device first and use conversion evidence for the strongest device candidate.
+- Broad refund_rate questions should inspect product first and use refund_quality evidence for the strongest product candidate.
 - Refund and complaint cases should prefer refund_quality evidence for product/category quality issues.
 - Stockout-rate cases should prefer inventory/warehouse evidence.
 """

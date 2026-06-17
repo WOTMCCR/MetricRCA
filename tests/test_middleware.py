@@ -632,6 +632,117 @@ def test_first_signal_policy_enforces_structured_element_without_question_text()
     assert context.failed is False
 
 
+def test_unscoped_pay_cvr_policy_requires_device_conversion_first_signal() -> None:
+    context = _context(_TraceWriter())
+    context.discovery_policy = discovery_policy_from_intent(
+        ParsedIntent(
+            metric_id="pay_cvr",
+            target_date="2026-06-05",
+            question_family="pay_cvr_drop",
+            analysis_strategy="standard",
+        )
+    )
+    context.repository = _Repository(
+        [
+            {"evidence_id": "run-1:E1", "run_id": "run-1", "guard_status": "passed"},
+            {
+                "evidence_id": "run-1:E2_device",
+                "run_id": "run-1",
+                "guard_status": "passed",
+                "result_summary": {
+                    "candidates": [
+                        {"dimension": "device", "element": "mobile"},
+                        {"dimension": "device", "element": "desktop"},
+                    ]
+                },
+            },
+        ]
+    )
+    middleware = GuardMiddleware(context)
+    called = False
+
+    def handler(request):
+        nonlocal called
+        called = True
+        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_ch_social"]})
+
+    rejected = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "pay_cvr",
+            "target_date": "2026-06-05",
+            "signal_type": "conversion",
+            "dimension": "channel",
+            "element": "social",
+            "evidence_ids": ["run-1:E1", "run-1:E2_channel"],
+        }),
+        handler,
+    )
+
+    payload = json.loads(rejected.content)
+    assert payload["observation"]["error_code"] == "ACTION_SCHEMA_INVALID"
+    assert "dimension=device" in payload["observation"]["message"]
+    assert "signal_type=conversion" in payload["observation"]["message"]
+    assert called is False
+
+    accepted = middleware.wrap_tool_call(
+        _request("fetch_related_signal", {
+            "metric_id": "pay_cvr",
+            "target_date": "2026-06-05",
+            "signal_type": "conversion",
+            "dimension": "device",
+            "element": "mobile",
+            "evidence_ids": ["run-1:E1", "run-1:E2_device"],
+        }),
+        lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E3_dev_mobile"]}),
+    )
+
+    assert json.loads(accepted.content)["observation"]["ok"] is True
+
+
+def test_unscoped_refund_and_uv_policies_use_structured_first_signals() -> None:
+    refund_policy = discovery_policy_from_intent(
+        ParsedIntent(
+            metric_id="refund_rate",
+            target_date="2026-06-05",
+            question_family="refund_rate_increase",
+            analysis_strategy="standard",
+        )
+    )
+    uv_policy = discovery_policy_from_intent(
+        ParsedIntent(
+            metric_id="uv",
+            target_date="2026-06-05",
+            question_family="uv_drop",
+            analysis_strategy="standard",
+        )
+    )
+
+    assert refund_policy.required_drilldowns == ("product",)
+    assert refund_policy.first_signal_dimension == "product"
+    assert refund_policy.first_signal_type == "refund_quality"
+    assert refund_policy.enforce_first_signal_top_candidate is True
+    assert uv_policy.required_drilldowns == ("channel",)
+    assert uv_policy.first_signal_dimension == "channel"
+    assert uv_policy.first_signal_type == "campaign"
+    assert uv_policy.enforce_first_signal_top_candidate is True
+
+
+def test_unscoped_metric_policy_does_not_require_exact_question_family() -> None:
+    policy = discovery_policy_from_intent(
+        ParsedIntent(
+            metric_id="refund_rate",
+            target_date="2026-06-05",
+            question_family="complaint_rate_increase",
+            analysis_strategy="standard",
+        )
+    )
+
+    assert policy.required_drilldowns == ("product",)
+    assert policy.first_signal_dimension == "product"
+    assert policy.first_signal_type == "refund_quality"
+    assert policy.enforce_first_signal_top_candidate is True
+
+
 def test_repair_action_guard_rejects_drift_without_budget() -> None:
     writer = _TraceWriter()
     context = _context(writer)

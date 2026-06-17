@@ -32,6 +32,12 @@ SIGNAL_RULES: tuple[SignalRule, ...] = (
         signal_type="campaign",
     ),
     SignalRule(
+        root_cause_type=RootCauseType.CAMPAIGN_TRAFFIC_DROP.value,
+        metric_id=MetricId.UV.value,
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="campaign",
+    ),
+    SignalRule(
         root_cause_type=RootCauseType.STOCKOUT.value,
         metric_id=MetricId.NET_GMV.value,
         dimension=DimensionId.PRODUCT.value,
