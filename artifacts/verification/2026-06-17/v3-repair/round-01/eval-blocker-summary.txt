@@ -1,0 +1,5 @@
+v3-repair-acceptance-20260617-01 {"complete": false, "llm_model": null, "case_total": 0, "eval_suite": "acceptance", "per_family": {}, "llm_provider": null, "thresholds_met": false, "per_family_gate": false, "no_anomaly_correct": false, "memory_pollution_ok": true, "completed_case_total": 0, "configured_case_total": 28, "dangerous_sql_blocked": true, "memory_treatment_gate": false, "memory_hit_improvement": 0.0, "memory_enabled_top1_rate": 0.0, "memory_disabled_top1_rate": 0.0, "completed_memory_case_total": 0}
+regression_stream_tail=
+{"error_code": "LLM_REQUIRED_UNAVAILABLE", "message": "LLM_REQUIRED_UNAVAILABLE: v3-repair-regression-20260617-216bf90e-r3"}
+acceptance_stream_tail=
+{"error_code": "LLM_REQUIRED_UNAVAILABLE", "message": "LLM_REQUIRED_UNAVAILABLE: v3-repair-acceptance-20260617-b19c2cc0-r3"}
