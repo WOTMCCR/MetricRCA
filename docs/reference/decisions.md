@@ -1,3 +1,67 @@
+## ADL-0041: Production follow-ups for sync AgentRuntime and metadata-driven planning
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-17 |
+| 状态 | accepted |
+| 关联迭代 | OpenAI Agents SDK migration post-review |
+| 影响范围 | AgentRuntime, OpenAIAgentsRuntime, RcaPlanCompiler |
+
+### 背景与场景
+
+Post-migration review accepted the Phase B result but flagged production follow-ups:
+`OpenAIAgentsRuntime.run_structured()` currently calls `Runner.run_sync()`, which
+is safe for the current synchronous eval/API runner path but must not be called
+from an already-running event loop. If MetricRCA is embedded directly in an async
+framework handler, the runtime boundary needs an async method instead of nesting
+the SDK sync runner.
+
+The same review noted two metadata-adjacent planning constants:
+`RATE_FAMILY_METRICS` in `RcaPlanCompiler` and `_dimension_prefix()` action-id
+abbreviations. These are structural planning choices, not metric definitions or
+natural-language parsing, but they require code changes when the metric catalog
+or dimension catalog grows.
+
+### 决策
+
+For the accepted Phase B implementation, `AgentRuntime` remains explicitly
+synchronous. This is a documented constraint: callers must run it from the sync
+RCA runner path or offload it to a worker thread/process when invoked from async
+application code. A production async API path must extend the protocol with an
+async structured-output method and implement it with the Agents SDK async runner
+rather than wrapping `Runner.run_sync()` inside an event loop.
+
+`RATE_FAMILY_METRICS` and `_dimension_prefix()` are accepted as Phase B
+structural constants only. Before adding new metric families or dimensions in
+production, family classification and action-id prefixing should be compiled from
+DB-backed metric/dimension metadata or a validated planning policy registry.
+They must not grow into hardcoded metric definitions, alias maps, or
+natural-language intent parsers.
+
+### 理由
+
+The current system has proven 28/28 Phase B behavior on the synchronous eval path
+and keeps the OpenAI SDK isolated behind `AgentRuntime`. Adding async semantics
+now would change runtime contracts after final validation and requires its own
+tests. Recording the constraint prevents accidental FastAPI/event-loop embedding
+from being treated as supported.
+
+The planning constants do not bypass QuerySpec → SQLRenderer → SQLGuard →
+Repository and do not resolve natural language. Still, catalog growth should be
+metadata-driven so future metrics and dimensions do not require runtime code
+edits for basic classification.
+
+### 被否决的方案
+
+- Calling `Runner.run_sync()` from async FastAPI handlers: risks event-loop
+  deadlock or runtime errors.
+- Adding an untested async method in this Phase B closeout: changes the accepted
+  runtime contract after final eval.
+- Moving metric family detection into keyword prompt parsing: violates the
+  LLM-first and metadata-path red lines.
+
+---
+
 ## ADL-0040: Agents SDK provider requests use explicit timeout and retry bounds
 
 | 字段 | 值 |
