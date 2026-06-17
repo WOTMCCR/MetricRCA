@@ -24,6 +24,7 @@ RCA_TOOL_NAMES = frozenset(
         "select_signal_element",
         "fetch_related_signal",
         "calculate_contribution",
+        "merge_contribution_sets",
         "rank_root_causes",
     }
 )
@@ -72,12 +73,14 @@ def build_default_tool_handlers() -> dict[str, MetricRCAToolHandler]:
     from metric_rca.agent.tools.detect_anomaly import detect_anomaly
     from metric_rca.agent.tools.drilldown_dimension import drilldown_dimension
     from metric_rca.agent.tools.fetch_related_signal import fetch_related_signal
+    from metric_rca.agent.tools.merge_contribution_sets import merge_contribution_sets
     from metric_rca.agent.tools.select_signal_element import select_signal_element
     from metric_rca.agent.tools.schemas import (
         CalculateContributionArgs,
         DetectAnomalyArgs,
         DrilldownDimensionArgs,
         FetchRelatedSignalArgs,
+        MergeContributionSetsArgs,
         SelectSignalElementArgs,
     )
 
@@ -124,6 +127,12 @@ def build_default_tool_handlers() -> dict[str, MetricRCAToolHandler]:
             renderer=dependencies.renderer,
         )
 
+    def _merge(args: MergeContributionSetsArgs, dependencies: Any) -> Any:
+        return merge_contribution_sets(
+            args,
+            repository=dependencies.repository,
+        )
+
     def _rank(args: RankRootCausesArgs, dependencies: RuntimeDependencies) -> ToolExecutionResult:
         return rank_from_persisted_e4(
             repository=dependencies.repository,
@@ -139,6 +148,7 @@ def build_default_tool_handlers() -> dict[str, MetricRCAToolHandler]:
         "select_signal_element": MetricRCAToolHandler(args_model=SelectSignalElementArgs, call=_select),
         "fetch_related_signal": MetricRCAToolHandler(args_model=FetchRelatedSignalArgs, call=_fetch),
         "calculate_contribution": MetricRCAToolHandler(args_model=CalculateContributionArgs, call=_calculate),
+        "merge_contribution_sets": MetricRCAToolHandler(args_model=MergeContributionSetsArgs, call=_merge),
         "rank_root_causes": MetricRCAToolHandler(args_model=RankRootCausesArgs, call=_rank),
     }
 

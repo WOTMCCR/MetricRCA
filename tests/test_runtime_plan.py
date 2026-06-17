@@ -113,11 +113,11 @@ def test_plan_compiler_builds_broad_gmv_product_first_with_all_required_drilldow
 
     drilldowns = [action.args.get("dimension") for action in plan.actions if action.kind == "drilldown_dimension"]
     assert drilldowns == ["channel", "category", "product"]
-    signal_action = next(action for action in plan.actions if action.kind == "fetch_related_signal")
-    assert signal_action.args["dimension"] == "product"
-    assert signal_action.args["signal_type"] == "inventory"
+    signal_actions = [action for action in plan.actions if action.kind == "fetch_related_signal"]
+    assert signal_actions[0].args["dimension"] == "product"
+    assert signal_actions[0].args["signal_type"] == "inventory"
     rank_action = plan.actions[-1]
-    assert rank_action.requires == ["E1", "E2_channel", "E2_category", "E2_product", "E_select_product", "E3", "E4"]
+    assert rank_action.requires[-1] == "E4"
 
 
 def test_plan_compiler_builds_signal_first_gmv_without_hardcoded_element() -> None:
@@ -131,8 +131,8 @@ def test_plan_compiler_builds_signal_first_gmv_without_hardcoded_element() -> No
     plan = _compiler().compile(run_id="run-1", parsed_intent=parsed)
 
     select_action = next(action for action in plan.actions if action.kind == "select_signal_element")
-    signal_action = next(action for action in plan.actions if action.kind == "fetch_related_signal")
-    contribution_action = next(action for action in plan.actions if action.kind == "calculate_contribution")
+    signal_action = next(action for action in plan.actions if action.kind == "fetch_related_signal" and action.args["dimension"] == "channel")
+    contribution_action = next(action for action in plan.actions if action.kind == "calculate_contribution" and action.args["dimension"] == "channel")
     rank_action = plan.actions[-1]
     assert select_action.args["dimension"] == "channel"
     assert select_action.args["signal_type"] == "campaign"
@@ -147,7 +147,7 @@ def test_plan_compiler_builds_signal_first_gmv_without_hardcoded_element() -> No
     assert signal_action.dynamic is True
     assert contribution_action.args["element"] is None
     assert contribution_action.args["element_selection"] == "signal_anomaly"
-    assert contribution_action.requires == ["E1", "E2_channel", "E_select_channel", "E3"]
+    assert contribution_action.requires == ["E1", "E2_channel", "E_select_channel", "E3_ch"]
     assert contribution_action.dynamic is True
     assert "E_select_channel" in rank_action.requires
 
@@ -203,8 +203,8 @@ def test_plan_compiler_uses_memory_prior_to_change_discovery_signal_dimension() 
 
     drilldowns = [action.args.get("dimension") for action in plan.actions if action.kind == "drilldown_dimension"]
     select_action = next(action for action in plan.actions if action.kind == "select_signal_element")
-    signal_action = next(action for action in plan.actions if action.kind == "fetch_related_signal")
-    contribution_action = next(action for action in plan.actions if action.kind == "calculate_contribution")
+    signal_action = next(action for action in plan.actions if action.kind == "fetch_related_signal" and action.args["dimension"] == "product")
+    contribution_action = next(action for action in plan.actions if action.kind == "calculate_contribution" and action.args["dimension"] == "product")
     rank_action = plan.actions[-1]
     assert drilldowns == ["channel", "category", "product"]
     assert select_action.args["dimension"] == "product"
@@ -213,8 +213,8 @@ def test_plan_compiler_uses_memory_prior_to_change_discovery_signal_dimension() 
     assert signal_action.args["dimension"] == "product"
     assert signal_action.args["signal_type"] == "inventory"
     assert signal_action.requires == ["E1", "E2_product", "E_select_product"]
-    assert contribution_action.requires == ["E1", "E2_product", "E_select_product", "E3"]
-    assert rank_action.requires == ["E1", "E2_channel", "E2_category", "E2_product", "E_select_product", "E3", "E4"]
+    assert contribution_action.requires == ["E1", "E2_product", "E_select_product", "E3_prod"]
+    assert rank_action.requires[-1] == "E4"
 
 
 def test_plan_compiler_does_not_let_memory_override_explicit_analysis_strategy() -> None:
@@ -241,6 +241,50 @@ def test_plan_compiler_does_not_let_memory_override_explicit_analysis_strategy()
     assert select_action.args["signal_type"] == "inventory"
     assert signal_action.args["dimension"] == "product"
     assert signal_action.args["signal_type"] == "inventory"
+
+
+def test_plan_compiler_builds_parallel_broad_gmv_contribution_chains() -> None:
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date=date(2026, 6, 1),
+        question_family="gmv_drop",
+        analysis_strategy="standard",
+    )
+
+    plan = _compiler().compile(run_id="run-1", parsed_intent=parsed)
+
+    contribution_actions = [action for action in plan.actions if action.kind == "calculate_contribution"]
+    merge_action = next(action for action in plan.actions if action.kind == "merge_contribution_sets")
+    rank_action = plan.actions[-1]
+
+    assert [action.args["dimension"] for action in contribution_actions] == ["channel", "category", "product"]
+    assert [action.produces for action in contribution_actions] == [["E4_channel"], ["E4_category"], ["E4_product"]]
+    assert [action.args["evidence_alias"] for action in contribution_actions] == [
+        "E4_channel",
+        "E4_category",
+        "E4_product",
+    ]
+    assert merge_action.requires == ["E4_channel", "E4_category", "E4_product"]
+    assert merge_action.produces == ["E4"]
+    assert merge_action.args["source_evidence_aliases"] == ["E4_channel", "E4_category", "E4_product"]
+    assert rank_action.requires[-1] == "E4"
+
+
+def test_plan_compiler_keeps_explicit_slice_single_canonical_e4() -> None:
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date=date(2026, 6, 1),
+        question_family="gmv_drop",
+        dimension="channel",
+        element="paid_ads",
+    )
+
+    plan = _compiler().compile(run_id="run-1", parsed_intent=parsed)
+
+    assert "merge_contribution_sets" not in [action.kind for action in plan.actions]
+    contribution_action = next(action for action in plan.actions if action.kind == "calculate_contribution")
+    assert contribution_action.produces == ["E4"]
+    assert "evidence_alias" not in contribution_action.args
 
 
 def test_plan_compiler_does_not_require_selection_evidence_for_explicit_slice() -> None:

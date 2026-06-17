@@ -56,6 +56,8 @@ def calculate_contribution(
                 f"then retry with evidence_ids {retry_hint}"
             ),
         )
+    evidence_alias = args.evidence_alias
+    evidence_id = f"{args.run_id}:{evidence_alias}"
     existing = _existing_contribution_result(args, repository=repository)
     if existing is not None:
         return existing
@@ -98,7 +100,7 @@ def calculate_contribution(
         baseline = execute_guarded_plan(repository=repository, plan=baseline_plan, run_id=args.run_id)
     except ToolRuntimeError as exc:
         return runtime_error(action, exc)
-    current_run_evidence = [*args.evidence_ids, f"{args.run_id}:E4"]
+    current_run_evidence = [*args.evidence_ids, evidence_id]
     anomaly_direction = _anomaly_direction(args.run_id, repository=repository)
     attribution = compute_dimension_contribution(
         metric_definition=metric_definition,
@@ -228,7 +230,7 @@ def calculate_contribution(
         dimension=args.dimension,
     )
     evidence = Evidence(
-        evidence_id=f"{args.run_id}:E4",
+        evidence_id=evidence_id,
         query_spec=baseline_spec,
         sql=baseline_plan.sql,
         sql_hash=baseline_plan.sql_hash,
@@ -249,31 +251,31 @@ def calculate_contribution(
             evidence_ids=[evidence.evidence_id],
         ),
         evidences=[evidence],
-        evidence_alias="E4",
+        evidence_alias=evidence_alias,
         candidates=attribution_candidates,
         sql_count=sql_count,
     )
 
 
 def _existing_contribution_result(args: CalculateContributionArgs, *, repository: Any) -> ToolResult | None:
-    evidence_id = f"{args.run_id}:E4"
+    evidence_id = f"{args.run_id}:{args.evidence_alias}"
     row = repository.get_evidence(run_id=args.run_id, evidence_id=evidence_id)
     if row is None or row.get("guard_status") != "passed":
         return None
     summary = row.get("result_summary")
     if not isinstance(summary, dict):
-        return _existing_e4_mismatch_result(evidence_id)
+        return _existing_e4_mismatch_result(evidence_id, args.evidence_alias)
     if (
         summary.get("metric_id") != args.metric_id
         or summary.get("dimension") != args.dimension
         or str(summary.get("element")) != str(args.element)
     ):
-        return _existing_e4_mismatch_result(evidence_id)
+        return _existing_e4_mismatch_result(evidence_id, args.evidence_alias)
     if [str(item) for item in summary.get("input_evidence_ids", [])] != [str(item) for item in args.evidence_ids]:
-        return _existing_e4_mismatch_result(evidence_id)
+        return _existing_e4_mismatch_result(evidence_id, args.evidence_alias)
     contribution_set = summary.get("contribution_set")
     if not isinstance(contribution_set, dict):
-        return _existing_e4_mismatch_result(evidence_id)
+        return _existing_e4_mismatch_result(evidence_id, args.evidence_alias)
     candidates = ContributionSet.model_validate(contribution_set).candidates
     return ToolResult(
         observation=Observation(
@@ -282,7 +284,7 @@ def _existing_contribution_result(args: CalculateContributionArgs, *, repository
             payload=summary,
             evidence_ids=[evidence_id],
         ),
-        evidence_alias="E4",
+        evidence_alias=args.evidence_alias,
         candidates=candidates,
     )
 
@@ -334,7 +336,7 @@ def _ordered_unique(values: list[str]) -> list[str]:
     return unique
 
 
-def _existing_e4_mismatch_result(evidence_id: str) -> ToolResult:
+def _existing_e4_mismatch_result(evidence_id: str, evidence_alias: str = "E4") -> ToolResult:
     return ToolResult(
         observation=Observation(
             action_name="calculate_contribution",
@@ -343,7 +345,7 @@ def _existing_e4_mismatch_result(evidence_id: str) -> ToolResult:
             message="E4 evidence is already persisted for this run; call rank_root_causes with the existing E4.",
             evidence_ids=[evidence_id],
         ),
-        evidence_alias="E4",
+        evidence_alias=evidence_alias,
     )
 
 

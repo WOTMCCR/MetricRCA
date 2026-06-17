@@ -25,6 +25,7 @@ DOWNSTREAM_ACTIONS = frozenset(
         "select_signal_element",
         "fetch_related_signal",
         "calculate_contribution",
+        "merge_contribution_sets",
         "rank_root_causes",
     }
 )

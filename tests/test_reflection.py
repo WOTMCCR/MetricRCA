@@ -661,6 +661,47 @@ def test_reflection_passes_only_with_current_run_persisted_e1_to_e4() -> None:
     assert result == ReflectionResult(passed=True, issues=[], repaired=False, repair_count=0)
 
 
+def test_reflection_warns_but_passes_when_cross_chain_contributions_overlap() -> None:
+    paid_ads = _candidate(contribution_pct=0.70)
+    electronics = _candidate(
+        root_cause_type="stockout",
+        dimension="category",
+        element="electronics",
+        contribution_pct=0.60,
+        evidence_ids=["run-1:E1", "run-1:E2_category", "run-1:E3_category", "run-1:E4", "run-1:E_rank"],
+    )
+    summary = _contribution_summary(paid_ads)
+    summary["candidates"] = [
+        paid_ads.model_dump(mode="json"),
+        electronics.model_dump(mode="json"),
+    ]
+    summary["contribution_set"]["candidates"] = summary["candidates"]
+    summary["contribution_set"]["factor_graph"] = {"chain_evidence_ids": ["run-1:E4_channel", "run-1:E4_category"]}
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2"),
+        _evidence(
+            "run-1:E3",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "value": 0.90,
+            },
+        ),
+        _evidence("run-1:E4", summary=summary),
+        _evidence("run-1:E_rank", summary=summary),
+    ]
+    state = _state(candidates=[paid_ads], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
+
+    assert result.passed is True
+    issue = next(issue for issue in result.issues if issue.check == "cross_chain_contribution_overlap")
+    assert issue.severity == "warning"
+
+
 def _checks(result) -> set[str]:
     return {issue.check for issue in result.issues}
 

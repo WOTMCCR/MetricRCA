@@ -1075,6 +1075,31 @@ def test_calculate_contribution_emits_e4_from_current_run_evidence() -> None:
     assert any("fact_traffic" in plan.sql for plan in repo.executed)
 
 
+def test_calculate_contribution_can_emit_noncanonical_e4_alias_for_parallel_chain() -> None:
+    repo = SpyRepository()
+    result = calculate_contribution(
+        CalculateContributionArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            dimension="channel",
+            element="paid_ads",
+            evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+            evidence_alias="E4_channel",
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is True
+    assert result.evidence_alias == "E4_channel"
+    assert result.observation.evidence_ids == ["run-1:E4_channel"]
+    assert "run-1:E4_channel" in repo.persisted_evidence
+    assert "run-1:E4" not in repo.persisted_evidence
+    contribution_set = result.evidences[0].result_summary["contribution_set"]
+    assert contribution_set["evidence_ids"][-1] == "run-1:E4_channel"
+
+
 def test_calculate_contribution_empty_current_data_fails_typed_without_e4() -> None:
     repo = EmptyContributionRepository(empty_side="current")
 

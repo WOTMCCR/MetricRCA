@@ -18,6 +18,7 @@ from metric_rca.domain.models import AgentAction, ContributionSet, Evidence, Ref
 REQUIRED_EVIDENCE_ALIASES = ("E1", "E2", "E3", "E4", "E_rank")
 ATTRIBUTION_COVERAGE_THRESHOLD = 0.50
 ADDITIVE_ATTRIBUTION_METRICS = frozenset({"gmv", "net_gmv", "uv"})
+CROSS_CHAIN_OVERLAP_WARNING_THRESHOLD = 1.10
 
 
 def verify_reflection(
@@ -160,15 +161,17 @@ def verify_reflection(
         issues.append(_issue("numeric_traceability", "report numeric claim is not traceable to evidence"))
     if _has_unsupported_causal_language(state, candidates):
         issues.append(_issue("causal_language", "confirmed causal language requires complete current-run evidence"))
+    issues.extend(_cross_chain_consistency_warnings(state=state, evidence_by_id=evidence_by_id))
     if repair_count > max_repair:
         issues.append(_issue("repair_limit", "repair_count exceeds max_repair"))
 
-    if issues and repair_count >= max_repair:
+    error_issues = [issue for issue in issues if issue.severity == "error"]
+    if error_issues and repair_count >= max_repair:
         return ReflectionResult(passed=False, issues=issues, repaired=False, repair_count=repair_count)
     return ReflectionResult(
-        passed=not issues,
+        passed=not error_issues,
         issues=issues,
-        repaired=not issues and repair_count > 0,
+        repaired=not error_issues and repair_count > 0,
         repair_count=repair_count,
     )
 
@@ -181,6 +184,49 @@ def _issue(check: str, message: str, *, suggested_action: AgentAction | None = N
         message=message,
         suggested_action=suggested_action,
     )
+
+
+def _warning(check: str, message: str) -> ReflectionIssue:
+    return ReflectionIssue(
+        check=check,
+        severity="warning",
+        by="rule",
+        message=message,
+    )
+
+
+def _cross_chain_consistency_warnings(
+    *,
+    state: dict[str, Any],
+    evidence_by_id: dict[str, Evidence],
+) -> list[ReflectionIssue]:
+    e4 = evidence_by_id.get(f"{state.get('run_id')}:E4")
+    if e4 is None:
+        return []
+    summary = e4.result_summary or {}
+    raw_contribution_set = summary.get("contribution_set")
+    if not isinstance(raw_contribution_set, dict):
+        return []
+    contribution_set = ContributionSet.model_validate(raw_contribution_set)
+    factor_graph = contribution_set.factor_graph
+    raw_chain_ids = factor_graph.get("chain_evidence_ids")
+    raw_chains = factor_graph.get("chains")
+    chain_count = 0
+    if isinstance(raw_chain_ids, list):
+        chain_count = len(raw_chain_ids)
+    elif isinstance(raw_chains, list):
+        chain_count = len(raw_chains)
+    if chain_count <= 1:
+        return []
+    contribution_total = sum(float(candidate.contribution_pct) for candidate in contribution_set.candidates)
+    if contribution_total <= CROSS_CHAIN_OVERLAP_WARNING_THRESHOLD:
+        return []
+    return [
+        _warning(
+            "cross_chain_contribution_overlap",
+            "cross-chain contribution percentages overlap; interpret merged coverage as non-additive",
+        )
+    ]
 
 
 def _low_coverage_repair_applies(state: dict[str, Any]) -> bool:

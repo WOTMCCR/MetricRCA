@@ -56,6 +56,14 @@ class CalculateContributionArgs(StrictModel):
     element: str
     evidence_ids: list[str]
     filters: dict[str, str] = Field(default_factory=dict)
+    evidence_alias: str = "E4"
+
+
+class MergeContributionSetsArgs(StrictModel):
+    run_id: str
+    metric_id: str
+    target_date: date
+    source_evidence_aliases: list[str]
 
 
 class ToolResult(StrictModel):

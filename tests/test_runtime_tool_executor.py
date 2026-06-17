@@ -59,6 +59,13 @@ class _RankArgs(StrictModel):
     target_date: date
 
 
+class _MergeArgs(StrictModel):
+    run_id: str
+    metric_id: str
+    target_date: date
+    source_evidence_aliases: list[str]
+
+
 def test_default_tool_registry_covers_full_rca_action_space() -> None:
     assert RCA_TOOL_NAMES == {
         "detect_anomaly",
@@ -66,6 +73,7 @@ def test_default_tool_registry_covers_full_rca_action_space() -> None:
         "select_signal_element",
         "fetch_related_signal",
         "calculate_contribution",
+        "merge_contribution_sets",
         "rank_root_causes",
     }
     assert set(build_default_tool_handlers()) == RCA_TOOL_NAMES
@@ -140,6 +148,46 @@ def test_tool_executor_does_not_inject_evidence_ids_into_rank_action() -> None:
         "run_id": "run-1",
         "metric_id": "gmv",
         "target_date": "2026-06-05",
+    }
+
+
+def test_tool_executor_passes_merge_source_aliases_without_evidence_id_injection() -> None:
+    captured: dict[str, Any] = {}
+
+    def handler(args: _MergeArgs, dependencies: object) -> ToolExecutionResult:
+        captured.update(args.model_dump(mode="json"))
+        return ToolExecutionResult(
+            observation=Observation(action_name="merge_contribution_sets", ok=True, evidence_ids=["run-1:E4"]),
+            evidence_ids=["run-1:E4"],
+        )
+
+    executor = ToolExecutor(
+        dependencies=object(),
+        handlers={
+            "merge_contribution_sets": MetricRCAToolHandler(args_model=_MergeArgs, call=handler),
+        },
+    )
+    ctx = RunContext(run_id="run-1", metric_id="gmv", target_date=date(2026, 6, 5))
+    action = RcaAction(
+        action_id="A7",
+        kind="merge_contribution_sets",
+        args={
+            "metric_id": "gmv",
+            "target_date": date(2026, 6, 5),
+            "source_evidence_aliases": ["E4_channel", "E4_category"],
+        },
+        requires=["E4_channel", "E4_category"],
+    )
+    graph = EvidenceGraph(run_id="run-1", evidence_ids=["run-1:E4_channel", "run-1:E4_category"])
+
+    result = executor.execute(ctx, action, graph)
+
+    assert result.observation.ok is True
+    assert captured == {
+        "run_id": "run-1",
+        "metric_id": "gmv",
+        "target_date": "2026-06-05",
+        "source_evidence_aliases": ["E4_channel", "E4_category"],
     }
 
 

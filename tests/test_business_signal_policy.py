@@ -157,6 +157,36 @@ def test_discovery_policy_rejects_required_drilldown_not_allowed_by_metric_defin
         discovery_policy_from_intent(parsed, validate_dimensions=validator)
 
 
+@pytest.mark.parametrize(
+    ("question_family", "analysis_strategy", "expected_dimension", "expected_signal_type"),
+    [
+        ("channel_gmv_anomaly", "channel_first", "channel", "campaign"),
+        ("channel_gmv_anomaly", "product_first", "channel", "campaign"),
+        ("channel_gmv_anomaly", "signal_first", "channel", "campaign"),
+        ("category_gmv_anomaly", "channel_first", "category", "inventory"),
+        ("category_gmv_anomaly", "product_first", "category", "inventory"),
+        ("category_gmv_anomaly", "signal_first", "category", "inventory"),
+    ],
+)
+def test_gmv_anomaly_discovery_policy_is_family_specific_across_analysis_strategies(
+    question_family: str,
+    analysis_strategy: str,
+    expected_dimension: str,
+    expected_signal_type: str,
+) -> None:
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date="2026-06-05",
+        question_family=question_family,
+        analysis_strategy=analysis_strategy,
+    )
+
+    policy = discovery_policy_from_intent(parsed)
+
+    assert policy.first_signal_dimension == expected_dimension
+    assert policy.first_signal_type == expected_signal_type
+
+
 def test_factor_graph_policy_reads_registry() -> None:
     registry = MetricPolicyRegistry(
         signal_policies=(),
