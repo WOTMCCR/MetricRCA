@@ -59,7 +59,7 @@ def detect_anomaly_from_rows(
     z_score = delta / max(baseline_std, eps)
     bad_direction = delta < 0 if metric_definition.higher_is_better else delta > 0
     threshold_passed = abs(delta_pct) >= thresh_pct and abs(z_score) >= z_thresh
-    is_anomaly = threshold_passed and bad_direction
+    is_anomaly = threshold_passed
     baseline = Baseline(
         baseline_dates=baseline_dates,
         baseline_mean=baseline_mean,

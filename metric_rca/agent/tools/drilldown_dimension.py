@@ -82,6 +82,7 @@ def drilldown_dimension(
         current_rows=current.rows,
         baseline_rows=baseline.rows,
         evidence_ids=args.evidence_ids,
+        anomaly_direction=_anomaly_direction(args.run_id, repository=repository),
     )
     if not attribution.ok:
         return tool_error(action, attribution.error_code or "ATTRIBUTION_COVERAGE_LOW", "attribution coverage low")
@@ -153,6 +154,22 @@ def _adtributor_elements(
         for element, actual in current_by_element.items()
         if element in baseline_values and baseline_values[element]
     ]
+
+
+def _anomaly_direction(run_id: str, *, repository: Any) -> str | None:
+    row = repository.get_evidence(run_id=run_id, evidence_id=f"{run_id}:E1")
+    summary = row.get("result_summary") if isinstance(row, dict) else None
+    if not isinstance(summary, dict):
+        return None
+    delta = summary.get("delta")
+    if delta is None:
+        return None
+    numeric_delta = float(delta)
+    if numeric_delta > 0:
+        return "increase"
+    if numeric_delta < 0:
+        return "decrease"
+    return None
 
 
 def _existing_drilldown_result(args: DrilldownDimensionArgs, *, repository: Any) -> ToolResult | None:

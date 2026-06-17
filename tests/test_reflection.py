@@ -78,6 +78,43 @@ def test_reflection_low_attribution_coverage_returns_ATTRIBUTION_COVERAGE_LOW() 
     assert issue.suggested_action.args["metric_id"] == "gmv"
 
 
+def test_reflection_accepts_low_coverage_rate_candidate_with_matching_signal() -> None:
+    candidate = _candidate(
+        root_cause_type="complaint_or_quality_issue",
+        dimension="product",
+        element="5",
+        contribution_pct=0.35980648069208854,
+        verdict="likely",
+        evidence_ids=["run-1:E1", "run-1:E2_product", "run-1:E3_prod_5", "run-1:E4", "run-1:E_rank"],
+    )
+    evidences = [
+        _evidence("run-1:E1", metric_id="refund_rate"),
+        _evidence("run-1:E2_product", metric_id="refund_rate"),
+        _evidence(
+            "run-1:E3_prod_5",
+            metric_id="complaint_rate",
+            summary={
+                "signal_type": "refund_quality",
+                "signal_metric_id": "complaint_rate",
+                "dimension": "product",
+                "element": "5",
+                "value": 0.90,
+            },
+        ),
+        _evidence("run-1:E4", metric_id="refund_rate", summary={"selected_candidate": candidate.model_dump(mode="json")}),
+        _evidence("run-1:E_rank", metric_id="refund_rate", summary={"selected_candidate": candidate.model_dump(mode="json")}),
+    ]
+    state = _state(
+        metric_id="refund_rate",
+        candidates=[candidate],
+        evidences=evidences,
+    )
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
+
+    assert result.passed is True
+
+
 def test_reflection_accepts_majority_rate_candidate_with_matching_signal() -> None:
     candidate = _candidate(
         root_cause_type="conversion_drop",

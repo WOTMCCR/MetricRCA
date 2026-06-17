@@ -126,9 +126,9 @@ LLM 仍自由选择工具，但不得自行改写配置日期、发明 metric_id
    `analysis_strategy=channel_first` 时，首个 E3/E4 必须来自
    `dimension=channel`、`signal_type=campaign`，但不强制使用 `E2_channel`
    top candidate element；若非 top channel 的 related signal evidence 更强，
-   E4 可以验证该 selected element。`analysis_strategy=organic_first` 进一步通过
-   `DiscoveryPolicy.first_signal_element=organic` 指定首个 channel/campaign signal 的
-   element，middleware 只执行该结构化字段，不解析原始 question 文本。
+   E4 可以验证该 selected element。`analysis_strategy=signal_first` 进一步通过
+   `DiscoveryPolicy.element_selection=signal_anomaly` 指定首个 channel/campaign signal 的
+   element 必须由 current-run signal anomaly evidence 选择，middleware 不解析原始 question 文本。
    `analysis_strategy=product_first` 时，首个 E3/E4 必须来自
    `dimension=product`、`signal_type=inventory`，并使用 `E2_product` 的 top
    candidate element，让 E4 decomposition 验证 `aov_drop`。

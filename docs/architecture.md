@@ -5,35 +5,36 @@
 ```mermaid
 flowchart LR
   User[User question] --> API[FastAPI]
-  API --> Orchestrator[RunOrchestrator]
-  Orchestrator --> DeepAgent[deepagents expert]
-  DeepAgent --> Middleware[GuardMiddleware]
-  Middleware --> Tools[registered MetricRCA tools]
+  API --> RunService[RunService]
+  RunService --> Intent[OpenAI Agents SDK intent agent]
+  Intent --> Compiler[RcaPlanCompiler]
+  Compiler --> Executor[RcaPlanExecutor]
+  Executor --> Gate[ActionGate]
+  Executor --> Tools[ToolExecutor]
   Tools --> QuerySpec[QuerySpec]
   QuerySpec --> Renderer[SQLRenderer]
   Renderer --> Guard[SQLGuard]
   Guard --> Repo[MetricRepository.execute_plan]
   Repo --> Evidence[(evidence/sql_audit)]
-  Middleware --> Trace[(trace_step token_usage)]
-  Orchestrator --> Memory[(memory_record)]
-  Orchestrator --> Reflection[Persisted Reflection]
+  Executor --> Trace[(trace_step token_usage)]
+  RunService --> Memory[(memory_record)]
+  RunService --> Reflection[Persisted Reflection]
   API --> Projector[Persisted report projector]
   Projector --> UI[React UI]
 ```
 
-## Orchestrator Control Flow
+## Runtime Control Flow
 
 ```mermaid
 flowchart TD
   START --> create_run
-  create_run --> build_agent
-  build_agent --> deepagents_loop
-  deepagents_loop --> guard_middleware
-  guard_middleware --> tools
-  tools --> persisted_evidence
+  create_run --> parse_intent
+  parse_intent --> compile_plan
+  compile_plan --> execute_plan
+  execute_plan --> action_gate
+  action_gate --> deterministic_tools
+  deterministic_tools --> persisted_evidence
   persisted_evidence --> reflection
-  reflection --> repair_reentry
-  repair_reentry --> deepagents_loop
   reflection --> report_projection
   report_projection --> memory_write
   memory_write --> finish_run
@@ -42,22 +43,27 @@ flowchart TD
   finish_run --> END
 ```
 
-## deepagents Repair Path
+## Deterministic Plan Execution
 
 ```mermaid
 sequenceDiagram
-  participant O as RunOrchestrator
-  participant A as deepagents expert
-  participant M as GuardMiddleware
+  participant R as RunService
+  participant C as RcaPlanCompiler
+  participant E as RcaPlanExecutor
+  participant G as ActionGate
+  participant T as ToolExecutor
   participant Q as QuerySpec/Renderer/Guard
   participant DB as MetricRepository
-  O->>A: repair message with ReflectionIssue
-  A->>M: tool call
-  M->>M: whitelist, schema, budget
-  M->>Q: build controlled query
+  R->>C: ParsedIntent + CasePrior
+  C-->>R: RcaPlan
+  R->>E: RunContext + RcaPlan
+  E->>G: validate action
+  G-->>E: GateDecision
+  E->>T: execute allowed action
+  T->>Q: build controlled query
   Q->>DB: execute guarded SQLPlan
-  DB-->>M: rows + sql_audit
-  M-->>O: new current-run Evidence
+  DB-->>T: rows + sql_audit
+  T-->>E: ToolExecutionResult + Evidence IDs
 ```
 
 ## QuerySpec Data Path
@@ -91,10 +97,9 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  Memory[(memory_record)] --> Orchestrator[RunOrchestrator]
-  Orchestrator --> Priority[planning priority only]
-  Priority --> Agent[deepagents planning]
-  Agent --> CurrentEvidence[current-run E1-E4]
+  Memory[(memory_record)] --> Prior[CasePrior]
+  Prior --> Compiler[RcaPlanCompiler]
+  Compiler --> CurrentEvidence[current-run E1-E4]
   CurrentEvidence --> Candidate[RootCauseCandidate]
   Memory -. forbidden .-> Candidate
   Memory -. forbidden .-> Evidence[evidence_id]
@@ -106,7 +111,7 @@ flowchart TD
 flowchart LR
   ReactUI[React/Vite UI] --> API[FastAPI]
   API --> POST[POST /api/rca/runs]
-  POST --> Runner[RunOrchestrator run_rca]
+  POST --> Runner[RunService run_rca]
   API --> GET[GET persisted artifacts]
   GET --> Projector[reporting.projector]
   Projector --> ReactUI
@@ -119,7 +124,7 @@ flowchart TD
   Cases[cases.jsonl] --> Runner[eval runner]
   GT[(anomaly_ground_truth)] --> Runner
   Runner --> RunnerCall[run_rca once per case]
-  Graph --> Artifacts[(agent_run/evidence/trace/sql_audit/tasks)]
+  RunnerCall --> Artifacts[(agent_run/evidence/trace/sql_audit/tasks)]
   Artifacts --> Scorer[scorer]
   Scorer --> Guard[real SQLGuard dangerous_sql_blocked]
   Scorer --> EvalRows[(eval_run/eval_case_result)]

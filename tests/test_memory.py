@@ -8,11 +8,12 @@ from typing import Any
 from sqlalchemy import create_engine, text
 
 from metric_rca.agent.reflection import verify_reflection
-from metric_rca.agent.runner import RunOrchestrator
 from metric_rca.config.settings import Settings
 from metric_rca.domain.models import Evidence, RootCauseCandidate
 from metric_rca.guardrails.query_spec import build_query_spec
-from tests.test_orchestrator import _Agent, _FailingMemoryRepo, _Repo, _deps
+from metric_rca.runtime.plan_compiler import RcaPlanCompiler
+from metric_rca.runtime.plan_models import CasePrior
+from metric_rca.services.metric_contracts import ParsedIntent
 
 
 def test_memory_repo_is_real_not_reexport_shell() -> None:
@@ -340,65 +341,44 @@ def test_memory_read_rejects_invalid_layer() -> None:
         raise AssertionError("invalid memory read layer was accepted")
 
 
-def test_memory_required_read_failure_fails_run() -> None:
-    repo = _Repo()
-    result = RunOrchestrator(
-        dependencies=_deps(repo, memory_required=True, memory_repo=_FailingMemoryRepo()),
-        agent_factory=lambda **kwargs: _Agent(),
-    ).run("why", run_id="run-1")
+def test_case_prior_is_planning_hint_not_evidence() -> None:
+    prior = CasePrior(
+        metric_id="gmv",
+        preferred_dimensions=["channel"],
+        preferred_signal_types=["campaign"],
+        prior_root_causes=["campaign_traffic_drop"],
+        confidence=0.8,
+        source_memory_ids=["mem-1"],
+    )
 
-    assert result["status"] == "failed"
-    assert result["error_code"] == "MEMORY_READ_FAILED"
-
-
-def test_memory_enabled_read_failure_fails_run_even_when_not_required() -> None:
-    repo = _Repo()
-    result = RunOrchestrator(
-        dependencies=_deps(repo, memory_required=False, memory_repo=_FailingMemoryRepo()),
-        agent_factory=lambda **kwargs: _Agent(),
-    ).run("why", run_id="run-1")
-
-    assert result["status"] == "failed"
-    assert result["error_code"] == "MEMORY_READ_FAILED"
+    assert prior.preferred_dimensions == ["channel"]
+    assert prior.source_memory_ids == ["mem-1"]
 
 
-def test_orchestrator_writes_episodic_key_that_future_runs_read() -> None:
-    from tests.test_orchestrator import _deps as _orchestrator_deps
+def test_plan_compiler_keeps_memory_hints_without_skipping_evidence_chain() -> None:
+    prior = CasePrior(
+        metric_id="gmv",
+        preferred_dimensions=["channel"],
+        preferred_signal_types=["campaign"],
+        prior_root_causes=["campaign_traffic_drop"],
+        confidence=0.8,
+        source_memory_ids=["mem-1"],
+    )
 
-    repo = _Repo()
-    memory_repo = _repo()
+    plan = RcaPlanCompiler().compile(
+        run_id="run-1",
+        parsed_intent=ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            question_family="gmv_drop",
+        ),
+        memory_hints=[prior],
+    )
 
-    class Agent(_Agent):
-        def invoke(self, *args, **kwargs):
-            repo.add_valid_evidences("run-1")
-            return {}
-
-    result = RunOrchestrator(
-        dependencies=_orchestrator_deps(repo, memory_repo=memory_repo),
-        agent_factory=lambda **kwargs: Agent(),
-    ).run("why", run_id="run-1")
-
-    assert result["status"] == "succeeded"
-    hits = memory_repo.read_layers("gmv|run", layers=("episodic",))
-    assert hits[0]["run_id"] == "run-1"
-    assert hits[0]["root_cause_type"] == "campaign_traffic_drop"
-
-
-def test_orchestrator_writes_reflection_key_that_future_runs_read() -> None:
-    from tests.test_orchestrator import _deps as _orchestrator_deps
-
-    repo = _Repo()
-    memory_repo = _repo()
-
-    result = RunOrchestrator(
-        dependencies=_orchestrator_deps(repo, memory_repo=memory_repo),
-        agent_factory=lambda **kwargs: _Agent(),
-    ).run("why", run_id="run-1")
-
-    assert result["status"] == "failed"
-    hits = memory_repo.read_layers("gmv|run", layers=("reflection",))
-    assert hits[0]["run_id"] == "run-1"
-    assert hits[0]["error_code"] == "REFLECTION_REPAIR_FAILED"
+    assert plan.memory_hints == [prior]
+    assert plan.actions[0].kind == "detect_anomaly"
+    assert [action.kind for action in plan.actions][-1] == "rank_root_causes"
+    assert all("memory" not in evidence_id for action in plan.actions for evidence_id in action.requires)
 
 
 def test_memory_cannot_be_final_conclusion_without_current_evidence() -> None:

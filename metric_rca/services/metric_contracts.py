@@ -22,7 +22,7 @@ QuestionFamily = Literal[
     "category_gmv_anomaly",
 ]
 
-AnalysisStrategy = Literal["standard", "channel_first", "product_first", "org" "anic_first"]
+AnalysisStrategy = Literal["standard", "channel_first", "product_first", "signal_first"]
 
 SUPPORTED_QUESTION_FAMILIES: tuple[str, ...] = get_args(QuestionFamily)
 SUPPORTED_ANALYSIS_STRATEGIES: tuple[str, ...] = get_args(AnalysisStrategy)

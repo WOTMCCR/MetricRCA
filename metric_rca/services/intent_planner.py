@@ -6,12 +6,11 @@ import json
 from datetime import date
 from typing import Literal, Protocol
 
-from langchain_core.exceptions import LangChainException, OutputParserException
-from openai import OpenAIError
 from pydantic import Field, ValidationError
 
 from metric_rca.domain.models import StrictModel
-from metric_rca.services.llm_client import LLMClientConfigError, build_openai_compatible_chat_model
+from metric_rca.intelligence.agent_runtime import AgentRuntime, AgentRuntimeError
+from metric_rca.services.llm_client import LLMClientConfigError, build_agent_runtime
 from metric_rca.services.metric_contracts import (
     AnalysisStrategy,
     MetricServiceError,
@@ -22,8 +21,6 @@ from metric_rca.services.metric_contracts import (
 )
 
 LLM_INTENT_PARSE_MAX_ATTEMPTS = 3
-NET_GMV_METRIC_ID = "net_" + "g" "mv"
-NET_GMV_QUESTION_FAMILY = "net_" + "g" "mv_drop"
 
 
 SYSTEM_PROMPT_TEMPLATE = """You are an intent parser for a metric anomaly diagnosis system.
@@ -44,6 +41,12 @@ SUPPORTED DIMENSION VALUES:
 BUSINESS TODAY:
 {business_today}
 
+RUN TARGET DATE:
+{run_target_date}
+
+RUN TARGET DATE RULE:
+{run_target_date_rule}
+
 RULES:
 - Output MUST be valid JSON matching the supplied schema.
 - metric_id MUST be one of the supported metrics.
@@ -55,8 +58,8 @@ RULES:
 - Use analysis_strategy=channel_first when an unscoped broad store/overall target
   KPI question should first verify channel/campaign movement.
 - Use analysis_strategy={stable_merch_strategy} when an unscoped target KPI question should
-  first verify {stable_merch_channel_value} channel campaign movement because
-  merchandising is stated as stable or not the likely driver.
+  first verify the strongest channel campaign movement because merchandising is
+  stated as stable or not the likely driver.
 - Use analysis_strategy=product_first when an unscoped target KPI question should
   first verify product/inventory movement, including merchandise sales, price, or
   average-order-value wording.
@@ -64,11 +67,16 @@ RULES:
 - element and filter values MUST come from the supported dimension values when values are listed.
 - If the question contains explicit "dimension=value" text, treat it as a required filter.
   Do not ignore explicit dimension values.
-- Resolve target_date against BUSINESS TODAY. "yesterday" is business_today
-  minus one day; "two days ago" is business_today minus two days; "on the Nth"
-  means that day in the current business month; "since the weekend" maps to
-  the most recent completed business day before BUSINESS TODAY when a single
-  RCA target date is required.
+- RUN TARGET DATE is the configured analysis date for this run. If it is not
+  null and the question asks about a relative date ("yesterday", "two days
+  ago", "since the weekend") or a generic abnormal/change investigation without
+  an explicit calendar date, set target_date to RUN TARGET DATE. If the question
+  gives an explicit calendar date such as "on the Nth", use that calendar date.
+- If RUN TARGET DATE is null, resolve target_date against BUSINESS TODAY:
+  "yesterday" is business_today minus one day; "two days ago" is business_today
+  minus two days; "on the Nth" means that calendar day in the current business
+  month; "since the weekend" maps to the most recent completed business day
+  before BUSINESS TODAY when a single RCA target date is required. Do not parse "two days ago" as "on the 2nd".
 - If the question does not match any family, set error_code to PARSE_FAILED and intent to null.
 - If the question mentions an unsupported metric, set error_code to METRIC_NOT_FOUND and intent to null.
 - If the question mentions an unsupported dimension, set error_code to DIMENSION_NOT_ALLOWED and intent to null.
@@ -113,6 +121,12 @@ RULES:
   with no explicit dimension/filter. "Why did yesterday's GMV fall despite
   stable merchandising?" is also metric_id=gmv, question_family=gmv_drop,
   analysis_strategy={stable_merch_strategy}, with no explicit dimension/filter.
+  "Something seems off with sales" is metric_id=gmv,
+  question_family=gmv_drop, analysis_strategy=channel_first, target_date equal
+  to the most recent completed business day, with no explicit dimension/filter.
+  "GMV has been declining since the weekend, what's happening?" is metric_id=gmv,
+  question_family=gmv_drop, analysis_strategy={stable_merch_strategy}, target_date equal
+  to the most recent completed business day, with no explicit dimension/filter.
 {slice_examples}
 - Do not infer a category/product element from broad words such as merchandise
   unless a supported dimension value is explicit in the user question.
@@ -129,6 +143,7 @@ class IntentPlanner(Protocol):
         question: str,
         *,
         business_today: date,
+        run_target_date: date | None = None,
         supported_metrics: list[str],
         supported_dimensions: list[str],
         supported_dimension_values: dict[str, list[str]],
@@ -159,7 +174,7 @@ class _LLMIntentOutput(StrictModel):
 
 
 class LLMIntentPlanner:
-    """LangChain OpenAI structured intent extraction with no fallback."""
+    """Structured intent extraction through the provider-neutral AgentRuntime."""
 
     def __init__(
         self,
@@ -169,32 +184,39 @@ class LLMIntentPlanner:
         api_key: str | None,
         base_url: str | None = None,
         structured_output_method: Literal["json_schema", "json_mode", "function_calling"] = "json_schema",
+        temperature: float | None = None,
+        agent_tracing_enabled: bool = False,
+        agent_trace_group_id: str | None = None,
+        agent_runtime: AgentRuntime | None = None,
     ) -> None:
         self._provider = provider
         self._model = model
         self._api_key = api_key
-        try:
-            chat_model = build_openai_compatible_chat_model(
-                provider=provider,
-                model=model,
-                api_key=api_key,
-                base_url=base_url,
-                timeout=30,
-                max_retries=0,
-                max_completion_tokens=3000,
-            )
-        except LLMClientConfigError as exc:
-            raise MetricServiceError(exc.code, exc.message) from exc
-        self._structured_model = chat_model.with_structured_output(
-            _LLMIntentOutput,
-            method=structured_output_method,
-        )
+        self._agent_runtime = agent_runtime
+        if self._agent_runtime is None:
+            try:
+                self._agent_runtime = build_agent_runtime(
+                    provider=provider,
+                    model=model,
+                    api_key=api_key,
+                    base_url=base_url,
+                    timeout=30,
+                    max_retries=0,
+                    max_completion_tokens=3000,
+                    temperature=temperature,
+                    structured_output_method=structured_output_method,
+                    agent_tracing_enabled=agent_tracing_enabled,
+                    agent_trace_group_id=agent_trace_group_id,
+                )
+            except LLMClientConfigError as exc:
+                raise MetricServiceError(exc.code, exc.message) from exc
 
     def parse(
         self,
         question: str,
         *,
         business_today: date,
+        run_target_date: date | None = None,
         supported_metrics: list[str],
         supported_dimensions: list[str],
         supported_dimension_values: dict[str, list[str]],
@@ -202,6 +224,7 @@ class LLMIntentPlanner:
     ) -> ParsedIntent:
         prompt = build_system_prompt(
             business_today=business_today,
+            run_target_date=run_target_date,
             supported_metrics=supported_metrics,
             supported_dimensions=supported_dimensions,
             supported_dimension_values=supported_dimension_values,
@@ -210,19 +233,21 @@ class LLMIntentPlanner:
         last_parse_error: Exception | None = None
         for attempt in range(1, LLM_INTENT_PARSE_MAX_ATTEMPTS + 1):
             try:
-                raw_payload = self._structured_model.invoke(
-                    [("system", prompt), ("human", _human_prompt(question, attempt=attempt))]
+                raw_payload = self._agent_runtime.run_structured(
+                    name="metric_rca_intent_agent",
+                    instructions=prompt,
+                    user_input=_human_prompt(question, attempt=attempt),
+                    output_type=_LLMIntentOutput,
+                    max_turns=1,
                 )
                 parsed_payload = _coerce_intent_output(raw_payload)
-            except OpenAIError as exc:
-                raise MetricServiceError("LLM_REQUIRED_UNAVAILABLE", "LLM intent planner request failed") from exc
-            except LangChainException as exc:
-                if not isinstance(exc, OutputParserException):
-                    raise MetricServiceError("LLM_REQUIRED_UNAVAILABLE", "LangChain intent planner request failed") from exc
-                last_parse_error = exc
-                if attempt < LLM_INTENT_PARSE_MAX_ATTEMPTS:
-                    continue
-                raise MetricServiceError("PARSE_FAILED", "LLM returned invalid intent payload") from exc
+            except AgentRuntimeError as exc:
+                if exc.code == "MODEL_BEHAVIOR_ERROR":
+                    last_parse_error = exc
+                    if attempt < LLM_INTENT_PARSE_MAX_ATTEMPTS:
+                        continue
+                    raise MetricServiceError("PARSE_FAILED", "LLM returned invalid intent payload") from exc
+                raise MetricServiceError(exc.code, exc.message) from exc
             except (MetricServiceError, ValidationError) as exc:
                 last_parse_error = exc
                 if attempt < LLM_INTENT_PARSE_MAX_ATTEMPTS:
@@ -286,6 +311,7 @@ def _human_prompt(question: str, *, attempt: int) -> str:
 def build_system_prompt(
     *,
     business_today: date,
+    run_target_date: date | None = None,
     supported_metrics: list[str],
     supported_dimensions: list[str],
     supported_dimension_values: dict[str, list[str]],
@@ -293,13 +319,14 @@ def build_system_prompt(
 ) -> str:
     return SYSTEM_PROMPT_TEMPLATE.format(
         business_today=business_today.isoformat(),
+        run_target_date=run_target_date.isoformat() if run_target_date is not None else "null",
+        run_target_date_rule=_run_target_date_rule(run_target_date),
         metrics_list=_json_list(supported_metrics),
         dimensions_list=_json_list(supported_dimensions),
         dimension_values=json.dumps(supported_dimension_values, ensure_ascii=False, sort_keys=True),
         families_list=_json_list(supported_families),
         analysis_strategies_list=_json_list(list(SUPPORTED_ANALYSIS_STRATEGIES)),
-        stable_merch_strategy="org" "anic_first",
-        stable_merch_channel_value="org" "anic",
+        stable_merch_strategy="signal_first",
         dimension_value_examples=_dimension_value_examples(supported_dimension_values),
         slice_examples=_slice_examples(
             supported_metrics=supported_metrics,
@@ -311,6 +338,16 @@ def build_system_prompt(
 
 def _json_list(values: list[str]) -> str:
     return json.dumps(values, ensure_ascii=False)
+
+
+def _run_target_date_rule(run_target_date: date | None) -> str:
+    if run_target_date is None:
+        return "No configured run target date is available; use BUSINESS TODAY rules."
+    value = run_target_date.isoformat()
+    return (
+        f'For this run, relative-date or generic anomaly questions MUST set target_date="{value}". '
+        "Do not compute a different target_date from BUSINESS TODAY unless the user gives an explicit calendar date."
+    )
 
 
 def _dimension_value_examples(supported_dimension_values: dict[str, list[str]]) -> str:
@@ -329,20 +366,24 @@ def _slice_examples(
     supported_families: list[str],
 ) -> str:
     lines = []
-    if NET_GMV_METRIC_ID in supported_metrics and NET_GMV_QUESTION_FAMILY in supported_families:
+    for metric_id, family in _supported_metric_family_pairs(
+        supported_metrics=supported_metrics,
+        supported_families=supported_families,
+    ):
+        metric_phrase = _metric_phrase(metric_id)
         product = _first_supported_value(supported_dimension_values, "product")
         if product is not None:
             lines.append(
-                f'  "Why did net GMV fall for product {product} yesterday?" is metric_id=net_gmv, '
-                f"question_family=net_gmv_drop, analysis_strategy=standard, dimension=product, "
+                f'  "Why did {metric_phrase} fall for product {product} yesterday?" is metric_id={metric_id}, '
+                f"question_family={family}, analysis_strategy=standard, dimension=product, "
                 f"element={product}, and filters containing dimension=product and value={product}."
             )
         channel = _first_supported_value(supported_dimension_values, "channel")
         if channel is not None:
             channel_alias = channel.replace("_", " ")
             lines.append(
-                f'  "Why did net GMV fall in {channel_alias} yesterday?" is metric_id=net_gmv, '
-                f"question_family=net_gmv_drop, analysis_strategy=standard, dimension=channel, "
+                f'  "Why did {metric_phrase} fall in {channel_alias} yesterday?" is metric_id={metric_id}, '
+                f"question_family={family}, analysis_strategy=standard, dimension=channel, "
                 f"element={channel}, and filters containing dimension=channel and value={channel}."
             )
     category = _first_supported_value(supported_dimension_values, "category")
@@ -377,6 +418,30 @@ def _slice_examples(
         ]
     )
     return "\n".join(lines)
+
+
+def _supported_metric_family_pairs(
+    *,
+    supported_metrics: list[str],
+    supported_families: list[str],
+) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    for family in supported_families:
+        metric_id = metric_id_from_question_family(family)
+        if metric_id in supported_metrics:
+            pairs.append((metric_id, family))
+    return pairs
+
+
+def _metric_phrase(metric_id: str) -> str:
+    return " ".join(_metric_phrase_token(token) for token in metric_id.split("_"))
+
+
+def _metric_phrase_token(token: str) -> str:
+    has_vowel = any(character in "aeiou" for character in token.lower())
+    if len(token) <= 2 or not has_vowel:
+        return token.upper()
+    return token
 
 
 def _first_supported_value(supported_dimension_values: dict[str, list[str]], dimension: str) -> str | None:

@@ -69,6 +69,7 @@ class MetricService:
         return parse_question(
             question,
             business_today=business_today,
+            run_target_date=self._settings.target_date,
             intent_planner=self._get_intent_planner(),
             supported_metrics=self._supported_metrics,
             supported_dimensions=self._supported_dimensions,
@@ -87,6 +88,9 @@ class MetricService:
             api_key=self._settings.llm_api_key,
             base_url=self._settings.llm_base_url,
             structured_output_method=self._settings.llm_structured_output_method,
+            temperature=self._settings.llm_temperature,
+            agent_tracing_enabled=self._settings.agent_tracing_enabled,
+            agent_trace_group_id=self._settings.agent_trace_group_id,
         )
         return self._intent_planner
 
@@ -95,6 +99,7 @@ def parse_question(
     question: str,
     *,
     business_today: date,
+    run_target_date: date | None = None,
     intent_planner: LLMIntentPlanner,
     supported_metrics: list[str],
     supported_dimensions: list[str],
@@ -108,6 +113,7 @@ def parse_question(
     parsed = intent_planner.parse(
         question,
         business_today=business_today,
+        run_target_date=run_target_date,
         supported_metrics=supported_metrics,
         supported_dimensions=supported_dimensions,
         supported_dimension_values=supported_dimension_values,

@@ -20,12 +20,13 @@
 LLM 只能看到 Out 的结构化摘要，永远看不到原始行集。
 
 `parse_question` 的结构化输出包含 `analysis_strategy`，取值为
-`standard`、`channel_first`、`product_first`、`organic_first`。该字段是发现型
+`standard`、`channel_first`、`product_first`、`signal_first`。该字段是发现型
 guard policy 的唯一自然语言语义入口：LLM intent planner 负责从 question 解析它，
 orchestrator 负责将 `ParsedIntent` 转成 `DiscoveryPolicy`，middleware 只消费结构化
-policy，不再读取或关键词匹配原始 question 文本。`organic_first` 通过
-`DiscoveryPolicy.first_signal_element=organic` 表达首个 channel/campaign signal 的
-element 约束，不在 middleware 中重放自然语言解析。intent planner 可对 malformed schema 或
+policy，不再读取或关键词匹配原始 question 文本。`signal_first` 通过
+`DiscoveryPolicy.element_selection=signal_anomaly` 表达首个 channel/campaign signal 的
+element 必须来自 current-run signal anomaly evidence，不在 middleware 中重放自然语言解析。
+intent planner 可对 malformed schema 或
 `PARSE_FAILED` 做有界的同模型重试；`METRIC_NOT_FOUND`、`DIMENSION_NOT_ALLOWED`、
 `DATE_RANGE_INVALID` 等 typed semantic errors 不重试、不替换模型、不默认改写 intent。
 自然语言 KPI/维度别名（如 net GMV、paid ads）只能在 LLM intent planner 的结构化

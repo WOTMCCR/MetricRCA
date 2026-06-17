@@ -1,3 +1,203 @@
+## ADL-0040: Agents SDK provider requests use explicit timeout and retry bounds
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-17 |
+| 状态 | accepted |
+| 关联迭代 | OpenAI Agents SDK migration / Phase B eval optimization |
+| 影响范围 | OpenAIAgentsRuntime, AgentRuntimeConfig |
+
+### 背景与场景
+
+DeepSeek confirm run once stalled inside `Runner.run_sync` while waiting on the
+OpenAI-compatible model request. `AgentRuntimeConfig` already carried
+`timeout=30` and `max_retries=0`, but the Agents SDK adapter did not pass those
+values into the SDK provider client, so the configured failure boundary was not
+actually enforced.
+
+### 决策
+
+`OpenAIAgentsRuntime` now constructs an explicit `AsyncOpenAI` client with
+`api_key`, `base_url`, `timeout`, and `max_retries`, then passes that client to
+`OpenAIProvider`. The business-facing runtime boundary remains unchanged:
+`RunService`, `PlanCompiler`, and `ToolExecutor` still depend only on
+`AgentRuntime` abstractions and never import SDK types.
+
+### 理由
+
+External LLM calls must fail fast with typed runtime errors instead of hanging an
+eval or production RCA run. Wiring the existing config into the SDK client keeps
+provider behavior explicit and testable without adding fallback or retry policy
+outside the configured values.
+
+### 被否决的方案
+
+- Leave SDK defaults in place and rely on manual interruption: not a production
+  failure boundary.
+- Catch timeout and silently switch provider/model: violates Zero Fallback.
+- Add timeout handling in RunService or PlanCompiler: would leak provider
+  concerns across the AgentRuntime boundary.
+
+---
+
+## ADL-0039: Phase B deterministic ranking and reflection repairs
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-17 |
+| 状态 | accepted |
+| 关联迭代 | Phase B eval optimization |
+| 影响范围 | runtime sdk tools, calculate_contribution, rank_root_causes, reflection |
+
+### 背景与场景
+
+28-case eval 暴露出若干非意图层缺口：C09 的非 top-channel related-signal evidence
+会被 Adtributor 第一名覆盖；C24 正向 GMV spike 被 AOV drop 改写；C25 `refund_rate`
+discovery 需要根据 `refund_quality` signal anomaly 选择 product；rate metric 的低
+coverage 贡献在有匹配 signal 时不应触发 additive metric 的覆盖率 repair。
+
+### 决策
+
+rank 阶段保留由匹配 E3 signal 验证过的 selected candidate，不让 Adtributor 增强结果
+无条件覆盖它。`signal_first` 动态 selection 使用已通过 QuerySpec → SQLRenderer →
+SQLGuard → Repository 的确定性 current/baseline signal 查询选择 anomaly severity
+最强的 candidate；`refund_quality` 动态 selection 使用同一受控数据路径选择当前
+signal level 最高的 candidate。不在 runtime 中硬编码 dimension element。
+`calculate_contribution` 动态步骤继承 E3 的 dimension/element，避免重新
+退回 E2 top candidate。AOV drop rewrite 只在负向异常下生效；rate metric 在有 matching
+signal evidence 时允许低 coverage 通过 Reflection。
+
+### 理由
+
+根因排序必须尊重当前 run 的证据链，而不是只尊重第一条贡献候选。正向 spike 与 rate
+metric 的解释机制不同于 additive GMV drop，统一套用 drop/coverage 规则会产生错误
+repair 或错误 root cause。
+
+### 被否决的方案
+
+- 按 case_id 或 ground truth 覆盖 selected candidate：违反 eval integrity。
+- 对 rate metrics 放宽所有 Reflection 校验：会允许无 signal 支撑的低质量解释通过。
+- 在工具外直接查询事实表：违反固定数据访问路径。
+
+---
+
+## ADL-0038: Run target date is explicit LLM intent context
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-17 |
+| 状态 | accepted |
+| 关联迭代 | Phase B eval optimization |
+| 影响范围 | MetricService, LLMIntentPlanner intent prompt |
+
+### 背景与场景
+
+C22 `Was GMV abnormal two days ago?` 在 eval runner 中使用 `target_date=2026-06-03`
+和 `business_today=2026-06-04`。DeepSeek 按自然日期算术把 “two days ago”
+解析成 2026-06-02，导致系统在 spike date 上正确检测到异常，但与 C22 的
+no-anomaly run context 不一致。修改 eval runner 或 cases.jsonl 被 Phase B 红线禁止。
+
+### 决策
+
+`MetricService` 将配置中的 `target_date` 作为 `run_target_date` 传入
+`LLMIntentPlanner`。intent prompt 明示 `RUN TARGET DATE` 是本次 RCA 运行的配置分析日：
+当问题使用 relative-date wording 或泛化异常/变化表达且没有显式 calendar date 时，
+LLM 必须将输出 `target_date` 设为该 run target date；若用户给出 “on the Nth”
+这类显式 calendar date，则使用显式日期。语义解析仍完全由 LLM structured output 完成，
+Python 只传递结构化 run context，不做关键词/regex date mapper。
+
+### 理由
+
+eval、API 和 runtime 已经都有目标分析日概念；把该上下文提供给 LLM 可以消除 provider
+对相对日期的不同算术解释，同时不改变 harness、scorer 或 ground truth。它也让生产 API
+中显式传入的 target_date 成为意图解析上下文，而不是只在后续工具层出现。
+
+### 被否决的方案
+
+- 修改 eval runner 的 `business_today` 推导：违反 eval harness 红线。
+- 在 Python 中识别 “two days ago” 并改写日期：违反 LLM-first intent 红线。
+- 在 prompt 中硬编码 C22 原题到固定日期：过拟合 eval 题面，且不适用于其它 run target。
+
+---
+
+## ADL-0037: DeepSeek uses explicit Agents SDK json_mode with safe tracing
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-17 |
+| 状态 | accepted |
+| 关联迭代 | OpenAI Agents SDK migration / Phase B eval optimization |
+| 影响范围 | AgentRuntimeConfig, OpenAIAgentsRuntime, Settings |
+
+### 背景与场景
+
+DeepSeek OpenAI-compatible endpoint 拒绝 Agents SDK 默认的 `json_schema`
+`response_format`，返回 `This response_format type is unavailable now`。Phase B 同时
+要求可开启 Agent Traces，并验证切到 DeepSeek 模型后 tracing 是否仍有效。
+
+### 决策
+
+`llm_structured_output_method=json_mode` 成为显式配置路径：Agent 仍由 OpenAI Agents SDK
+执行，但 output_type 设为 plain text，并通过 prompt 附加 JSON schema；runtime 使用
+Pydantic `TypeAdapter.validate_json` 将文本校验成目标结构化模型。DeepSeek json_mode 通过
+`ModelSettings.extra_body={"response_format":{"type":"json_object"}}` 明确启用。Tracing
+通过 `agent_tracing_enabled` 和 `agent_trace_group_id` 配置接入 `RunConfig`，并始终设置
+`trace_include_sensitive_data=False`；hosted trace export 依赖 `OPENAI_API_KEY`，模型调用
+可使用 DeepSeek key。
+
+### 理由
+
+这是显式 provider 配置，不是在 `json_schema` 失败后 fallback。无效 JSON 会以
+`MODEL_BEHAVIOR_ERROR` typed error 失败并由 intent planner 的既有 parse retry 处理。
+Tracing 属于 SDK runtime 观测层，和模型 provider 解耦，但不能把用户输入/输出敏感数据写入
+trace。
+
+### 被否决的方案
+
+- 捕获 DeepSeek `json_schema` 失败后自动改用 json_mode：provider fallback。
+- 在业务层直接调用 OpenAI SDK 或 DeepSeek client：破坏 AgentRuntime 边界。
+- 开启 sensitive trace data：不需要且增加泄露风险。
+
+---
+
+## ADL-0036: OpenAI Agents SDK behind AgentRuntime boundary
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-17 |
+| 状态 | accepted |
+| 关联迭代 | OpenAI Agents SDK migration |
+| 影响范围 | intelligence runtime, MetricService, LLM client |
+
+### 背景与场景
+
+用户要求从 LangChain/DeepAgents runtime 迁移到 OpenAI Agents SDK，同时明确禁止
+`RunOrchestrator`、`PlanCompiler`、`ToolExecutor` 直接依赖 OpenAI SDK。旧实现还依赖
+LangGraph 内部结构做 tool 泄漏检查，架构边界脆弱。
+
+### 决策
+
+新增 provider-neutral `AgentRuntime` Protocol 与 `AgentRuntimeConfig`。业务层只依赖
+`run_structured(...)` 抽象；OpenAI Agents SDK 相关 import、`Agent`、`Runner`、
+`OpenAIProvider` 和 `RunConfig` 只存在于 `openai_agents_runtime.py` adapter。配置层显式
+要求 provider/model/api_key/base_url，非 OpenAI provider 不允许读取 `OPENAI_API_KEY`
+作为替代 key。unsupported provider、缺 key/base_url、unsupported structured output method
+均 typed fail-fast。
+
+### 理由
+
+这样可在不污染核心 RCA 编排、plan compiler 和 deterministic tool executor 的前提下使用
+Agents SDK structured output、tracing 和 provider adapter 能力。SDK 替换或第三方
+OpenAI-compatible provider 差异被限制在 runtime adapter 内。
+
+### 被否决的方案
+
+- 在 MetricService 或 RunService 直接实例化 `agents.Agent`：违反用户架构红线。
+- 保留 LangChain/DeepAgents compatibility layer：继续携带旧 runtime 的内部结构依赖。
+- provider 缺失时默认切回 OpenAI：违反 Zero Fallback。
+
+---
+
 ## ADL-0035: Phase B eval-driven PTV optimization loop
 
 | 字段 | 值 |

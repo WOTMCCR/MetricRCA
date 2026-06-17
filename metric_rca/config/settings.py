@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     thresh_pct: float = 0.15
     z_thresh: float = 2.0
 
-    # 业务终止上限（业务安全机制，不依赖 LangGraph 的 recursion_limit）。
+    # 业务终止上限（业务安全机制，不依赖框架 recursion_limit）。
     max_steps: int = 8
     max_query: int = 12
     max_drilldown_depth: int = 3
@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     # 单条 SQL 的执行超时（毫秒），repo 执行前 SET SESSION 生效，防慢查。
     statement_timeout_ms: int = 3000
 
-    # LLM / Memory 的启用与"是否必需"开关。P6 deepagents 编排要求 agent 运行时显式
+    # LLM / Memory 的启用与"是否必需"开关。运行时要求 intent agent 显式
     # 配置 LLM；缺少 provider / model / API key 由 agent factory typed fail-fast，
     # 不能阻断 seed/test 等非 LLM 命令。
     llm_enabled: bool = True
@@ -64,6 +64,8 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None
     llm_structured_output_method: Literal["json_schema", "json_mode", "function_calling"] = "json_schema"
     llm_temperature: float = 0.0
+    agent_tracing_enabled: bool = False
+    agent_trace_group_id: str | None = None
     eval_llm_max_attempts: int = Field(default=3, ge=1)
     eval_llm_retry_seconds: float = 20.0
     eval_concurrency: int = Field(default=1, ge=1)

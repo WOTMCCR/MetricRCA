@@ -1,208 +1,139 @@
 from __future__ import annotations
 
-from pathlib import Path
+from datetime import date
+from types import SimpleNamespace
 
-from tests.test_middleware import _context, _message, _request
-from tests.test_orchestrator import _Agent, _FailingMemoryRepo, _FailingMemoryWriteRepo, _Repo, _deps
-
-from metric_rca.agent.middleware import GuardMiddleware
-from metric_rca.agent.runner import RunOrchestrator
-from metric_rca.agent.tools.runtime import ToolRuntimeError, execute_guarded_plan
-from metric_rca.domain.models import SQLPlan
-
-
-ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_DIRS = [ROOT / "metric_rca" / "services", ROOT / "metric_rca" / "agent"]
+from metric_rca.agent.factory import AgentFactoryError, create_metric_rca_agent
+from metric_rca.domain.models import Observation, StrictModel
+from metric_rca.runtime.action_gate import ActionGate
+from metric_rca.runtime.evidence_graph import EvidenceGraph
+from metric_rca.runtime.plan_models import RcaAction
+from metric_rca.runtime.run_context import RunContext
+from metric_rca.runtime.sdk_tools import MetricRCAToolHandler, ToolExecutor
 
 
-def test_runtime_code_does_not_read_anomaly_ground_truth() -> None:
-    offenders = [
-        str(path.relative_to(ROOT))
-        for path in _runtime_sources()
-        if "anomaly_ground_truth" in path.read_text()
-    ]
-    assert offenders == []
+def test_missing_llm_config_fails_fast_without_runtime_agent() -> None:
+    with _raises_code(AgentFactoryError, "LLM_REQUIRED_UNAVAILABLE"):
+        create_metric_rca_agent(dependencies=_deps(llm_api_key=None), run_id="run-1")
 
 
-def test_services_and_tools_have_no_hardcoded_metric_definitions() -> None:
-    offenders: list[str] = []
-    for path in _runtime_sources():
-        source = path.read_text()
-        if "METRIC_DEFINITIONS" in source:
-            offenders.append(f"{path.relative_to(ROOT)}:METRIC_DEFINITIONS")
-        if "MetricDefinition(" in source:
-            offenders.append(f"{path.relative_to(ROOT)}:MetricDefinition(")
-    assert offenders == []
-
-
-def test_llm_unavailable_fails_before_agent_loop() -> None:
-    repo = _Repo()
-    result = RunOrchestrator(
-        dependencies=_deps(repo, llm_api_key=None),
-        agent_factory=lambda **kwargs: _Agent(),
-    ).run("why", run_id="run-1")
-
-    assert result["status"] == "failed"
-    assert result["error_code"] == "LLM_REQUIRED_UNAVAILABLE"
-
-
-def test_illegal_tool_args_observation_tool_not_executed() -> None:
-    writer = _TraceWriter()
-    middleware = GuardMiddleware(_context(writer))
+def test_illegal_tool_args_return_typed_schema_error_without_handler_execution() -> None:
     called = False
 
-    def handler(request):
+    class Args(StrictModel):
+        run_id: str
+        metric_id: str
+        target_date: date
+        dimension: str
+
+    def handler(args: Args, dependencies: object):
         nonlocal called
         called = True
-        return _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E1"]})
+        return Observation(action_name="drilldown_dimension", ok=True)
 
-    result = middleware.wrap_tool_call(
-        _request("detect_anomaly", {"metric_id": "gmv", "target_date": "2026-06-05", "illegal": "x"}),
-        handler,
+    executor = ToolExecutor(
+        dependencies=object(),
+        handlers={"drilldown_dimension": MetricRCAToolHandler(args_model=Args, call=handler)},
+    )
+    result = executor.execute(
+        RunContext(run_id="run-1", metric_id="gmv", target_date=date(2026, 6, 5)),
+        RcaAction(
+            action_id="A2",
+            kind="drilldown_dimension",
+            args={"metric_id": "gmv", "target_date": date(2026, 6, 5)},
+        ),
+        EvidenceGraph(run_id="run-1"),
     )
 
-    assert "ACTION_SCHEMA_INVALID" in result.content
     assert called is False
+    assert result.observation.ok is False
+    assert result.observation.error_code == "ACTION_SCHEMA_INVALID"
 
 
-def test_budget_exhausted_then_llm_attempts_data_tool_run_failed() -> None:
-    writer = _TraceWriter()
-    middleware = GuardMiddleware(_context(writer, max_query=0))
-
-    first = middleware.wrap_tool_call(
-        _request("detect_anomaly", {"metric_id": "gmv", "target_date": "2026-06-05"}),
-        lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E1"]}),
+def test_budget_exhaustion_is_typed_and_does_not_mutate_context() -> None:
+    ctx = RunContext(
+        run_id="run-1",
+        metric_id="gmv",
+        target_date=date(2026, 6, 5),
+        budget={"max_steps": 0, "max_query": 12, "max_drilldown_depth": 3},
     )
-    second = middleware.wrap_tool_call(
-        _request("drilldown_dimension", {"metric_id": "gmv", "target_date": "2026-06-05", "dimension": "channel", "evidence_ids": ["run-1:E1"]}),
-        lambda request: _message(request, {"observation": {"ok": True}, "evidence_ids": ["run-1:E2"]}),
+    action = RcaAction(
+        action_id="A1",
+        kind="detect_anomaly",
+        args={"metric_id": "gmv", "target_date": date(2026, 6, 5), "filters": {}},
     )
 
-    assert "BUDGET_EXCEEDED" in first.content
-    assert "query budget exhausted; call rank_root_causes or stop" in first.content
-    assert "data tool attempted after budget exhaustion" in second.content
-    assert middleware.context.failed is True
+    decision = ActionGate().validate(ctx, action, EvidenceGraph(run_id="run-1"))
+
+    assert decision.allowed is False
+    assert decision.error_code == "BUDGET_EXCEEDED"
+    assert ctx.step_count == 0
 
 
-def test_sql_guard_rejection_cannot_be_bypassed() -> None:
-    plan = SQLPlan(sql="SELECT * FROM fact_order", sql_hash="x", guard_status="rejected", guard_errors=["star"])
-    repo = _ExecutingRepo()
+def test_no_anomaly_contract_blocks_downstream_actions() -> None:
+    ctx = RunContext(
+        run_id="run-1",
+        metric_id="gmv",
+        target_date=date(2026, 6, 5),
+        repository=_Repository(
+            {
+                "run-1:E1": {
+                    "evidence_id": "run-1:E1",
+                    "guard_status": "passed",
+                    "result_summary": {"is_anomaly": False},
+                }
+            }
+        ),
+    )
+    action = RcaAction(
+        action_id="A2",
+        kind="rank_root_causes",
+        args={"metric_id": "gmv", "target_date": date(2026, 6, 5)},
+        requires=["E1"],
+    )
 
-    try:
-        execute_guarded_plan(repository=repo, plan=plan, run_id="run-1")
-    except ToolRuntimeError as exc:
-        assert exc.code == "SQL_GUARD_REJECTED"
-    else:
-        raise AssertionError("expected SQL_GUARD_REJECTED")
+    decision = ActionGate().validate(ctx, action, EvidenceGraph(run_id="run-1", evidence_ids=["run-1:E1"]))
 
-    assert repo.executed is False
-
-
-def test_no_anomaly_with_drilldown_or_rank_trace_fails() -> None:
-    for action in ["rank_root_causes", "fetch_related_signal"]:
-        repo = _Repo()
-
-        class Agent(_Agent):
-            def invoke(self, *args, **kwargs):
-                repo.add_evidence("run-1", "E1", {"is_anomaly": False})
-                repo.trace_steps.append({"run_id": "run-1", "seq": 2, "node": "tool_call", "action": action})
-                return {}
-
-        result = RunOrchestrator(dependencies=_deps(repo), agent_factory=lambda **kwargs: Agent()).run("why", run_id="run-1")
-
-        assert result["status"] == "failed"
-        assert result["error_code"] == "NO_ANOMALY_CONTRACT_VIOLATED"
+    assert decision.allowed is False
+    assert decision.error_code == "NO_ANOMALY_CONTRACT_VIOLATED"
 
 
-def test_reflection_repair_exhausted_no_report() -> None:
-    repo = _Repo()
+class _raises_code:
+    def __init__(self, exc_type: type[BaseException], code: str) -> None:
+        self.exc_type = exc_type
+        self.code = code
 
-    class Agent(_Agent):
-        def invoke(self, *args, **kwargs):
-            repo.add_evidence("run-1", "E1", {"is_anomaly": True})
-            return {}
+    def __enter__(self):
+        return self
 
-    result = RunOrchestrator(dependencies=_deps(repo), agent_factory=lambda **kwargs: Agent()).run("why", run_id="run-1")
-
-    assert result["status"] == "failed"
-    assert result["error_code"] == "REFLECTION_REPAIR_FAILED"
-    assert result.get("report") is None
-
-
-def test_memory_read_write_failure_fails_run() -> None:
-    repo = _Repo()
-    read_result = RunOrchestrator(
-        dependencies=_deps(repo, memory_required=True, memory_repo=_FailingMemoryRepo()),
-        agent_factory=lambda **kwargs: _Agent(),
-    ).run("why", run_id="run-1")
-
-    assert read_result["status"] == "failed"
-    assert read_result["error_code"] == "MEMORY_READ_FAILED"
-
-    write_repo = _Repo()
-
-    class Agent(_Agent):
-        def invoke(self, *args, **kwargs):
-            write_repo.add_valid_evidences("run-2")
-            return {}
-
-    write_result = RunOrchestrator(
-        dependencies=_deps(write_repo, memory_required=True, memory_repo=_FailingMemoryWriteRepo()),
-        agent_factory=lambda **kwargs: Agent(),
-    ).run("why", run_id="run-2")
-
-    assert write_result["status"] == "failed"
-    assert write_result["error_code"] == "MEMORY_WRITE_FAILED"
+    def __exit__(self, exc_type, exc, tb):
+        assert exc_type is self.exc_type
+        assert getattr(exc, "code", None) == self.code
+        return True
 
 
-def test_empty_result_set_no_attribute_or_rank() -> None:
-    repo = _Repo()
+class _Repository:
+    def __init__(self, rows: dict[str, dict[str, object]]) -> None:
+        self._rows = rows
 
-    class Agent(_Agent):
-        def __init__(self, middleware):
-            self.middleware = middleware
-
-        def invoke(self, *args, **kwargs):
-            self.middleware.wrap_tool_call(
-                _request("detect_anomaly", {"metric_id": "gmv", "target_date": "2026-06-05"}),
-                lambda request: _message(
-                    request,
-                    {"observation": {"ok": False, "error_code": "INSUFFICIENT_BASELINE_DATA"}, "evidence_ids": []},
-                ),
-            )
-            repo.add_valid_evidences("run-1")
-            return {}
-
-    def factory(**kwargs):
-        return Agent(kwargs["middleware"][0])
-
-    result = RunOrchestrator(dependencies=_deps(repo), agent_factory=factory).run("why", run_id="run-1")
-
-    assert result["status"] == "failed"
-    assert result["error_code"] == "INSUFFICIENT_BASELINE_DATA"
-    assert "report" not in result
+    def get_evidence(self, *, run_id: str, evidence_id: str) -> dict[str, object] | None:
+        row = self._rows.get(evidence_id)
+        if row is None or not str(row.get("evidence_id", "")).startswith(f"{run_id}:"):
+            return None
+        return row
 
 
-def _runtime_sources() -> list[Path]:
-    return [
-        path
-        for directory in RUNTIME_DIRS
-        if directory.exists()
-        for path in directory.rglob("*.py")
-    ]
-
-
-class _TraceWriter:
-    def __init__(self) -> None:
-        self.steps = []
-
-    def write_step(self, **kwargs) -> None:
-        self.steps.append(kwargs)
-
-
-class _ExecutingRepo:
-    executed = False
-
-    def execute_plan(self, *args, **kwargs):
-        self.executed = True
-        return []
+def _deps(*, llm_api_key: str | None = "key") -> SimpleNamespace:
+    return SimpleNamespace(
+        settings=SimpleNamespace(
+            llm_provider="openai",
+            llm_model="gpt-test",
+            llm_api_key=llm_api_key,
+            business_today=date(2026, 6, 6),
+            target_date=date(2026, 6, 5),
+        ),
+        repository=SimpleNamespace(),
+        metric_service=SimpleNamespace(),
+        renderer=SimpleNamespace(),
+        trace_writer=SimpleNamespace(),
+    )

@@ -16,6 +16,7 @@ from metric_rca.domain.models import AgentAction, Evidence, ReflectionIssue, Ref
 
 REQUIRED_EVIDENCE_ALIASES = ("E1", "E2", "E3", "E4", "E_rank")
 ATTRIBUTION_COVERAGE_THRESHOLD = 0.50
+ADDITIVE_ATTRIBUTION_METRICS = frozenset({"gmv", "net_gmv", "uv"})
 
 
 def verify_reflection(
@@ -108,7 +109,11 @@ def verify_reflection(
                 persisted_evidence_by_id=persisted_evidence_by_id,
             ):
                 issues.append(_issue("persisted_evidence", "candidate evidence is not persisted guard-passed evidence"))
-        if candidate is candidates[0] and candidate.contribution_pct < ATTRIBUTION_COVERAGE_THRESHOLD:
+        if (
+            candidate is candidates[0]
+            and candidate.contribution_pct < ATTRIBUTION_COVERAGE_THRESHOLD
+            and _low_coverage_repair_applies(state)
+        ):
             issues.append(
                 _issue(
                     "ATTRIBUTION_COVERAGE_LOW",
@@ -175,6 +180,10 @@ def _issue(check: str, message: str, *, suggested_action: AgentAction | None = N
         message=message,
         suggested_action=suggested_action,
     )
+
+
+def _low_coverage_repair_applies(state: dict[str, Any]) -> bool:
+    return str(state.get("metric_id") or "") in ADDITIVE_ATTRIBUTION_METRICS
 
 
 def _persisted_evidence_matches(

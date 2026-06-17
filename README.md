@@ -1,7 +1,7 @@
 # MetricRCA
 
 MetricRCA is a persisted-artifact metric root-cause analysis system. The LLM is
-required for intent parsing and tool planning, while SQL generation, SQL guard,
+required for structured intent parsing, while plan compilation, SQL generation, SQL guard,
 evidence persistence, attribution, Reflection, report projection, UI display,
 and eval scoring stay deterministic and auditable.
 
@@ -28,15 +28,10 @@ Use the same shell for LLM-backed commands and set `OPENAI_API_KEY`, or set
 ```mermaid
 flowchart LR
   Q[question] --> IP[intent planner]
-  IP --> M{multi_agent_enabled}
-  M -->|false| SA[single expert]
-  M -->|true| T[triage by ParsedIntent.metric_id]
-  T --> GMV[gmv family expert]
-  T --> RATE[rate family expert]
-  SA --> G[GuardMiddleware]
-  GMV --> G
-  RATE --> G
-  G --> TOOLS[deterministic tools]
+  IP --> PC[RcaPlanCompiler]
+  PC --> PE[RcaPlanExecutor]
+  PE --> G[ActionGate]
+  PE --> TOOLS[ToolExecutor]
   TOOLS --> QS[QuerySpec]
   QS --> SR[SQLRenderer]
   SR --> SG[SQLGuard]
@@ -50,29 +45,22 @@ flowchart LR
   services, not runtime constants.
 - The only metric-fact data path is
   `QuerySpec -> SQLRenderer -> SQLGuard -> MetricRepository.execute_plan`.
-- `RunOrchestrator` owns run creation, memory read/write, agent invocation,
-  deterministic Reflection, report projection, tasks, token trace flushing, and
-  terminal status.
-- `METRIC_RCA_MULTI_AGENT_ENABLED=false` preserves the P8 single-agent path.
-  When enabled, deterministic triage routes only from `ParsedIntent.metric_id`
-  to `gmv_family` or `rate_family`; experts share one tool set, one
-  `GuardMiddleware`, and one run-level `RunGuardContext`.
-- Expert output may include advisory `RunOutcome` for tracing, but malformed
-  structured output only logs a warning. Reflection and report projection still
-  read persisted artifacts.
+- `RunService` owns run creation, intent parsing, plan compilation, deterministic
+  plan execution, Reflection, report projection, tasks, token trace flushing,
+  and terminal status.
+- `RcaPlanCompiler` routes from structured `ParsedIntent.metric_id` and
+  metadata/policy into `gmv_family` or `rate_family` plans. The model does not
+  choose SQL, evidence ids, or final root cause.
 - Memory can only influence planning priority. It cannot become evidence or a
   final conclusion.
 
-### Multi-Agent Operational Boundary
+### Runtime Boundary
 
-When `METRIC_RCA_MULTI_AGENT_ENABLED=true`, routing is intentionally strict.
-Only Phase 1 metrics with an explicit expert family are accepted. Unknown
-metrics, or metrics not assigned to `gmv_family` / `rate_family`, fail with
-`METRIC_NOT_FOUND`; the system does not fall back to a generic or single-agent
-path. Likewise, if either expert cannot be constructed or exposes a mismatched
-tool set, factory construction fails with a typed error instead of downgrading
-to the P8 single-agent path. This preserves the zero-fallback contract and makes
-metric-family rollout/configuration mistakes visible.
+OpenAI Agents SDK is used at the intent boundary for structured output. The RCA
+loop itself is a typed deterministic `RcaPlan`: each action passes `ActionGate`,
+then `ToolExecutor` injects run id and current-run evidence ids before calling
+deterministic tools. No runtime path depends on the legacy agent stacks removed
+during the SDK migration.
 
 ## Zero Silent Fallback
 
@@ -99,11 +87,9 @@ npm run test --prefix frontend -- --run
 npm run build --prefix frontend
 ```
 
-Local API and eval targets set `LANGSMITH_TRACING=false` and
-`LANGCHAIN_TRACING_V2=false` inside the command. The default seed command is
-`METRIC_RCA_DATA_SEED=20260606 python -m metric_rca.data.seed_data`.
-Make targets map to `docker compose`, `python`, `uvicorn`, `npm`, and `pytest`
-commands as defined in `Makefile`.
+The default seed command is `METRIC_RCA_DATA_SEED=20260606 python -m
+metric_rca.data.seed_data`. Make targets map to `docker compose`, `python`,
+`uvicorn`, `npm`, and `pytest` commands as defined in `Makefile`.
 
 ## API Reference
 

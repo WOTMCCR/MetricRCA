@@ -1,4 +1,4 @@
-"""RunOrchestrator for the P6 deepagents architecture."""
+"""Compatibility runner entrypoint backed by runtime.RunService."""
 
 from __future__ import annotations
 
@@ -7,15 +7,9 @@ from datetime import datetime, timezone
 import json
 import logging
 from typing import Any
-from uuid import uuid4
-
-from langchain_core.exceptions import LangChainException
-from openai import OpenAIError
 
 from metric_rca.agent.discovery_policy import DiscoveryPolicy, discovery_policy_from_intent
-from metric_rca.agent.factory import AgentFactoryError, create_metric_rca_agent
 from metric_rca.agent.reflection import verify_reflection
-from metric_rca.agent.subagents import RunOutcome, route_metric_family
 from metric_rca.config.settings import Settings, get_settings
 from metric_rca.domain.models import Evidence, PHASE1_METRICS, QuerySpec, RootCauseCandidate
 from metric_rca.guardrails.renderer import SQLRenderer
@@ -81,181 +75,10 @@ class RunOrchestrator:
         self.agent_factory = agent_factory
 
     def run(self, question: str, *, run_id: str | None = None) -> dict[str, Any]:
-        resolved_run_id = run_id or f"run-{uuid4().hex}"
-        try:
-            self.dependencies.trace_writer.start_run(
-                run_id=resolved_run_id,
-                question=question,
-                target_date=self.dependencies.settings.target_date,
-            )
-        except TraceWriteError as exc:
-            return {"run_id": resolved_run_id, "question": question, "status": "failed", "error_code": exc.code}
+        from metric_rca.runtime.run_service import RunService
 
-        parsed_intent: ParsedIntent | None = None
-        try:
-            parsed_intent = self.dependencies.metric_service.parse_question(
-                question,
-                business_today=self.dependencies.settings.business_today,
-            )
-            self.dependencies.trace_writer.set_run_context(
-                run_id=resolved_run_id,
-                metric_id=parsed_intent.metric_id,
-                target_date=parsed_intent.target_date,
-            )
-            bundle = create_metric_rca_agent(
-                dependencies=self.dependencies,
-                run_id=resolved_run_id,
-                agent_factory=self.agent_factory,
-            )
-            bundle.guard_context.explicit_filters = _parsed_intent_scope(parsed_intent)
-            bundle.guard_context.target_metric_id = parsed_intent.metric_id
-            bundle.guard_context.target_date = parsed_intent.target_date
-            bundle.guard_context.discovery_policy = discovery_policy_from_intent(parsed_intent)
-            expert_family: str | None = None
-            selected_agent = bundle.agent
-            if self.dependencies.settings.multi_agent_enabled:
-                expert_family = route_metric_family(parsed_intent.metric_id)
-                self._write_triage_route(resolved_run_id, parsed_intent=parsed_intent, family=expert_family)
-                selected_agent = bundle.agent_for_family(expert_family)
-            memory_hits = self._read_required_memory(resolved_run_id, parsed_intent=parsed_intent)
-        except (AgentFactoryError, TraceWriteError, RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
-            code = _code_from_exception(exc, "LLM_REQUIRED_UNAVAILABLE")
-            extra_payload = _failure_payload(parsed_intent)
-            return self._fail(resolved_run_id, question, code, extra_payload=extra_payload)
-
-        try:
-            agent_result = selected_agent.invoke(
-                {
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": _agent_user_message(
-                                question,
-                                self.dependencies.settings,
-                                parsed_intent=parsed_intent,
-                                memory_hits=memory_hits,
-                            ),
-                        }
-                    ]
-                },
-                config={
-                    "configurable": {"thread_id": resolved_run_id},
-                    "callbacks": [bundle.token_usage_callback],
-                },
-            )
-            if expert_family is not None:
-                _warn_on_run_outcome(agent_result, parsed_intent=parsed_intent)
-        except (RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
-            code = _code_from_exception(exc, "AGENT_INVOKE_FAILED")
-            if not self._can_continue_after_terminal_agent_error(resolved_run_id, code):
-                return self._fail(resolved_run_id, question, code, extra_payload=_failure_payload(parsed_intent))
-        try:
-            self._flush_pending_token_usage(bundle.guard_context)
-        except TraceWriteError as exc:
-            return self._fail(resolved_run_id, question, exc.code, extra_payload=_failure_payload(parsed_intent))
-
-        if bundle.guard_context.failed:
-            return self._fail(
-                resolved_run_id,
-                question,
-                bundle.guard_context.error_code or "AGENT_TOOL_FAILED",
-                extra_payload=_failure_payload(parsed_intent),
-            )
-
-        no_anomaly_error = self._no_anomaly_contract_error(resolved_run_id)
-        if no_anomaly_error is not None:
-            return self._fail(resolved_run_id, question, no_anomaly_error, extra_payload=_failure_payload(parsed_intent))
-
-        reflection = self._verify(resolved_run_id, repair_count=0, parsed_intent=parsed_intent)
-        initial_reflection = reflection
-        if not reflection.passed:
-            if _has_repair_action(reflection) and int(getattr(self.dependencies.settings, "max_repair", 1)) > 0:
-                repair_action = _first_repair_action(reflection)
-                try:
-                    bundle.guard_context.required_repair_action = repair_action
-                    repair_result = selected_agent.invoke(
-                        {
-                            "messages": [
-                                {
-                                    "role": "user",
-                                    "content": _repair_instruction(reflection, repair_action=repair_action),
-                                }
-                            ]
-                        },
-                        config={
-                            "configurable": {"thread_id": resolved_run_id},
-                            "callbacks": [bundle.token_usage_callback],
-                        },
-                    )
-                    if expert_family is not None:
-                        _warn_on_run_outcome(repair_result, parsed_intent=parsed_intent)
-                except (RuntimeError, ValueError, TypeError, OpenAIError, LangChainException) as exc:
-                    code = _code_from_exception(exc, "REFLECTION_REPAIR_FAILED")
-                    return self._fail(
-                        resolved_run_id,
-                        question,
-                        code,
-                        extra_payload=_failure_payload(
-                            parsed_intent,
-                            {"reflection_issues": _reflection_issues_payload(initial_reflection)},
-                        ),
-                    )
-                finally:
-                    bundle.guard_context.required_repair_action = None
-                try:
-                    self._flush_pending_token_usage(bundle.guard_context)
-                except TraceWriteError as exc:
-                    return self._fail(resolved_run_id, question, exc.code, extra_payload=_failure_payload(parsed_intent))
-                if bundle.guard_context.failed:
-                    return self._fail(
-                        resolved_run_id,
-                        question,
-                        bundle.guard_context.error_code or "AGENT_TOOL_FAILED",
-                        extra_payload=_failure_payload(parsed_intent),
-                    )
-                reflection = self._verify(resolved_run_id, repair_count=1, parsed_intent=parsed_intent)
-            if not reflection.passed:
-                return self._fail(
-                    resolved_run_id,
-                    question,
-                    "REFLECTION_REPAIR_FAILED",
-                    extra_payload=_failure_payload(
-                        parsed_intent,
-                        {"reflection_issues": _reflection_issues_payload(reflection)},
-                    ),
-                )
-
-        status = "no_anomaly" if self._is_no_anomaly(resolved_run_id) else "succeeded"
-        report = self._project_report(resolved_run_id, status=status)
-        if report is None:
-            return self._fail(
-                resolved_run_id,
-                question,
-                "REPORT_PROJECTION_FAILED",
-                extra_payload=_failure_payload(parsed_intent),
-            )
-        try:
-            self._create_required_tasks(resolved_run_id, report)
-            self._finish_run_with_observability(resolved_run_id, status=status, error_code=None)
-            self._write_required_memory(
-                resolved_run_id,
-                report,
-                reflection=reflection,
-                status=status,
-                initial_reflection=initial_reflection,
-                parsed_intent=parsed_intent,
-            )
-        except (TraceWriteError, RuntimeError) as exc:
-            code = _code_from_exception(exc, "MEMORY_WRITE_FAILED")
-            return self._fail(resolved_run_id, question, code, extra_payload=_failure_payload(parsed_intent))
-        return {
-            "run_id": resolved_run_id,
-            "question": question,
-            "status": status,
-            "error_code": None,
-            "reflection": reflection.model_dump(mode="json"),
-            "report": report,
-        }
+        _ = self.agent_factory
+        return RunService(dependencies=self.dependencies).run(question, run_id=run_id)
 
     def _verify(self, run_id: str, *, repair_count: int, parsed_intent: ParsedIntent | None = None) -> Any:
         state = self._reflection_state(run_id, repair_count=repair_count, parsed_intent=parsed_intent)
@@ -629,30 +452,6 @@ def run_rca(
 
 def _has_repair_action(reflection: Any) -> bool:
     return any(getattr(issue, "suggested_action", None) is not None for issue in getattr(reflection, "issues", []))
-
-
-def _warn_on_run_outcome(result: Any, *, parsed_intent: ParsedIntent) -> RunOutcome | None:
-    raw: Any = None
-    if isinstance(result, dict):
-        raw = result.get("structured_response")
-    else:
-        raw = getattr(result, "structured_response", None)
-    if raw is None:
-        LOGGER.warning("expert did not return structured RunOutcome; continuing from persisted artifacts")
-        return None
-    try:
-        outcome = raw if isinstance(raw, RunOutcome) else RunOutcome.model_validate(raw)
-    except (TypeError, ValueError) as exc:
-        LOGGER.warning("malformed RunOutcome ignored; continuing from persisted artifacts: %s", exc)
-        return None
-    if outcome.metric_id != parsed_intent.metric_id:
-        LOGGER.warning(
-            "RunOutcome metric_id=%s does not match ParsedIntent metric_id=%s; continuing from persisted artifacts",
-            outcome.metric_id,
-            parsed_intent.metric_id,
-        )
-        return None
-    return outcome
 
 
 def _first_repair_action(reflection: Any) -> str | None:

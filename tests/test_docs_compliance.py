@@ -64,10 +64,11 @@ def test_architecture_md_has_mermaid_and_matches_required_nodes() -> None:
     architecture = (ROOT / "docs" / "architecture.md").read_text()
     assert architecture.count("```mermaid") >= 7
     for component in [
-        "RunOrchestrator",
-        "deepagents expert",
-        "GuardMiddleware",
-        "registered MetricRCA tools",
+        "RunService",
+        "OpenAI Agents SDK intent agent",
+        "RcaPlanCompiler",
+        "ActionGate",
+        "ToolExecutor",
         "Persisted Reflection",
         "report_projection",
         "memory_write",

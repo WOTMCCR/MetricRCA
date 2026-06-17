@@ -9,7 +9,6 @@ EVAL_ID ?=
 BASE_URL ?= http://127.0.0.1:8000
 HTTP_TIMEOUT ?= 600
 HTTP_CONCURRENCY ?= $(or $(METRIC_RCA_EVAL_CONCURRENCY),1)
-LOCAL_TRACING_ENV ?= LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false
 
 up:
 	docker compose up -d mysql
@@ -18,24 +17,24 @@ seed:
 	METRIC_RCA_DATA_SEED=$(SEED) python -m metric_rca.data.seed_data
 
 api:
-	$(LOCAL_TRACING_ENV) uvicorn metric_rca.api.main:app --reload
+	uvicorn metric_rca.api.main:app --reload
 
 ui:
 	npm run dev --prefix frontend
 
 eval:
-	$(LOCAL_TRACING_ENV) python -m metric_rca.evals.runner
+	python -m metric_rca.evals.runner
 
 eval-stream:
-	$(LOCAL_TRACING_ENV) python -m metric_rca.evals.runner --stream $(if $(EVAL_ID),--eval-id $(EVAL_ID),)
+	python -m metric_rca.evals.runner --stream $(if $(EVAL_ID),--eval-id $(EVAL_ID),)
 
 eval-http:
 	@test -n "$(PROVIDER)" || (echo "PROVIDER is required for eval-http" >&2; exit 2)
 	@test -n "$(MODEL)" || (echo "MODEL is required for eval-http" >&2; exit 2)
-	$(LOCAL_TRACING_ENV) python -m metric_rca.evals.client --base-url $(BASE_URL) --provider $(PROVIDER) --model $(MODEL) --timeout $(HTTP_TIMEOUT) --concurrency $(HTTP_CONCURRENCY)
+	python -m metric_rca.evals.client --base-url $(BASE_URL) --provider $(PROVIDER) --model $(MODEL) --timeout $(HTTP_TIMEOUT) --concurrency $(HTTP_CONCURRENCY)
 
 eval-gaps:
-	$(LOCAL_TRACING_ENV) python -m metric_rca.evals.gap_analyzer --eval-id $(EVAL_ID)
+	python -m metric_rca.evals.gap_analyzer --eval-id $(EVAL_ID)
 
 test:
 	pytest -q

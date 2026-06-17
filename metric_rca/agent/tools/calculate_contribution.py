@@ -98,12 +98,14 @@ def calculate_contribution(
     except ToolRuntimeError as exc:
         return runtime_error(action, exc)
     current_run_evidence = [*args.evidence_ids, f"{args.run_id}:E4"]
+    anomaly_direction = _anomaly_direction(args.run_id, repository=repository)
     attribution = compute_dimension_contribution(
         metric_definition=metric_definition,
         dimension=args.dimension,
         current_rows=current.rows,
         baseline_rows=baseline.rows,
         evidence_ids=current_run_evidence,
+        anomaly_direction=anomaly_direction,
     )
     if not attribution.ok:
         return tool_error(action, attribution.error_code or "ATTRIBUTION_COVERAGE_LOW", "attribution coverage low")
@@ -161,7 +163,7 @@ def calculate_contribution(
             if code in {"NO_CURRENT_DATA", "INSUFFICIENT_BASELINE_DATA"}:
                 return tool_error(action, code, "factor decomposition failed")
             raise
-        if factor_summary["decomposition"]["largest_drop_factor"] == "aov":
+        if factor_summary["decomposition"]["largest_drop_factor"] == "aov" and anomaly_direction != "increase":
             selected_candidate = selected_candidate.model_copy(update={"root_cause_type": RootCauseType.AOV_DROP.value})
             attribution_candidates = [
                 selected_candidate
@@ -454,6 +456,22 @@ def _candidate_for_selected_element(
     for candidate in candidates:
         if candidate.dimension == dimension and str(candidate.element) == str(element):
             return candidate
+    return None
+
+
+def _anomaly_direction(run_id: str, *, repository: Any) -> str | None:
+    row = repository.get_evidence(run_id=run_id, evidence_id=f"{run_id}:E1")
+    summary = row.get("result_summary") if isinstance(row, dict) else None
+    if not isinstance(summary, dict):
+        return None
+    delta = summary.get("delta")
+    if delta is None:
+        return None
+    numeric_delta = float(delta)
+    if numeric_delta > 0:
+        return "increase"
+    if numeric_delta < 0:
+        return "decrease"
     return None
 
 

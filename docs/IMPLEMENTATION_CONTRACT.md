@@ -46,7 +46,7 @@ A future implementation is acceptable only when:
 
 These shortcuts are P0 violations:
 
-- No plain sequential function pretending to be LangGraph.
+- No plain sequential function pretending to be a real runtime.
 - No empty placeholder node/tool modules.
 - No CLI print pretending to be FastAPI.
 - No print(json) pretending to be a frontend debug UI.
@@ -73,39 +73,40 @@ Passing tests by bypassing core logic is failure, not success.
 
 Future application code must implement the documented architecture directly.
 
-### Agent Orchestrator
+### Runtime Orchestrator
 
-P6 supersedes the v1 hand-written LangGraph `StateGraph` requirement. New
-application code must implement the documented deepagents architecture directly:
+Application code must implement the OpenAI Agents SDK runtime architecture
+directly:
 
-- `metric_rca/agent/runner.py` owns `RunOrchestrator`, run lifecycle,
-  persisted-artifact Reflection, one repair re-entry, report projection, memory
-  writes, and terminal status.
-- `metric_rca/agent/factory.py` builds the deepagents agent with the required
-  configured LLM, registered MetricRCA tools, `GuardMiddleware`, planning
-  `write_todos`, and disabled filesystem permissions.
-- `metric_rca/agent/middleware.py` implements `GuardMiddleware.wrap_tool_call`.
-- `metric_rca/agent/deep_tools.py` exposes LangChain structured tools over the
-  deterministic tool layer.
-- `metric_rca/agent/prompts.py` and `metric_rca/agent/subagents.py` hold the
-  controlled expert prompt and P9 multi-agent gate.
-- `metric_rca/agent/graph.py`, `state.py`, `react.py`, and `nodes/` must not be
-  kept as import shims.
+- `metric_rca/runtime/run_service.py` owns run lifecycle, structured intent
+  parsing, plan compilation, deterministic plan execution, persisted-artifact
+  Reflection, report projection, memory writes, and terminal status.
+- `metric_rca/services/intent_planner.py` uses OpenAI Agents SDK structured
+  output for natural-language intent. Python runtime code must not add
+  keyword/regex semantic alias mappers.
+- `metric_rca/runtime/plan_compiler.py` turns `ParsedIntent`, metadata, policy,
+  and memory priors into a typed `RcaPlan`.
+- `metric_rca/runtime/action_gate.py` validates action schemas, scope,
+  budgets, evidence chain, and no-anomaly downstream contracts.
+- `metric_rca/runtime/sdk_tools.py` owns the SDK-native deterministic tool
+  registry and injects run id/evidence ids outside model control.
+- `metric_rca/agent/runner.py` and `metric_rca/agent/factory.py` are
+  compatibility entrypoints only; they must not depend on legacy agent stacks.
 
-### Tool-Calling Loop
+### Plan Execution Loop
 
-- The LLM is required. Missing provider, model, API key, or deepagents runtime
-  returns `LLM_REQUIRED_UNAVAILABLE`.
-- Tool calls must be constrained to the registered whitelist plus planning
-  `write_todos`.
-- `GuardMiddleware` validates tool name, Pydantic args with `extra="forbid"`,
-  run-scoped budgets, trace persistence, and data-tool evidence ids.
+- The LLM is required for intent. Missing provider, model, API key, or SDK
+  runtime returns `LLM_REQUIRED_UNAVAILABLE`.
+- Tool execution must be constrained to the registered MetricRCA runtime
+  whitelist.
+- `ActionGate` validates Pydantic args with `extra="forbid"`, run-scoped
+  budgets, trace persistence, and data-tool evidence ids.
 - Invalid tool or args must create `Observation(ok=False,
   error_code="ACTION_SCHEMA_INVALID")` and must not execute the handler.
 - Budget exhaustion returns `BUDGET_EXCEEDED`; repeated data-tool attempts after
   exhaustion fail the run.
 - Business termination must use settings such as `max_steps`, `max_query`,
-  `max_drilldown_depth`, and `max_repair`, not LangGraph recursion limits.
+  `max_drilldown_depth`, and `max_repair`, not framework recursion limits.
 
 ### Tool And Data Access Layer
 

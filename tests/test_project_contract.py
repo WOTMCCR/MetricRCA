@@ -26,13 +26,7 @@ def test_pyproject_declares_current_phase_dependencies() -> None:
         "pymysql",
         "sqlglot",
         "pandas",
-        "deepagents",
-        "langchain",
-        "langchain-core",
-        "langchain-openai",
-        "langgraph",
-        "langgraph-checkpoint",
-        "langgraph-prebuilt",
+        "openai-agents",
         "fastapi",
         "uvicorn",
         "httpx[socks]",
@@ -44,9 +38,7 @@ def test_pyproject_declares_current_phase_dependencies() -> None:
     }
     assert set(declared) == required
     assert forbidden_phase_gt1.isdisjoint(declared)
-    assert declared["deepagents"] == "deepagents==0.3.5"
-    assert declared["langchain"] == "langchain==1.2.3"
-    assert declared["langgraph"] == "langgraph==1.0.6"
+    assert declared["openai-agents"] == "openai-agents==0.17.5"
 
     installed = metadata("metric_rca")
     assert installed["Name"] == "metric_rca"
@@ -63,9 +55,9 @@ def test_makefile_targets_match_documented_commands() -> None:
     expected = {
         "up": "docker compose up -d mysql",
         "seed": "METRIC_RCA_DATA_SEED=20260606 python -m metric_rca.data.seed_data",
-        "api": "LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false uvicorn metric_rca.api.main:app --reload",
+        "api": "uvicorn metric_rca.api.main:app --reload",
         "ui": "npm run dev --prefix frontend",
-        "eval": "LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false python -m metric_rca.evals.runner",
+        "eval": "python -m metric_rca.evals.runner",
         "test": "pytest -q",
     }
     for target, command in expected.items():
@@ -99,10 +91,7 @@ def test_eval_stream_make_target_passes_eval_id() -> None:
         for line in result.stdout.splitlines()
         if line and not line.startswith("export ") and not line.startswith("make[")
     ]
-    assert lines[-1] == (
-        "LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false "
-        "python -m metric_rca.evals.runner --stream --eval-id eval-predict-test"
-    )
+    assert lines[-1] == "python -m metric_rca.evals.runner --stream --eval-id eval-predict-test"
 
 
 def test_compose_declares_mysql_only_contract() -> None:
@@ -122,3 +111,29 @@ def test_compose_declares_mysql_only_contract() -> None:
         for volume in services["mysql"]["volumes"]
     )
     assert "healthcheck" in services["mysql"]
+
+
+def test_core_runtime_depends_on_agent_runtime_not_openai_sdk() -> None:
+    forbidden = [
+        "from agents",
+        "import agents",
+        "OpenAIProvider",
+        "RunConfig",
+        "Runner",
+        "Agent(",
+    ]
+    checked = [
+        ROOT / "metric_rca" / "agent" / "runner.py",
+        ROOT / "metric_rca" / "runtime" / "run_service.py",
+        ROOT / "metric_rca" / "runtime" / "plan_compiler.py",
+        ROOT / "metric_rca" / "runtime" / "plan_executor.py",
+        ROOT / "metric_rca" / "runtime" / "sdk_tools.py",
+        ROOT / "metric_rca" / "services" / "intent_planner.py",
+        ROOT / "metric_rca" / "services" / "llm_client.py",
+    ]
+    for path in checked:
+        source = path.read_text()
+        assert not any(token in source for token in forbidden), path
+
+    adapter = ROOT / "metric_rca" / "intelligence" / "openai_agents_runtime.py"
+    assert "from agents" in adapter.read_text()

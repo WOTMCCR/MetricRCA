@@ -1390,6 +1390,94 @@ def test_rank_root_causes_invokes_internal_adtributor_and_updates_e4() -> None:
     assert all(not evidence_id.endswith(f":{forbidden_alias}") for evidence_id in repo.persisted_evidence)
 
 
+def test_rank_root_causes_preserves_signal_verified_selection_when_adtributor_applies() -> None:
+    repo = SpyRepository()
+    repo.persisted_evidence["run-1:E2_channel"] = {
+        "evidence_id": "run-1:E2_channel",
+        "run_id": "run-1",
+        "guard_status": "passed",
+        "result_summary": {
+            "metric_id": "gmv",
+            "dimension": "channel",
+            "adtributor_elements": [
+                {"dimension": "channel", "element": "paid_ads", "actual": 20.0, "forecast": 100.0},
+                {"dimension": "channel", "element": "organic", "actual": 90.0, "forecast": 100.0},
+            ],
+        },
+    }
+    repo.persisted_evidence["run-1:E3_ch_organic"] = {
+        "evidence_id": "run-1:E3_ch_organic",
+        "run_id": "run-1",
+        "guard_status": "passed",
+        "result_summary": {"dimension": "channel", "element": "organic", "delta_pct": -0.77},
+    }
+    repo.persisted_evidence["run-1:E4"] = {
+        "evidence_id": "run-1:E4",
+        "run_id": "run-1",
+        "query_spec": {},
+        "sql_text": "SELECT order_amount FROM fact_order WHERE business_date = :target_date LIMIT 1000",
+        "sql_hash": "e4" * 32,
+        "guard_status": "passed",
+        "data_source": "fact_order",
+        "result_summary": {
+            "selected_candidate": {
+                "root_cause_type": "campaign_traffic_drop",
+                "dimension": "channel",
+                "element": "organic",
+                "contribution_pct": 0.25,
+                "signal_severity": 0.77,
+                "evidence_support": 1.0,
+                "reflection_factor": 1.0,
+                "eng_confidence": 0.77,
+                "verdict": "likely",
+                "evidence_ids": ["run-1:E1", "run-1:E2_channel", "run-1:E3_ch_organic", "run-1:E4"],
+            },
+            "candidates": [
+                {
+                    "root_cause_type": "campaign_traffic_drop",
+                    "dimension": "channel",
+                    "element": "paid_ads",
+                    "contribution_pct": 0.8,
+                    "signal_severity": 0.8,
+                    "evidence_support": 1.0,
+                    "reflection_factor": 1.0,
+                    "eng_confidence": 0.8,
+                    "verdict": "likely",
+                    "evidence_ids": ["run-1:E1", "run-1:E2_channel", "run-1:E3_ch_organic", "run-1:E4"],
+                },
+                {
+                    "root_cause_type": "campaign_traffic_drop",
+                    "dimension": "channel",
+                    "element": "organic",
+                    "contribution_pct": 0.25,
+                    "signal_severity": 0.77,
+                    "evidence_support": 1.0,
+                    "reflection_factor": 1.0,
+                    "eng_confidence": 0.77,
+                    "verdict": "likely",
+                    "evidence_ids": ["run-1:E1", "run-1:E2_channel", "run-1:E3_ch_organic", "run-1:E4"],
+                },
+            ],
+        },
+    }
+    deps = SimpleNamespace(
+        repository=repo,
+        metric_service=StaticMetricService(),
+        renderer=None,
+        settings=Settings(db_dsn="sqlite://", readonly_db_dsn="sqlite://"),
+        trace_writer=None,
+    )
+    rank_tool = next(tool for tool in build_metric_rca_tools(dependencies=deps, run_id="run-1") if tool.name == "rank_root_causes")
+
+    result = rank_tool.invoke({"metric_id": "gmv", "target_date": date(2026, 6, 5)})
+
+    assert result["observation"]["ok"] is True
+    assert result["observation"]["payload"]["adtributor_status"] == "applied"
+    assert result["observation"]["payload"]["selected_candidate"]["element"] == "organic"
+    assert repo.persisted_evidence["run-1:E4"]["result_summary"]["selected_candidate"]["element"] == "organic"
+    assert repo.evidence_rows[-1]["result_summary"]["selected_candidate"]["element"] == "organic"
+
+
 def test_rank_root_causes_ignores_rejected_adtributor_evidence() -> None:
     repo = SpyRepository()
     repo.persisted_evidence["run-1:E2_rejected"] = {

@@ -1,23 +1,19 @@
-"""Configured OpenAI-compatible chat model construction."""
+"""Agent runtime construction compatibility helpers."""
 
 from __future__ import annotations
 
-from typing import Any
-
-from langchain_openai import ChatOpenAI
-
-
-OPENAI_COMPATIBLE_PROVIDERS = frozenset({"openai", "openai-compatible", "deepseek"})
-
-
-class LLMClientConfigError(RuntimeError):
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(f"{code}: {message}")
-        self.code = code
-        self.message = message
+from metric_rca.intelligence.agent_runtime import (
+    AgentRuntime,
+    AgentRuntimeConfig,
+    AgentRuntimeConfigError,
+    create_agent_runtime,
+)
 
 
-def build_openai_compatible_chat_model(
+LLMClientConfigError = AgentRuntimeConfigError
+
+
+def build_agent_runtime(
     *,
     provider: str | None,
     model: str | None,
@@ -27,27 +23,24 @@ def build_openai_compatible_chat_model(
     timeout: float | int | None = None,
     max_retries: int | None = None,
     max_completion_tokens: int | None = None,
-    model_kwargs: dict[str, Any] | None = None,
-) -> ChatOpenAI:
-    if provider not in OPENAI_COMPATIBLE_PROVIDERS:
-        raise LLMClientConfigError("LLM_PROVIDER_UNSUPPORTED", "provider must be openai-compatible")
-    if not model or not api_key:
-        raise LLMClientConfigError("LLM_REQUIRED_UNAVAILABLE", "model and API key are required")
-    if provider != "openai" and not base_url:
-        raise LLMClientConfigError("LLM_BASE_URL_REQUIRED", "OpenAI-compatible providers require llm_base_url")
-
-    kwargs: dict[str, Any] = {
-        "model": model,
-        "api_key": api_key,
-        "timeout": timeout,
-        "max_retries": max_retries,
-    }
-    if temperature is not None:
-        kwargs["temperature"] = temperature
-    if max_completion_tokens is not None:
-        kwargs["max_completion_tokens"] = max_completion_tokens
-    if model_kwargs is not None:
-        kwargs["model_kwargs"] = model_kwargs
-    if base_url is not None:
-        kwargs["base_url"] = base_url
-    return ChatOpenAI(**kwargs)
+    parallel_tool_calls: bool | None = None,
+    structured_output_method: str = "json_schema",
+    agent_tracing_enabled: bool = False,
+    agent_trace_group_id: str | None = None,
+) -> AgentRuntime:
+    return create_agent_runtime(
+        AgentRuntimeConfig(
+            provider=provider,
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            temperature=temperature,
+            timeout=timeout,
+            max_retries=max_retries,
+            max_completion_tokens=max_completion_tokens,
+            parallel_tool_calls=parallel_tool_calls,
+            structured_output_method=structured_output_method,  # type: ignore[arg-type]
+            agent_tracing_enabled=agent_tracing_enabled,
+            agent_trace_group_id=agent_trace_group_id,
+        )
+    )

@@ -25,10 +25,10 @@ DiscoveryPolicy 校验 → 预算计数 → 执行 → trace 落库（含 token_
 写入 `ParsedIntent.analysis_strategy`，再由 orchestrator 转成 `DiscoveryPolicy`；
 middleware 不重新解析 question 文本。标准无显式过滤 GMV discovery 与
 `channel_first` policy 要求首个 E3/E4 chain 使用 `dimension=channel`、
-`signal_type=campaign`，并绑定 `E2_channel` top candidate；`organic_first`
+`signal_type=campaign`，并绑定 `E2_channel` top candidate；`signal_first`
 policy 使用相同的 channel/campaign first-signal 约束，并额外要求
-`first_signal_element=organic`，该 element 来自结构化
-`ParsedIntent.analysis_strategy` 而不是 middleware keyword parser；`product_first` policy
+`element_selection=signal_anomaly`，该 element 来自 current-run signal anomaly evidence
+而不是 middleware keyword parser；`product_first` policy
 要求首个 E3/E4 chain 选 `E2_product` top candidate 并使用
 `signal_type=inventory`，由 E4 decomposition 验证 `aov_drop`。首个 E3-family signal 成功后必须进入
 calculate_contribution；额外 `fetch_related_signal` 被 `E3_ALREADY_EXISTS`

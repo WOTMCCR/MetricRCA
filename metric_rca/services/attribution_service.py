@@ -27,6 +27,7 @@ def compute_dimension_contribution(
     current_rows: list[dict[str, Any]],
     baseline_rows: list[dict[str, Any]],
     evidence_ids: list[str],
+    anomaly_direction: str | None = None,
     top_threshold: float = 0.60,
 ) -> AttributionResult:
     if not evidence_ids:
@@ -36,15 +37,21 @@ def compute_dimension_contribution(
 
     current_by_element = _values_by_element(current_rows, dimension)
     baseline_by_element = _baseline_means_by_element(baseline_rows, dimension)
+    movement_direction = _movement_direction(
+        metric_definition=metric_definition,
+        anomaly_direction=anomaly_direction,
+    )
     bad_delta_by_element: dict[str, float] = {}
+    severity_by_element: dict[str, float] = {}
     for element, baseline_value in baseline_by_element.items():
         current_value = current_by_element.get(element)
         if current_value is not None:
-            if metric_definition.higher_is_better:
+            if movement_direction == "decrease":
                 bad_delta = max(0.0, baseline_value - current_value)
             else:
                 bad_delta = max(0.0, current_value - baseline_value)
             bad_delta_by_element[element] = bad_delta
+            severity_by_element[element] = min(1.0, bad_delta / baseline_value) if baseline_value else 0.0
 
     total_bad_delta = sum(bad_delta_by_element.values())
     if total_bad_delta <= 0:
@@ -56,7 +63,7 @@ def compute_dimension_contribution(
             pass
         else:
             contribution_pct = bad_delta / total_bad_delta
-            signal_severity = min(1.0, contribution_pct)
+            signal_severity = severity_by_element.get(element, min(1.0, contribution_pct))
             evidence_support = 1.0 if evidence_ids else 0.0
             score = contribution_pct * signal_severity * evidence_support
             raw_candidates.append(
@@ -78,6 +85,12 @@ def compute_dimension_contribution(
     if not ranked:
         return AttributionResult(ok=False, error_code="ATTRIBUTION_COVERAGE_LOW")
     return AttributionResult(ok=True, candidates=ranked, coverage=ranked[0].contribution_pct)
+
+
+def _movement_direction(*, metric_definition: MetricDefinition, anomaly_direction: str | None) -> str:
+    if anomaly_direction in {"increase", "decrease"}:
+        return anomaly_direction
+    return "decrease" if metric_definition.higher_is_better else "increase"
 
 
 def compute_gmv_decomposition(

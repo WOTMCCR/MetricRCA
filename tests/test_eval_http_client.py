@@ -516,8 +516,8 @@ def test_makefile_has_eval_http_target() -> None:
 
     assert "\neval-http:" in f"\n{source}"
     assert "metric_rca.evals.client" in source
-    assert "LANGSMITH_TRACING=false" in source
-    assert "LANGCHAIN_TRACING_V2=false" in source
+    assert "LANGSMITH_TRACING" not in source
+    assert "LANGCHAIN_TRACING_V2" not in source
     assert "--timeout $(HTTP_TIMEOUT)" in source
     assert "--concurrency $(HTTP_CONCURRENCY)" in source
     assert "PROVIDER ?=" not in source

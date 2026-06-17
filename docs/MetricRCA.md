@@ -163,7 +163,7 @@ class ParsedIntent(BaseModel):
     metric_id: str
     target_date: date
     question_family: str
-    analysis_strategy: Literal["standard", "channel_first", "product_first", "organic_first"] = "standard"
+    analysis_strategy: Literal["standard", "channel_first", "product_first", "signal_first"] = "standard"
     dimension: Optional[str] = None
     element: Optional[str] = None
     filters: dict[str, str] = Field(default_factory=dict)
@@ -618,11 +618,12 @@ The active v2 ReAct contract is:
   `analysis_strategy=channel_first`, the first channel/campaign E3/E4 chain must
   use the strongest `E2_channel` drilldown element, so later Adtributor ranking
   cannot select a different top channel while carrying mismatched E3 signal
-  evidence. `analysis_strategy=organic_first`
+  evidence. `analysis_strategy=signal_first`
   carries the same channel/campaign first-signal policy plus
-  `first_signal_element=organic`; the LLM intent planner must emit this
-  strategy from natural-language semantics, while middleware only enforces the
-  structured element field. `analysis_strategy=product_first` requires the first
+  `element_selection=signal_anomaly`; the LLM intent planner must emit this
+  strategy from natural-language semantics, while middleware/executor selects the
+  element from current-run signal evidence instead of a hardcoded value.
+  `analysis_strategy=product_first` requires the first
   E3/E4 chain to use the product drilldown's strongest drop candidate with
   `signal_type=inventory`, so E4 GMV factor decomposition can prove `aov_drop`;
   middleware enforces the top candidate element from the structured
