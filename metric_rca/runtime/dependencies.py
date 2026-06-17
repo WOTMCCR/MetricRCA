@@ -14,6 +14,9 @@ class RuntimeRepository(Protocol):
     def get_trace_steps(self, run_id: str) -> list[dict[str, Any]]:
         ...
 
+    def get_sql_audit_rows(self, run_id: str) -> list[dict[str, Any]]:
+        ...
+
     def get_evidence(self, *, run_id: str, evidence_id: str) -> dict[str, Any] | None:
         ...
 

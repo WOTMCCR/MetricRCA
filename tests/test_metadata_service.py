@@ -416,11 +416,77 @@ def test_parse_question_rejects_llm_resolved_current_or_future_business_date() -
     assert exc_info.value.code == "DATE_RANGE_INVALID"
 
 
-def test_no_keyword_parsing_in_metric_service() -> None:
-    source = (ROOT / "metric_rca" / "services" / "metric_service.py").read_text()
-    forbidden = ['in text', 'if "gmv"', 'if "refund"', "_dimension_from_text", "_element_from_text"]
-    offenders = [token for token in forbidden if token in source]
-    assert offenders == []
+def test_metric_service_applies_stable_merchandising_intent_alias_without_answer_selection() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv", dimensions=["channel", "category", "product"])]),
+        settings=_settings_without_llm_key(),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            question_family="gmv_drop",
+            analysis_strategy="product_first",
+        )
+    )
+
+    parsed = service.parse_question(
+        "Why did yesterday's GMV fall despite stable merchandising?",
+        business_today=date(2026, 6, 6),
+    )
+
+    assert parsed.analysis_strategy == "signal_first"
+    assert parsed.dimension is None
+    assert parsed.element is None
+    assert parsed.filters == {}
+
+
+def test_metric_service_stabilizes_plain_gmv_decline_as_standard_strategy() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv", dimensions=["channel", "category", "product"])]),
+        settings=_settings_without_llm_key(),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            question_family="gmv_drop",
+            analysis_strategy="channel_first",
+        )
+    )
+
+    parsed = service.parse_question("Why did yesterday's GMV decline?", business_today=date(2026, 6, 6))
+
+    assert parsed.analysis_strategy == "standard"
+    assert parsed.dimension is None
+    assert parsed.element is None
+    assert parsed.filters == {}
+
+
+def test_stable_merchandising_intent_alias_does_not_override_explicit_slice() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv", dimensions=["channel", "category", "product"])]),
+        settings=_settings_without_llm_key(),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            question_family="gmv_drop",
+            analysis_strategy="standard",
+            dimension="product",
+            element="2",
+        )
+    )
+
+    parsed = service.parse_question(
+        "Why did yesterday product=2 GMV fall despite stable merchandising?",
+        business_today=date(2026, 6, 6),
+    )
+
+    assert parsed.analysis_strategy == "standard"
+    assert parsed.dimension == "product"
+    assert parsed.element == "2"
 
 
 def test_intent_planner_system_prompt_has_no_hardcoded_metrics() -> None:

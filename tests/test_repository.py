@@ -578,8 +578,9 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
                 """
                 CREATE TABLE agent_run (
                   run_id TEXT PRIMARY KEY, question TEXT, metric_id TEXT, target_date TEXT,
-                  status TEXT, error_code TEXT, total_tokens INTEGER, total_latency_ms INTEGER,
-                  token_breakdown TEXT, created_at TEXT, finished_at TEXT
+                  status TEXT, error_code TEXT, runtime_version INTEGER NOT NULL DEFAULT 3,
+                  total_tokens INTEGER, total_latency_ms INTEGER, token_breakdown TEXT,
+                  created_at TEXT, finished_at TEXT
                 )
                 """
             )
@@ -649,8 +650,10 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
             text(
                 """
                 CREATE TABLE anomaly_ground_truth (
-                  case_id TEXT PRIMARY KEY, business_date TEXT, metric_id TEXT, expected_anomaly INTEGER,
-                  root_cause_type TEXT, dimension TEXT, element TEXT
+                  case_id TEXT PRIMARY KEY, scenario_id TEXT, split TEXT, seed INTEGER, profile TEXT,
+                  business_date TEXT, metric_id TEXT, expected_anomaly INTEGER,
+                  root_cause_type TEXT, dimension TEXT, element TEXT,
+                  root_causes TEXT, confounders TEXT, expected_behavior TEXT
                 )
                 """
             )
@@ -658,10 +661,14 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
         conn.execute(
             text(
                 """
-                INSERT INTO agent_run
+                INSERT INTO agent_run (
+                  run_id, question, metric_id, target_date, status, error_code,
+                  runtime_version, total_tokens, total_latency_ms, token_breakdown,
+                  created_at, finished_at
+                )
                 VALUES (
-                  'run-1', 'why', 'gmv', '2026-06-05', 'succeeded', NULL, 5, 9,
-                  :token_breakdown, :now, :now
+                  'run-1', 'why', 'gmv', '2026-06-05', 'succeeded', NULL,
+                  3, 5, 9, :token_breakdown, :now, :now
                 )
                 """
             ),
@@ -732,9 +739,20 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
             text(
                 """
                 INSERT INTO anomaly_ground_truth
-                VALUES ('gmv_paid_ads_drop', '2026-06-05', 'gmv', 1, 'campaign_traffic_drop', 'channel', 'paid_ads')
+                VALUES (
+                  'gmv_paid_ads_drop', 'gmv_paid_ads_drop', 'regression', 20260606, 'regression',
+                  '2026-06-05', 'gmv', 1, 'campaign_traffic_drop', 'channel', 'paid_ads',
+                  :root_causes,
+                  :confounders,
+                  :expected_behavior
+                )
                 """
-            )
+            ),
+            {
+                "root_causes": '[{"root_cause_type":"campaign_traffic_drop","dimension":"channel","element":"paid_ads","weight":1.0}]',
+                "confounders": "[]",
+                "expected_behavior": '{"top1_policy":"dominant_effect"}',
+            },
         )
 
     agent_run = repo.get_agent_run("run-1")
@@ -774,6 +792,13 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
             "root_cause_type": "campaign_traffic_drop",
             "dimension": "channel",
             "element": "paid_ads",
+            "root_causes": '[{"root_cause_type":"campaign_traffic_drop","dimension":"channel","element":"paid_ads","weight":1.0}]',
+            "confounders": "[]",
+            "expected_behavior": '{"top1_policy":"dominant_effect"}',
+            "scenario_id": "gmv_paid_ads_drop",
+            "split": "regression",
+            "seed": 20260606,
+            "profile": "regression",
         }
     }
 
@@ -783,6 +808,7 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
 def test_repository_memory_records_for_run_exclude_future_same_metric_records() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     _create_agent_run_table(engine)
+    _create_trace_step_table(engine)
     _create_memory_record_table(engine)
     repo = MetricRepository(readonly_engine=engine, audit_engine=engine, statement_timeout_ms=3000)
     with engine.begin() as conn:
@@ -870,6 +896,7 @@ def test_repository_memory_records_for_run_exclude_future_same_metric_records() 
 def test_repository_memory_records_for_run_not_hidden_by_unrelated_history() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     _create_agent_run_table(engine)
+    _create_trace_step_table(engine)
     _create_memory_record_table(engine)
     repo = MetricRepository(readonly_engine=engine, audit_engine=engine, statement_timeout_ms=3000)
     with engine.begin() as conn:
@@ -926,6 +953,75 @@ def test_repository_memory_records_for_run_not_hidden_by_unrelated_history() -> 
     records = repo.get_memory_records_for_run("run-1")
 
     assert [row["memory_id"] for row in records] == ["m-target"]
+    repo.close()
+
+
+def test_repository_memory_records_for_run_include_suite_scoped_records_only_when_read() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    _create_agent_run_table(engine)
+    _create_trace_step_table(engine)
+    _create_memory_record_table(engine)
+    repo = MetricRepository(readonly_engine=engine, audit_engine=engine, statement_timeout_ms=3000)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO agent_run (
+                  run_id, question, metric_id, target_date, status, error_code,
+                  total_tokens, total_latency_ms, token_breakdown, created_at, finished_at
+                )
+                VALUES (
+                  'run-1', 'why', 'gmv', '2026-06-05', 'succeeded', NULL,
+                  NULL, NULL, NULL, '2026-06-15 12:00:00', '2026-06-15 12:10:00'
+                )
+                """
+            )
+        )
+        for memory_id, payload in [
+            ("m-treatment-used", {"metric_id": "gmv", "eval_suites": ["memory-treatment"]}),
+            ("m-treatment-unused", {"metric_id": "gmv", "eval_suites": ["memory-treatment"]}),
+            ("m-common", {"metric_id": "gmv"}),
+        ]:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO memory_record (
+                      memory_id, layer, mem_key, payload, confidence, source,
+                      version, ttl_days, created_at
+                    )
+                    VALUES (
+                      :memory_id, 'case', 'gmv|run', :payload,
+                      0.9, 'test', 1, 30, '2026-06-15 11:30:00'
+                    )
+                    """
+                ),
+                {"memory_id": memory_id, "payload": json.dumps(payload)},
+            )
+        conn.execute(
+            text(
+                """
+                INSERT INTO trace_step (
+                  step_id, run_id, seq, node, action, input_summary, output_summary,
+                  error_code, latency_ms, token_usage, created_at
+                )
+                VALUES (
+                  'step-1', 'run-1', 1, 'memory_read', 'read_priors', '{}', :output_summary,
+                  NULL, 0, NULL, '2026-06-15 12:01:00'
+                )
+                """
+            ),
+            {
+                "output_summary": json.dumps(
+                    {"hits": [{"memory_id": "m-treatment-used"}, {"memory_id": "m-common"}]}
+                )
+            },
+        )
+
+    records = repo.get_memory_records_for_run("run-1")
+
+    memory_ids = {row["memory_id"] for row in records}
+    assert memory_ids == {"m-treatment-used", "m-common"}
+    assert "m-treatment-unused" not in memory_ids
     repo.close()
 
 
@@ -1056,6 +1152,7 @@ def _create_agent_run_table(engine) -> None:
                   target_date DATE NOT NULL,
                   status TEXT NOT NULL,
                   error_code TEXT,
+                  runtime_version INTEGER NOT NULL DEFAULT 3,
                   total_tokens INTEGER,
                   total_latency_ms INTEGER,
                   token_breakdown TEXT,

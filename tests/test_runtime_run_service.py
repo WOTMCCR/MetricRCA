@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from metric_rca.runtime.plan_models import ExecutionResult, RcaAction, RcaPlan
+from metric_rca.runtime.plan_models import CasePrior, ExecutionResult, RcaAction, RcaPlan
 from metric_rca.runtime.run_service import RunService
 from metric_rca.services.metric_contracts import MetricServiceError, ParsedIntent
 
@@ -45,6 +45,52 @@ def test_run_service_executes_parse_compile_plan_path() -> None:
     assert executor.plan is compiler.plan
     assert trace.started == [("run-1", "why did GMV drop?")]
     assert trace.finished[-1] == ("run-1", "succeeded", None)
+
+
+def test_run_service_reads_memory_priors_before_plan_compile_and_writes_verified_case() -> None:
+    parsed = ParsedIntent(metric_id="gmv", target_date=date(2026, 6, 5), question_family="gmv_drop")
+    prior = CasePrior(
+        metric_id="gmv",
+        preferred_dimensions=["product"],
+        preferred_signal_types=["inventory"],
+        prior_root_causes=["stockout"],
+        confidence=0.8,
+        source_memory_ids=["mem-1"],
+    )
+    compiler = _PlanCompiler(_plan("run-1"))
+    memory = _MemoryService(priors=[prior])
+
+    result = RunService(
+        dependencies=_Dependencies(metric_service=_MetricService(parsed), trace_writer=_TraceWriter(), settings=_Settings(memory_enabled=True)),
+        plan_compiler=compiler,
+        plan_executor=_PlanExecutor(ExecutionResult(status="succeeded")),
+        report_projector=lambda run_id, status: {"run_id": run_id, "status": status, "metric_id": "gmv"},
+        reflection_verifier=lambda run_id, repair_count, parsed_intent: _Reflection(passed=True),
+        memory_service=memory,
+    ).run("why", run_id="run-1")
+
+    assert result["status"] == "succeeded"
+    assert memory.read_calls == [("run-1", parsed)]
+    assert compiler.memory_hints == [prior]
+    assert memory.verified_writes == [("run-1", {"run_id": "run-1", "status": "succeeded", "metric_id": "gmv"}, parsed)]
+
+
+def test_run_service_writes_reflection_failure_memory_for_execution_failures() -> None:
+    parsed = ParsedIntent(metric_id="gmv", target_date=date(2026, 6, 5), question_family="gmv_drop")
+    memory = _MemoryService(priors=[])
+
+    result = RunService(
+        dependencies=_Dependencies(metric_service=_MetricService(parsed), trace_writer=_TraceWriter(), settings=_Settings(memory_enabled=True)),
+        plan_compiler=_PlanCompiler(_plan("run-1")),
+        plan_executor=_PlanExecutor(ExecutionResult(status="failed", error_code="EVIDENCE_MISSING")),
+        report_projector=lambda run_id, status: {},
+        reflection_verifier=lambda run_id, repair_count, parsed_intent: _Reflection(passed=True),
+        memory_service=memory,
+    ).run("why", run_id="run-1")
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "EVIDENCE_MISSING"
+    assert memory.failure_writes == [("run-1", "EVIDENCE_MISSING", parsed, {})]
 
 
 def test_run_service_returns_no_anomaly_without_reflection_repair() -> None:
@@ -159,9 +205,10 @@ class _Dependencies:
 
 
 class _Settings:
-    business_today = date(2026, 6, 6)
-    target_date = date(2026, 6, 5)
-    memory_enabled = False
+    def __init__(self, *, memory_enabled: bool = False) -> None:
+        self.business_today = date(2026, 6, 6)
+        self.target_date = date(2026, 6, 5)
+        self.memory_enabled = memory_enabled
 
 
 class _Repository:
@@ -224,9 +271,18 @@ class _PlanCompiler:
     def __init__(self, plan: RcaPlan) -> None:
         self.plan = plan
         self.parsed_intent: ParsedIntent | None = None
+        self.memory_hints: list[CasePrior] | None = None
 
-    def compile(self, *, run_id: str, parsed_intent: ParsedIntent, budget: dict[str, int] | None = None) -> RcaPlan:
+    def compile(
+        self,
+        *,
+        run_id: str,
+        parsed_intent: ParsedIntent,
+        memory_hints: list[CasePrior] | None = None,
+        budget: dict[str, int] | None = None,
+    ) -> RcaPlan:
         self.parsed_intent = parsed_intent
+        self.memory_hints = memory_hints
         return self.plan
 
 
@@ -247,3 +303,33 @@ class _Reflection:
 
     def model_dump(self, mode: str = "json") -> dict[str, Any]:
         return {"passed": self.passed, "repair_count": self.repair_count, "issues": []}
+
+
+class _MemoryService:
+    def __init__(self, *, priors: list[CasePrior]) -> None:
+        self._priors = priors
+        self.read_calls: list[tuple[str, ParsedIntent]] = []
+        self.verified_writes: list[tuple[str, dict[str, Any], ParsedIntent]] = []
+        self.failure_writes: list[tuple[str, str, ParsedIntent, dict[str, Any]]] = []
+
+    def read_priors(self, run_id: str, parsed_intent: ParsedIntent) -> list[CasePrior]:
+        self.read_calls.append((run_id, parsed_intent))
+        return self._priors
+
+    def write_verified_case(
+        self,
+        run_id: str,
+        report: dict[str, Any],
+        reflection: Any,
+        parsed_intent: ParsedIntent,
+    ) -> None:
+        self.verified_writes.append((run_id, report, parsed_intent))
+
+    def write_reflection_failure(
+        self,
+        run_id: str,
+        error_code: str,
+        parsed_intent: ParsedIntent,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        self.failure_writes.append((run_id, error_code, parsed_intent, extra or {}))

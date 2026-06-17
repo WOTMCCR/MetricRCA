@@ -28,10 +28,14 @@ Use the same shell for LLM-backed commands and set `OPENAI_API_KEY`, or set
 ```mermaid
 flowchart LR
   Q[question] --> IP[intent planner]
+  IP --> MEM[RuntimeMemoryService]
+  MEM --> PC
   IP --> PC[RcaPlanCompiler]
   PC --> PE[RcaPlanExecutor]
   PE --> G[ActionGate]
   PE --> TOOLS[ToolExecutor]
+  TOOLS --> SELECT[E_select selection evidence]
+  SELECT --> TOOLS
   TOOLS --> QS[QuerySpec]
   QS --> SR[SQLRenderer]
   SR --> SG[SQLGuard]
@@ -51,6 +55,12 @@ flowchart LR
 - `RcaPlanCompiler` routes from structured `ParsedIntent.metric_id` and
   metadata/policy into `gmv_family` or `rate_family` plans. The model does not
   choose SQL, evidence ids, or final root cause.
+- Broad discovery compiles first-class `select_signal_element` actions that
+  persist `E_select_*` evidence before `fetch_related_signal` and
+  `calculate_contribution`. Explicit slice questions do not require `E_select`.
+- SQL budget is based on repository `sql_audit` deltas. Tool-declared
+  `sql_count` must match the audit delta or the run fails
+  `TOOL_SQL_COUNT_MISMATCH`.
 - Memory can only influence planning priority. It cannot become evidence or a
   final conclusion.
 
@@ -75,10 +85,13 @@ write boundary; retry exhaustion remains `SYSTEM_TABLE_WRITE_FAILED`.
 ```bash
 PATH=.venv/bin:$PATH make up
 PATH=.venv/bin:$PATH make seed
-PATH=.venv/bin:$PATH make seed SEED=20260610
+PATH=.venv/bin:$PATH make seed SEED=20260610 SEED_PROFILE=regression
+PATH=.venv/bin:$PATH make seed SEED_PROFILE=acceptance ALLOW_DESTRUCTIVE_SEED=true
 PATH=.venv/bin:$PATH make api
 PATH=.venv/bin:$PATH make ui
 PATH=.venv/bin:$PATH make eval
+PATH=.venv/bin:$PATH make eval-regression
+PATH=.venv/bin:$PATH make eval-acceptance
 PATH=.venv/bin:$PATH make eval-stream EVAL_ID=eval-example
 PATH=.venv/bin:$PATH make eval-http BASE_URL=http://127.0.0.1:8000 PROVIDER=openai MODEL=gpt-5-nano HTTP_CONCURRENCY=5
 PATH=.venv/bin:$PATH make eval-gaps EVAL_ID=eval-example
@@ -87,9 +100,11 @@ npm run test --prefix frontend -- --run
 npm run build --prefix frontend
 ```
 
-The default seed command is `METRIC_RCA_DATA_SEED=20260606 python -m
-metric_rca.data.seed_data`. Make targets map to `docker compose`, `python`,
-`uvicorn`, `npm`, and `pytest` commands as defined in `Makefile`.
+The default seed command begins with `METRIC_RCA_DATA_SEED=20260606`. The
+default seed profile is `regression`. `make seed` passes
+`METRIC_RCA_SEED_PROFILE` and `METRIC_RCA_ALLOW_DESTRUCTIVE_SEED` explicitly;
+`acceptance` and `stress` are opt-in. Make targets map to `docker compose`,
+`python`, `uvicorn`, `npm`, and `pytest` commands as defined in `Makefile`.
 
 ## API Reference
 
@@ -141,8 +156,13 @@ is not at `http://127.0.0.1:8000`.
 
 ## Eval
 
-- `make eval` runs the direct persisted-artifact 20-case eval against
+- `make eval` runs the direct persisted-artifact 28-case regression eval against
   `anomaly_ground_truth`, including paired memory enabled/disabled legs.
+- `make eval-regression`, `make eval-blind`, `make eval-seed-sweep`,
+  `make eval-mutation`, `make eval-memory-treatment`, and
+  `make eval-acceptance` expose the v3 suite target names and pass
+  `METRIC_RCA_EVAL_SUITE`; full non-regression suite data and per-family gates
+  are tracked in `docs/final-design/06-v3-repair-plan.md`.
 - `make eval-stream EVAL_ID=...` streams case progress and writes per-case JSON
   artifacts under `eval_out/{eval_id}`.
 - `make eval-http BASE_URL=... PROVIDER=openai MODEL=gpt-5-nano HTTP_CONCURRENCY=5`
@@ -173,7 +193,7 @@ All application settings use the `METRIC_RCA_` prefix.
 | `METRIC_RCA_THRESH_PCT` | `0.15` |
 | `METRIC_RCA_Z_THRESH` | `2.0` |
 | `METRIC_RCA_MAX_STEPS` | `8` |
-| `METRIC_RCA_MAX_QUERY` | `12` |
+| `METRIC_RCA_MAX_QUERY` | `20` |
 | `METRIC_RCA_MAX_DRILLDOWN_DEPTH` | `3` |
 | `METRIC_RCA_MAX_REPAIR` | `1` |
 | `METRIC_RCA_STATEMENT_TIMEOUT_MS` | `3000` |

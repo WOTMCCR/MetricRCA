@@ -42,6 +42,7 @@ def test_agent_run_lifecycle_persists_status_error_and_finished_at() -> None:
     writer.finish_run(run_id="run-1", status="failed", error_code="REFLECTION_REPAIR_FAILED")
 
     assert repo.agent_rows[0]["status"] == "running"
+    assert repo.agent_rows[0]["runtime_version"] == 3
     assert repo.context_updates[-1]["metric_id"] == "gmv"
     assert repo.finish_updates[-1]["status"] == "failed"
     assert repo.finish_updates[-1]["error_code"] == "REFLECTION_REPAIR_FAILED"

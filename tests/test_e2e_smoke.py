@@ -60,7 +60,7 @@ def test_e2e_smoke_runs_three_cases_through_run_service() -> None:
             run_id = f"e2e-smoke-{uuid4().hex}"
             result = service.run(question, run_id=run_id)
 
-            assert result["status"] in {"succeeded", "failed", "no_anomaly"}
+            assert result["status"] == metric_service.expected_status(question)
             evidences = repository.get_evidences(run_id)
             sql_audit = repository.get_sql_audit_rows(run_id)
             trace_steps = repository.get_trace_steps(run_id)
@@ -94,6 +94,10 @@ class _SmokeMetricService:
 
     def get_metric_definition(self, metric_id: str) -> Any:
         return self._metadata.get_metric_definition(metric_id)
+
+    def expected_status(self, question: str) -> str:
+        intent = self._intents[question]
+        return "no_anomaly" if intent.target_date == NO_ANOMALY_DATE else "succeeded"
 
 
 def _smoke_intents() -> dict[str, ParsedIntent]:

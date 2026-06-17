@@ -1,3 +1,6 @@
+> Historical v2 design. Active production runtime decisions are superseded by
+> `docs/final-design/06-v3-repair-plan.md`.
+
 # 最终版关键流程（v2）
 
 ## 1. 标准 run（「昨天净 GMV 为什么下降？」，multi_agent=true）

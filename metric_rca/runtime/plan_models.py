@@ -13,6 +13,7 @@ from metric_rca.domain.models import StrictModel
 RcaActionKind = Literal[
     "detect_anomaly",
     "drilldown_dimension",
+    "select_signal_element",
     "fetch_related_signal",
     "calculate_contribution",
     "rank_root_causes",
@@ -74,4 +75,3 @@ class ExecutionResult(StrictModel):
     status: Literal["succeeded", "no_anomaly", "failed"]
     error_code: str | None = None
     produced_evidence_ids: list[str] = Field(default_factory=list)
-

@@ -26,6 +26,17 @@ class DrilldownDimensionArgs(StrictModel):
     filters: dict[str, str] = Field(default_factory=dict)
 
 
+class SelectSignalElementArgs(StrictModel):
+    run_id: str
+    metric_id: str
+    target_date: date
+    signal_type: Literal["campaign", "inventory", "conversion", "refund_quality"]
+    dimension: str
+    evidence_ids: list[str]
+    filters: dict[str, str] = Field(default_factory=dict)
+    element_selection: Literal["top_candidate", "signal_anomaly", "signal_level"] = "top_candidate"
+
+
 class FetchRelatedSignalArgs(StrictModel):
     run_id: str
     metric_id: str
@@ -53,3 +64,4 @@ class ToolResult(StrictModel):
     evidence_alias: str | None = None
     candidates: list[RootCauseCandidate] = Field(default_factory=list)
     sql_count: int = 0
+    sql_audit_delta: int = 0

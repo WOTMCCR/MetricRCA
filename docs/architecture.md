@@ -7,10 +7,15 @@ flowchart LR
   User[User question] --> API[FastAPI]
   API --> RunService[RunService]
   RunService --> Intent[OpenAI Agents SDK intent agent]
+  RunService --> RuntimeMemory[RuntimeMemoryService]
+  RuntimeMemory --> Prior[CasePrior]
   Intent --> Compiler[RcaPlanCompiler]
+  Prior --> Compiler
   Compiler --> Executor[RcaPlanExecutor]
   Executor --> Gate[ActionGate]
   Executor --> Tools[ToolExecutor]
+  Tools --> Selection[E_select evidence]
+  Selection --> Tools
   Tools --> QuerySpec[QuerySpec]
   QuerySpec --> Renderer[SQLRenderer]
   Renderer --> Guard[SQLGuard]
@@ -29,7 +34,8 @@ flowchart LR
 flowchart TD
   START --> create_run
   create_run --> parse_intent
-  parse_intent --> compile_plan
+  parse_intent --> memory_read
+  memory_read --> compile_plan
   compile_plan --> execute_plan
   execute_plan --> action_gate
   action_gate --> deterministic_tools
@@ -39,6 +45,8 @@ flowchart TD
   report_projection --> memory_write
   memory_write --> finish_run
   reflection --> failed_run
+  failed_run --> failure_memory_write
+  failure_memory_write --> END
   failed_run --> END
   finish_run --> END
 ```
@@ -48,12 +56,15 @@ flowchart TD
 ```mermaid
 sequenceDiagram
   participant R as RunService
+  participant M as RuntimeMemoryService
   participant C as RcaPlanCompiler
   participant E as RcaPlanExecutor
   participant G as ActionGate
   participant T as ToolExecutor
   participant Q as QuerySpec/Renderer/Guard
   participant DB as MetricRepository
+  R->>M: read_priors(run_id, ParsedIntent)
+  M-->>R: CasePrior planning hints
   R->>C: ParsedIntent + CasePrior
   C-->>R: RcaPlan
   R->>E: RunContext + RcaPlan
@@ -63,7 +74,8 @@ sequenceDiagram
   T->>Q: build controlled query
   Q->>DB: execute guarded SQLPlan
   DB-->>T: rows + sql_audit
-  T-->>E: ToolExecutionResult + Evidence IDs
+  T-->>E: ToolExecutionResult + Evidence IDs + sql_count
+  E->>DB: compare sql_audit delta
 ```
 
 ## QuerySpec Data Path
@@ -86,6 +98,7 @@ flowchart LR
 flowchart LR
   Run[(agent_run)] --> Projector
   E4[(evidence E4 result_summary.selected_candidate)] --> Projector
+  ESelect[(evidence E_select result_summary.selected_element)] --> Projector
   Tasks[(operation_task)] --> Projector
   Trace[(trace_step)] --> API
   Projector --> Report[Verified projection]

@@ -7,6 +7,7 @@ import pytest
 from metric_rca.domain.models import MetricDefinition
 from metric_rca.runtime.evidence_graph import EvidenceGraph
 from metric_rca.runtime.plan_compiler import PlanCompilerError, RcaPlanCompiler
+from metric_rca.runtime.plan_models import CasePrior
 from metric_rca.services.metric_contracts import ParsedIntent
 
 
@@ -66,10 +67,19 @@ def test_plan_compiler_builds_broad_uv_discovery_from_metric_policy() -> None:
     assert [action.args.get("dimension") for action in plan.actions if action.kind == "drilldown_dimension"] == [
         "channel"
     ]
+    select_action = next(action for action in plan.actions if action.kind == "select_signal_element")
     signal_action = next(action for action in plan.actions if action.kind == "fetch_related_signal")
+    contribution_action = next(action for action in plan.actions if action.kind == "calculate_contribution")
+    rank_action = plan.actions[-1]
+    assert select_action.args["dimension"] == "channel"
+    assert select_action.args["signal_type"] == "campaign"
+    assert select_action.produces == ["E_select_channel"]
     assert signal_action.args["signal_type"] == "campaign"
     assert signal_action.args["dimension"] == "channel"
+    assert signal_action.requires == ["E1", "E2_channel", "E_select_channel"]
     assert signal_action.dynamic is True
+    assert contribution_action.requires == ["E1", "E2_channel", "E_select_channel", "E3"]
+    assert rank_action.requires == ["E1", "E2_channel", "E_select_channel", "E3", "E4"]
 
 
 def test_plan_compiler_builds_refund_discovery_even_with_nonstandard_strategy() -> None:
@@ -107,7 +117,7 @@ def test_plan_compiler_builds_broad_gmv_product_first_with_all_required_drilldow
     assert signal_action.args["dimension"] == "product"
     assert signal_action.args["signal_type"] == "inventory"
     rank_action = plan.actions[-1]
-    assert rank_action.requires == ["E1", "E2_channel", "E2_category", "E2_product", "E3", "E4"]
+    assert rank_action.requires == ["E1", "E2_channel", "E2_category", "E2_product", "E_select_product", "E3", "E4"]
 
 
 def test_plan_compiler_builds_signal_first_gmv_without_hardcoded_element() -> None:
@@ -120,16 +130,137 @@ def test_plan_compiler_builds_signal_first_gmv_without_hardcoded_element() -> No
 
     plan = _compiler().compile(run_id="run-1", parsed_intent=parsed)
 
+    select_action = next(action for action in plan.actions if action.kind == "select_signal_element")
     signal_action = next(action for action in plan.actions if action.kind == "fetch_related_signal")
     contribution_action = next(action for action in plan.actions if action.kind == "calculate_contribution")
+    rank_action = plan.actions[-1]
+    assert select_action.args["dimension"] == "channel"
+    assert select_action.args["signal_type"] == "campaign"
+    assert select_action.args["element_selection"] == "signal_anomaly"
+    assert select_action.requires == ["E1", "E2_channel"]
+    assert select_action.produces == ["E_select_channel"]
     assert signal_action.args["dimension"] == "channel"
     assert signal_action.args["signal_type"] == "campaign"
     assert signal_action.args["element"] is None
     assert signal_action.args["element_selection"] == "signal_anomaly"
+    assert signal_action.requires == ["E1", "E2_channel", "E_select_channel"]
     assert signal_action.dynamic is True
     assert contribution_action.args["element"] is None
     assert contribution_action.args["element_selection"] == "signal_anomaly"
+    assert contribution_action.requires == ["E1", "E2_channel", "E_select_channel", "E3"]
     assert contribution_action.dynamic is True
+    assert "E_select_channel" in rank_action.requires
+
+
+@pytest.mark.parametrize(
+    ("question_family", "expected_dimension", "expected_signal_type"),
+    [
+        ("channel_gmv_anomaly", "channel", "campaign"),
+        ("category_gmv_anomaly", "category", "inventory"),
+    ],
+)
+def test_plan_compiler_builds_broad_gmv_anomaly_discovery_policy(
+    question_family: str,
+    expected_dimension: str,
+    expected_signal_type: str,
+) -> None:
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date=date(2026, 6, 2),
+        question_family=question_family,
+        analysis_strategy="standard",
+    )
+
+    plan = _compiler().compile(run_id="run-1", parsed_intent=parsed)
+
+    drilldowns = [action.args.get("dimension") for action in plan.actions if action.kind == "drilldown_dimension"]
+    select_action = next(action for action in plan.actions if action.kind == "select_signal_element")
+    signal_action = next(action for action in plan.actions if action.kind == "fetch_related_signal")
+    assert drilldowns == ["channel", "category", "product"]
+    assert select_action.args["dimension"] == expected_dimension
+    assert select_action.args["signal_type"] == expected_signal_type
+    assert signal_action.args["dimension"] == expected_dimension
+    assert signal_action.args["signal_type"] == expected_signal_type
+
+
+def test_plan_compiler_uses_memory_prior_to_change_discovery_signal_dimension() -> None:
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date=date(2026, 6, 5),
+        question_family="gmv_drop",
+        analysis_strategy="standard",
+    )
+    prior = CasePrior(
+        metric_id="gmv",
+        preferred_dimensions=["product"],
+        preferred_signal_types=["inventory"],
+        prior_root_causes=["stockout"],
+        confidence=0.82,
+        source_memory_ids=["mem-product-stockout"],
+    )
+
+    plan = _compiler().compile(run_id="run-1", parsed_intent=parsed, memory_hints=[prior])
+
+    drilldowns = [action.args.get("dimension") for action in plan.actions if action.kind == "drilldown_dimension"]
+    select_action = next(action for action in plan.actions if action.kind == "select_signal_element")
+    signal_action = next(action for action in plan.actions if action.kind == "fetch_related_signal")
+    contribution_action = next(action for action in plan.actions if action.kind == "calculate_contribution")
+    rank_action = plan.actions[-1]
+    assert drilldowns == ["channel", "category", "product"]
+    assert select_action.args["dimension"] == "product"
+    assert select_action.args["signal_type"] == "inventory"
+    assert select_action.produces == ["E_select_product"]
+    assert signal_action.args["dimension"] == "product"
+    assert signal_action.args["signal_type"] == "inventory"
+    assert signal_action.requires == ["E1", "E2_product", "E_select_product"]
+    assert contribution_action.requires == ["E1", "E2_product", "E_select_product", "E3"]
+    assert rank_action.requires == ["E1", "E2_channel", "E2_category", "E2_product", "E_select_product", "E3", "E4"]
+
+
+def test_plan_compiler_does_not_let_memory_override_explicit_analysis_strategy() -> None:
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date=date(2026, 6, 5),
+        question_family="gmv_drop",
+        analysis_strategy="product_first",
+    )
+    prior = CasePrior(
+        metric_id="gmv",
+        preferred_dimensions=["channel"],
+        preferred_signal_types=["campaign"],
+        prior_root_causes=["campaign_traffic_drop"],
+        confidence=0.92,
+        source_memory_ids=["mem-campaign-prior"],
+    )
+
+    plan = _compiler().compile(run_id="run-1", parsed_intent=parsed, memory_hints=[prior])
+
+    select_action = next(action for action in plan.actions if action.kind == "select_signal_element")
+    signal_action = next(action for action in plan.actions if action.kind == "fetch_related_signal")
+    assert select_action.args["dimension"] == "product"
+    assert select_action.args["signal_type"] == "inventory"
+    assert signal_action.args["dimension"] == "product"
+    assert signal_action.args["signal_type"] == "inventory"
+
+
+def test_plan_compiler_does_not_require_selection_evidence_for_explicit_slice() -> None:
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date=date(2026, 6, 5),
+        question_family="gmv_drop",
+        dimension="channel",
+        element="paid_ads",
+    )
+
+    plan = _compiler().compile(run_id="run-1", parsed_intent=parsed)
+
+    assert "select_signal_element" not in [action.kind for action in plan.actions]
+    signal_action = next(action for action in plan.actions if action.kind == "fetch_related_signal")
+    contribution_action = next(action for action in plan.actions if action.kind == "calculate_contribution")
+    rank_action = next(action for action in plan.actions if action.kind == "rank_root_causes")
+    assert signal_action.requires == ["E1", "E2_channel"]
+    assert contribution_action.requires == ["E1", "E2_channel", "E3"]
+    assert "E_select_channel" not in rank_action.requires
 
 
 def test_plan_compiler_fails_fast_when_unscoped_metric_has_no_discovery_policy() -> None:

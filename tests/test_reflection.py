@@ -323,15 +323,30 @@ def test_reflection_top_candidate_must_match_persisted_e4_selected_candidate() -
         _evidence("run-1:E1"),
         _evidence("run-1:E2"),
         _evidence("run-1:E3"),
-        _evidence("run-1:E4", summary={"selected_candidate": state_candidate.model_dump(mode="json")}),
+        _evidence("run-1:E4", summary=_contribution_summary(state_candidate)),
     ]
     state = _state(candidates=[state_candidate], evidences=evidences)
     persisted = _persisted_rows(evidences)
-    persisted["run-1:E4"]["result_summary"] = {
-        "selected_candidate": persisted_candidate.model_dump(mode="json")
-    }
+    persisted["run-1:E4"]["result_summary"] = _contribution_summary(persisted_candidate)
 
     result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=persisted)
+
+    assert result.passed is False
+    assert "candidate_traceability" in _checks(result)
+
+
+def test_reflection_rejects_legacy_selected_candidate_only_e4_summary() -> None:
+    candidate = _candidate()
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2"),
+        _evidence("run-1:E3"),
+        _legacy_evidence("run-1:E4", summary={"selected_candidate": candidate.model_dump(mode="json")}),
+        _evidence("run-1:E_rank", summary=_contribution_summary(candidate)),
+    ]
+    state = _state(candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
 
     assert result.passed is False
     assert "candidate_traceability" in _checks(result)
@@ -426,6 +441,54 @@ def test_reflection_accepts_related_signal_metric_for_aliased_e3_evidence() -> N
     )
 
     result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(state["evidences"]))
+
+    assert result.passed is True
+
+
+def test_reflection_accepts_related_signal_metric_for_dynamic_selection_evidence() -> None:
+    candidate = _candidate(
+        dimension="channel",
+        element="organic",
+        evidence_ids=[
+            "run-1:E1",
+            "run-1:E2_channel",
+            "run-1:E_select_channel",
+            "run-1:E3_ch_organic",
+            "run-1:E4",
+            "run-1:E_rank",
+        ],
+    )
+    evidences = [
+        _evidence("run-1:E1", metric_id="uv"),
+        _evidence("run-1:E2_channel", metric_id="uv"),
+        _evidence(
+            "run-1:E_select_channel",
+            metric_id="gmv",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "selected_element": "organic",
+                "candidate_scores": [{"element": "organic", "signal_score": 0.88}],
+            },
+        ),
+        _evidence(
+            "run-1:E3_ch_organic",
+            metric_id="gmv",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "element": "organic",
+                "value": 0.90,
+            },
+        ),
+        _evidence("run-1:E4", metric_id="uv", summary={"selected_candidate": candidate.model_dump(mode="json")}),
+        _evidence("run-1:E_rank", metric_id="uv", summary={"selected_candidate": candidate.model_dump(mode="json")}),
+    ]
+    state = _state(metric_id="uv", candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
 
     assert result.passed is True
 
@@ -667,6 +730,8 @@ def _evidence(
     guard_status: str = "passed",
     summary: dict[str, Any] | None = None,
 ) -> Evidence:
+    if summary is not None:
+        summary = _canonical_summary_for_evidence(evidence_id, summary)
     return Evidence(
         evidence_id=evidence_id,
         query_spec=build_query_spec(metric_id=metric_id, start_date=target_date, end_date=target_date),
@@ -677,6 +742,52 @@ def _evidence(
         data_source="fact_order",
         created_at=datetime(2026, 6, 5),
     )
+
+
+def _legacy_evidence(
+    evidence_id: str,
+    *,
+    metric_id: str = "gmv",
+    target_date: date = date(2026, 6, 5),
+    guard_status: str = "passed",
+    summary: dict[str, Any] | None = None,
+) -> Evidence:
+    return Evidence(
+        evidence_id=evidence_id,
+        query_spec=build_query_spec(metric_id=metric_id, start_date=target_date, end_date=target_date),
+        sql="SELECT 1",
+        sql_hash="0" * 64,
+        guard_status=guard_status,
+        result_summary=summary or {"metric_id": metric_id, "target_date": str(target_date), "value": 0.90},
+        data_source="fact_order",
+        created_at=datetime(2026, 6, 5),
+    )
+
+
+def _canonical_summary_for_evidence(evidence_id: str, summary: dict[str, Any]) -> dict[str, Any]:
+    if not (evidence_id.endswith(":E4") or evidence_id.endswith(":E_rank")):
+        return summary
+    if "contribution_set" in summary:
+        return summary
+    selected = summary.get("selected_candidate")
+    if not isinstance(selected, dict):
+        return summary
+    return {**summary, **_contribution_summary(RootCauseCandidate.model_validate(selected))}
+
+
+def _contribution_summary(candidate: RootCauseCandidate) -> dict[str, Any]:
+    candidate_payload = candidate.model_dump(mode="json")
+    return {
+        "selected_candidate": candidate_payload,
+        "candidates": [candidate_payload],
+        "contribution_set": {
+            "selected_candidate": candidate_payload,
+            "candidates": [candidate_payload],
+            "evidence_ids": candidate.evidence_ids,
+            "factor_graph": {},
+            "selection_evidence_id": None,
+        },
+    }
 
 
 def _persisted_rows(evidences: list[Evidence]) -> dict[str, dict[str, Any]]:

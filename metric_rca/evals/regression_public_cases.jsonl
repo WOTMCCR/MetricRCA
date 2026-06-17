@@ -1,0 +1,28 @@
+{"case_id":"gmv_paid_ads_drop","question":"Why did GMV from paid ads fall yesterday?","tags":["mvp","campaign","specified_slice"]}
+{"case_id":"gmv_stockout_electronics","question":"Why did electronics GMV fall yesterday?","tags":["mvp","inventory","specified_slice"]}
+{"case_id":"cvr_mobile_drop","question":"Why did mobile conversion rate fall yesterday?","tags":["mvp","conversion","specified_slice"]}
+{"case_id":"refund_rate_product_quality","question":"Why did refund rate rise for product 1 yesterday?","tags":["mvp","quality","specified_slice"]}
+{"case_id":"gmv_no_anomaly","question":"Was yesterday's GMV actually abnormal?","tags":["mvp","no_anomaly"]}
+{"case_id":"C06_gmv_multi_channel_drop","question":"Why did overall GMV fall yesterday?","tags":["p7","adtributor","discovery"]}
+{"case_id":"C07_gmv_category_channel_cross","question":"Why was yesterday's GMV below expectation across the store?","tags":["p7","adtributor","discovery","cross_dimension"]}
+{"case_id":"C08_gmv_aov_drop","question":"Why did yesterday's GMV decline in merchandise sales?","tags":["p7","discovery"]}
+{"case_id":"C09_gmv_uv_organic_drop","question":"Why did yesterday's GMV fall despite stable merchandising?","tags":["p7","discovery"]}
+{"case_id":"C10_gmv_price_change","question":"Why did fashion category GMV fall yesterday?","tags":["p7","specified_slice"]}
+{"case_id":"C11_gmv_promo_end_falloff","question":"Why did affiliate channel GMV fall yesterday?","tags":["p7","specified_slice"]}
+{"case_id":"C12_gmv_single_sku_stockout","question":"Why did product 3 GMV fall yesterday?","tags":["p7","specified_slice"]}
+{"case_id":"C13_net_gmv_refund_spike","question":"Why did net GMV fall for product 1 yesterday?","tags":["p7","net_gmv","specified_slice"]}
+{"case_id":"C14_net_gmv_gmv_driven","question":"Why did net GMV fall in paid ads yesterday?","tags":["p7","net_gmv","specified_slice"]}
+{"case_id":"C15_refund_rate_logistics","question":"Why did refund rate rise for fashion yesterday?","tags":["p7","specified_slice"]}
+{"case_id":"C16_stockout_rate_warehouse","question":"Why did stockout rate rise in the Osaka warehouse yesterday?","tags":["p7","specified_slice"]}
+{"case_id":"C17_complaint_rate_quality","question":"Why did complaint rate rise for electronics yesterday?","tags":["p7","specified_slice"]}
+{"case_id":"C18_cvr_channel_landing","question":"Why did conversion rate fall for affiliate yesterday?","tags":["p7","specified_slice"]}
+{"case_id":"C19_gmv_seasonal_false_positive","question":"Was yesterday's GMV actually abnormal?","tags":["p7","no_anomaly"]}
+{"case_id":"C20_cvr_no_anomaly_noise","question":"Was yesterday's conversion rate actually abnormal?","tags":["p7","no_anomaly"]}
+{"case_id":"C21_cvr_discovery","question":"Why did conversion rate fall yesterday?","tags":["e1","discovery","rate_family"]}
+{"case_id":"C22_gmv_borderline","question":"Was GMV abnormal two days ago?","tags":["e2","borderline","no_anomaly"]}
+{"case_id":"C23_uv_organic_drop","question":"Why did traffic drop yesterday?","tags":["e1","discovery","gmv_family"]}
+{"case_id":"C24_gmv_positive_spike","question":"Why did GMV spike on the 2nd?","tags":["e2","positive_anomaly"]}
+{"case_id":"C25_refund_discovery","question":"Why did refund rate rise yesterday?","tags":["e1","discovery","rate_family"]}
+{"case_id":"C26_ambiguous_intent","question":"Something seems off with sales","tags":["e2","ambiguous","discovery"]}
+{"case_id":"C27_composite_cause","question":"What caused the overall store GMV decline yesterday?","tags":["e3","composite","discovery"]}
+{"case_id":"C28_multi_day_drift","question":"GMV has been declining since the weekend, what's happening?","tags":["e3","multi_day","discovery"]}

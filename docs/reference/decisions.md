@@ -1,3 +1,148 @@
+## ADL-0050: Python Analyst may compute hypotheses but cannot judge RCA conclusions
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-17 |
+| 状态 | proposed |
+| 关联迭代 | post-v3 complex multi-cause extension |
+| 影响范围 | future AnalysisFrameBuilder, PythonAnalyst, HypothesisStore, PromotionValidator, ContributionSet |
+
+### 背景与场景
+
+多主因、弱信号叠加、滞后因果、交互项和残差分解会超出当前固定 deterministic 工具链的表达能力。LLM 不适合直接承担精确计数、相关性、滞后扫描、残差搜索或 bootstrap 稳定性计算，但 Python 可以作为受控计算环境补足这些数值能力。
+
+### 决策
+
+将 Python 能力定位为 Analyst，而不是 Judge。未来如需启用，deterministic runtime 先生成只读 `AnalysisFrame`，sandbox 只输出 schema-validated `SandboxHypothesis` 和 diagnostics；`PromotionValidator` 必须用 `QuerySpec -> SQLRenderer -> SQLGuard -> Repository` 重新验证后，才允许生成 `E_lag/E_interaction/E_residual/E_stability` 并进入 canonical `ContributionSet`。
+
+### 理由
+
+这样可以让复杂统计探索进入 RCA 流程，同时保留 v3 最重要的 deterministic、auditable、zero-fallback 边界。Python 输出不能直接成为 final root cause，Reflection 仍然只接受当前 run promoted evidence 支撑的结论。
+
+### 被否决的方案
+
+允许 sandbox 直接访问生产 DB、自由写 SQL、直接写 evidence/report/task 或直接返回 selected candidate 均被否决，因为这些路径会绕过 SQLGuard、EvidenceGraph 和 Reflection。把 Python 诊断分数直接作为 GRPO reward 也被否决，训练 reward 仍必须由外部 artifact judge 按最终答案和证据链给出 0/1。
+
+### 后续跟进
+
+只有在多轮 deterministic 修复和 review 仍难以提升复杂多因场景后，才进入该扩展的实施设计。优先顺序为 `AnalysisFrameBuilder -> PythonAnalyst -> HypothesisStore -> PromotionValidator -> promoted evidence -> ContributionSet`。
+
+## ADL-0049: Eval runs export GRPO-ready RCA trajectories
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-17 |
+| 状态 | accepted |
+| 关联迭代 | v3 Repair Plan eval artifact extension |
+| 影响范围 | eval runner, scorer, trace artifacts, predict-then-verify outputs, GRPO training data |
+
+### 背景与场景
+
+v3 eval 已经持久化 per-case score、trace、evidence、SQL audit、memory records 和 predict-then-verify predictions。后续希望把这些 eval 轨迹沉淀为可训练 agent 模型的 GRPO 数据集，而不是只作为一次性验收报告。
+
+### 决策
+
+每次完整 eval 额外导出 `eval_out/<eval_id>/grpo_dataset/trajectories.jsonl` 与 `manifest.json`。每条 trajectory 绑定 case、prediction records、ground truth、final answer、agent_run、trace_steps、evidences、sql_audit、report、memory_records，并由 eval 外部的 deterministic artifact judge 给出 `0/1` reward。
+
+### 理由
+
+GRPO 训练需要可复放的 trajectory 和明确 reward。Reward 必须只奖励最终答案正确且由当前 run evidence 支撑的轨迹；中间 diagnostics 可以辅助过滤和分析，但不能让缺证据、unsafe SQL、memory-derived conclusion 或工具失败的轨迹拿到正奖励。
+
+### 被否决的方案
+
+只保存 eval summary 被否决，因为 aggregate 指标无法还原训练轨迹。把 intent/evidence/sql/memory 子分数直接加权成连续 reward 被否决，因为它可能奖励猜中局部步骤但最终 hallucinate 的轨迹。只保存 baseline phase 被否决，因为 memory phase 的正负样本对训练 planning policy 很有价值。
+
+### 后续跟进
+
+后续可以添加离线 dataset validation 命令、脱敏/采样 profile，以及面向 GRPO trainer 的 train/validation split exporter。
+
+## ADL-0048: v3 policy registry and eval profiles become hard contracts
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-17 |
+| 状态 | accepted |
+| 关联迭代 | v3 Repair Plan Iterations 3-5 |
+| 影响范围 | policy_registry, attribution_service, reflection repair, seed profiles, eval runner/scorer |
+
+### 背景与场景
+
+v3 审核要求禁止 answer-bearing keyword mapper，并要求 root cause、signal type、factor graph 和 evidence chain 都不能绕过 registry。旧路径仍有 `Settings.root_cause_type_by_*` 和 Reflection repair helper 按 metric/dimension 硬编码 root cause type；seed profile 也只声明 acceptance/stress，但没有真实扩展到 acceptance cardinality。
+
+### 决策
+
+新增 `MetricPolicyRegistry` 的 root cause policy，并支持 signal-qualified rule，例如 `net_gmv + channel + refund_quality -> complaint_or_quality_issue`。`attribution_service` 和 Reflection repair 都通过 registry 决定 root cause type；旧 settings root cause mapper 被移除。Seed profile 现在以 `regression` 为默认，`acceptance/stress` opt-in，并实际生成 200+ products、20+ categories、8+ channels、4+ devices、10+ warehouses、100+ campaigns、10k users、180+ days 的 acceptance profile。Eval summary 增加 per-family gate、memory-treatment hard gate、multi-cause scoring、p95 latency 和 p95 SQL count。
+
+### 理由
+
+把 root cause type 收敛进 registry 可以让 policy matrix 成为唯一业务归因入口，避免 prompt、settings 或 repair helper 各自维护一份答案逻辑。Acceptance profile 必须真实扩展实体和时间窗口，否则只是在 metadata 中声明大规模能力。Eval gate 必须按 family 和 memory-treatment 判断，aggregate top1/top3 不能证明 memory 增益和复杂场景覆盖。
+
+### 被否决的方案
+
+保留 settings root cause mapper 被否决，因为它会绕过 registry。继续让 `calculate_contribution` 根据 E3 signal type 本地 switch root cause 被否决，因为这属于 hidden policy。Acceptance/stress 继续复用 regression slice 被否决，因为不能验证 SQL count、latency 和高维实体规模。
+
+### 后续跟进
+
+真实 `make seed` 和 predict-then-verify eval 仍需在 destructive reset 明确确认后执行。Blind、mutation、seed-sweep 的新增 case family 可以在 registry/eval scaffold 上继续扩展。
+
+## ADL-0047: E4 attribution uses canonical ContributionSet
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-17 |
+| 状态 | accepted |
+| 关联迭代 | v3 Repair Plan Iteration 2 |
+| 影响范围 | calculate_contribution, rank_root_causes, Reflection, report projector, API/eval artifacts |
+
+### 背景与场景
+
+v3 审核指出 E4 仍以 `selected_candidate/candidates` 作为事实源，ranker 会在 Adtributor 增强后保留 legacy selected candidate。这会把多候选、多主因归因继续锁在旧的单 selected-candidate 链路上。
+
+### 决策
+
+新增 `ContributionSet` 作为 E4 canonical payload。`calculate_contribution` 写入 `result_summary.contribution_set`，并只把 `selected_candidate/candidates` 作为派生兼容投影。`rank_root_causes` 只从 `contribution_set` 读取候选；缺失 canonical set 或与派生字段不一致时 typed fail。Reflection 和 report projector 在存在 `contribution_set` 时以 canonical selected candidate 为准。
+
+### 理由
+
+canonical set 明确了 ranking truth 的唯一来源，避免旧字段与新字段漂移，也为后续 weighted multi-cause scoring 和 factor graph attribution 留出结构空间。
+
+### 被否决的方案
+
+只在 E4 上追加 `contribution_set` 但仍让 ranker 读取旧 `selected_candidate/candidates` 被否决，因为这会让新字段变成包装壳。生产 v3 report 对缺失 `contribution_set` 的 E4 不再投影；历史读取只允许显式 `runtime_version < 3` 路径。
+
+### 后续跟进
+
+多主因 ground truth 的 `root_causes JSON`、weighted coverage scoring、policy registry 和 scenario registry 仍在后续 v3 iterations 中完成。
+
+## ADL-0046: Dynamic selection becomes first-class evidence and SQL budget uses audit delta
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-17 |
+| 状态 | accepted |
+| 关联迭代 | v3 Repair Plan Iteration 1 |
+| 影响范围 | RcaPlanCompiler, RcaPlanExecutor, ToolExecutor, select_signal_element, RuntimeMemoryService |
+
+### 背景与场景
+
+v3 审核指出 dynamic element selection 原来隐藏在 `ToolExecutor` 内部，会执行候选级 SQL 但不产生正式证据；同时 runtime budget 以 action 数记账，不等于真实 SQL 数。Memory repository 已存在，但 `RunService` 没有真实读取并传入 plan compiler。
+
+### 决策
+
+把 `select_signal_element` 升级为 first-class `RcaActionKind`，在 broad discovery 中产生 `E_select_{dimension}`，后续 `fetch_related_signal` 和 `calculate_contribution` 必须依赖该证据。`RcaPlanExecutor` 以 repository `sql_audit` 前后 delta 作为 SQL budget 的权威来源，并要求工具声明的 `sql_count` 与 audit delta 一致。新增 `RuntimeMemoryService`，由 `RunService` 在 compile 前读取 `CasePrior`，在成功/失败终态写入 memory。
+
+### 理由
+
+selection 过程必须可审计，不能只把最终 element 透传给下游工具；真实 SQL budget 必须反映工具内部执行的 current/baseline/factor 查询数量，避免复杂场景下预算失真。Memory 必须出现在真实 runtime path，才能让后续 memory-treatment eval 证明业务增益。
+
+### 被否决的方案
+
+继续在 `ToolExecutor` 中按候选循环查询被否决，因为 SQL 数随候选数增长且没有 selection evidence。只在 `ToolExecutionResult.sql_count` 上记账也被否决，因为 handler 可能漏报；audit delta 才是持久化事实。
+
+### 后续跟进
+
+ContributionSet canonical attribution、policy registry、scenario registry、memory-treatment eval hard gate 仍需在后续 v3 iterations 完成。
+
 ## ADL-0045: Signal-first intent priority for multi-day GMV drift framing
 
 | 字段 | 值 |

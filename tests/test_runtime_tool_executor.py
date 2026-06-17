@@ -19,6 +19,8 @@ from metric_rca.runtime.sdk_tools import (
     ToolExecutor,
     build_default_tool_handlers,
 )
+from metric_rca.agent.tools.schemas import SelectSignalElementArgs
+from metric_rca.agent.tools.select_signal_element import select_signal_element
 
 
 class _DrilldownArgs(StrictModel):
@@ -61,6 +63,7 @@ def test_default_tool_registry_covers_full_rca_action_space() -> None:
     assert RCA_TOOL_NAMES == {
         "detect_anomaly",
         "drilldown_dimension",
+        "select_signal_element",
         "fetch_related_signal",
         "calculate_contribution",
         "rank_root_causes",
@@ -161,7 +164,7 @@ def test_tool_executor_does_not_swallow_untyped_handler_exception() -> None:
         executor.execute(ctx, action, EvidenceGraph(run_id="run-1"))
 
 
-def test_tool_executor_resolves_dynamic_element_from_top_drilldown_candidate() -> None:
+def test_tool_executor_resolves_top_candidate_dynamic_element_from_selection_evidence() -> None:
     captured: dict[str, Any] = {}
 
     def handler(args: _FetchArgs, dependencies: object) -> ToolExecutionResult:
@@ -177,7 +180,12 @@ def test_tool_executor_resolves_dynamic_element_from_top_drilldown_candidate() -
                 "evidence_id": "run-1:E2_channel",
                 "guard_status": "passed",
                 "result_summary": {"candidates": [{"element": "organic"}, {"element": "paid_ads"}]},
-            }
+            },
+            "run-1:E_select_channel": {
+                "evidence_id": "run-1:E_select_channel",
+                "guard_status": "passed",
+                "result_summary": {"dimension": "channel", "selected_element": "organic"},
+            },
         }
     )
     executor = ToolExecutor(
@@ -202,6 +210,45 @@ def test_tool_executor_resolves_dynamic_element_from_top_drilldown_candidate() -
             "dimension": "channel",
             "element": None,
         },
+        requires=["E1", "E2_channel", "E_select_channel"],
+        dynamic=True,
+    )
+    graph = EvidenceGraph(run_id="run-1", evidence_ids=["run-1:E1", "run-1:E2_channel", "run-1:E_select_channel"])
+
+    result = executor.execute(ctx, action, graph)
+
+    assert result.observation.ok is True
+    assert captured["element"] == "organic"
+    assert captured["evidence_ids"] == ["run-1:E1", "run-1:E2_channel", "run-1:E_select_channel"]
+
+
+def test_tool_executor_runs_select_action_without_element_resolution_and_preserves_selection_mode() -> None:
+    captured: dict[str, Any] = {}
+
+    def handler(args: SelectSignalElementArgs, dependencies: object) -> ToolExecutionResult:
+        captured.update(args.model_dump(mode="json"))
+        return ToolExecutionResult(
+            observation=Observation(action_name="select_signal_element", ok=True, evidence_ids=["run-1:E_select_channel"]),
+            evidence_ids=["run-1:E_select_channel"],
+        )
+
+    executor = ToolExecutor(
+        dependencies=object(),
+        handlers={
+            "select_signal_element": MetricRCAToolHandler(args_model=SelectSignalElementArgs, call=handler),
+        },
+    )
+    ctx = RunContext(run_id="run-1", metric_id="gmv", target_date=date(2026, 6, 5))
+    action = RcaAction(
+        action_id="A3",
+        kind="select_signal_element",
+        args={
+            "metric_id": "gmv",
+            "target_date": date(2026, 6, 5),
+            "signal_type": "campaign",
+            "dimension": "channel",
+            "element_selection": "signal_anomaly",
+        },
         requires=["E1", "E2_channel"],
         dynamic=True,
     )
@@ -210,11 +257,12 @@ def test_tool_executor_resolves_dynamic_element_from_top_drilldown_candidate() -
     result = executor.execute(ctx, action, graph)
 
     assert result.observation.ok is True
-    assert captured["element"] == "organic"
+    assert captured["run_id"] == "run-1"
     assert captured["evidence_ids"] == ["run-1:E1", "run-1:E2_channel"]
+    assert captured["element_selection"] == "signal_anomaly"
 
 
-def test_tool_executor_resolves_signal_first_dynamic_element_from_signal_anomaly() -> None:
+def test_tool_executor_resolves_dynamic_element_from_selection_evidence() -> None:
     captured: dict[str, Any] = {}
 
     def handler(args: _FetchArgs, dependencies: object) -> ToolExecutionResult:
@@ -224,7 +272,7 @@ def test_tool_executor_resolves_signal_first_dynamic_element_from_signal_anomaly
             evidence_ids=["run-1:E3_ch_b"],
         )
 
-    repository = _SignalRepository(
+    repository = _Repository(
         {
             "run-1:E2_channel": {
                 "evidence_id": "run-1:E2_channel",
@@ -235,16 +283,16 @@ def test_tool_executor_resolves_signal_first_dynamic_element_from_signal_anomaly
                         {"element": "b"},
                     ]
                 },
-            }
+            },
+            "run-1:E_select_channel": {
+                "evidence_id": "run-1:E_select_channel",
+                "guard_status": "passed",
+                "result_summary": {"dimension": "channel", "selected_element": "b"},
+            },
         }
     )
     executor = ToolExecutor(
-        dependencies=SimpleNamespace(
-            repository=repository,
-            renderer=SQLRenderer(),
-            metric_service=_MetricService(),
-            settings=SimpleNamespace(signal_metric_by_type={"campaign": "gmv"}),
-        ),
+        dependencies=object(),
         handlers={
             "fetch_related_signal": MetricRCAToolHandler(args_model=_FetchArgs, call=handler),
         },
@@ -266,20 +314,20 @@ def test_tool_executor_resolves_signal_first_dynamic_element_from_signal_anomaly
             "element": None,
             "element_selection": "signal_anomaly",
         },
-        requires=["E1", "E2_channel"],
+        requires=["E1", "E2_channel", "E_select_channel"],
         dynamic=True,
     )
-    graph = EvidenceGraph(run_id="run-1", evidence_ids=["run-1:E1", "run-1:E2_channel"])
+    graph = EvidenceGraph(run_id="run-1", evidence_ids=["run-1:E1", "run-1:E2_channel", "run-1:E_select_channel"])
 
     result = executor.execute(ctx, action, graph)
 
     assert result.observation.ok is True
     assert captured["element"] == "b"
     assert "element_selection" not in captured
-    assert repository.executed_signal_queries == 4
+    assert captured["evidence_ids"] == ["run-1:E1", "run-1:E2_channel", "run-1:E_select_channel"]
 
 
-def test_tool_executor_resolves_refund_quality_dynamic_element_from_signal_level() -> None:
+def test_tool_executor_resolves_refund_quality_dynamic_element_from_selection_evidence() -> None:
     captured: dict[str, Any] = {}
 
     def handler(args: _FetchArgs, dependencies: object) -> ToolExecutionResult:
@@ -289,7 +337,7 @@ def test_tool_executor_resolves_refund_quality_dynamic_element_from_signal_level
             evidence_ids=["run-1:E3_prod_1"],
         )
 
-    repository = _SignalLevelRepository(
+    repository = _Repository(
         {
             "run-1:E2_product": {
                 "evidence_id": "run-1:E2_product",
@@ -301,15 +349,16 @@ def test_tool_executor_resolves_refund_quality_dynamic_element_from_signal_level
                         {"element": "1"},
                     ]
                 },
-            }
+            },
+            "run-1:E_select_product": {
+                "evidence_id": "run-1:E_select_product",
+                "guard_status": "passed",
+                "result_summary": {"dimension": "product", "selected_element": "1"},
+            },
         }
     )
     executor = ToolExecutor(
-        dependencies=SimpleNamespace(
-            repository=repository,
-            renderer=SQLRenderer(),
-            settings=SimpleNamespace(signal_metric_by_type={"refund_quality": "complaint_rate"}),
-        ),
+        dependencies=object(),
         handlers={
             "fetch_related_signal": MetricRCAToolHandler(args_model=_FetchArgs, call=handler),
         },
@@ -331,17 +380,17 @@ def test_tool_executor_resolves_refund_quality_dynamic_element_from_signal_level
             "element": None,
             "element_selection": "signal_level",
         },
-        requires=["E1", "E2_product"],
+        requires=["E1", "E2_product", "E_select_product"],
         dynamic=True,
     )
-    graph = EvidenceGraph(run_id="run-1", evidence_ids=["run-1:E1", "run-1:E2_product"])
+    graph = EvidenceGraph(run_id="run-1", evidence_ids=["run-1:E1", "run-1:E2_product", "run-1:E_select_product"])
 
     result = executor.execute(ctx, action, graph)
 
     assert result.observation.ok is True
     assert captured["element"] == "1"
     assert "element_selection" not in captured
-    assert repository.executed_signal_query is True
+    assert captured["evidence_ids"] == ["run-1:E1", "run-1:E2_product", "run-1:E_select_product"]
 
 
 def test_tool_executor_resolves_dynamic_contribution_element_from_e3_signal() -> None:
@@ -365,6 +414,11 @@ def test_tool_executor_resolves_dynamic_contribution_element_from_e3_signal() ->
                 "evidence_id": "run-1:E3_prod_1",
                 "guard_status": "passed",
                 "result_summary": {"dimension": "product", "element": "1"},
+            },
+            "run-1:E_select_product": {
+                "evidence_id": "run-1:E_select_product",
+                "guard_status": "passed",
+                "result_summary": {"dimension": "product", "selected_element": "1"},
             },
         }
     )
@@ -390,10 +444,13 @@ def test_tool_executor_resolves_dynamic_contribution_element_from_e3_signal() ->
             "element": None,
             "element_selection": "signal_anomaly",
         },
-        requires=["E1", "E2_product", "E3"],
+        requires=["E1", "E2_product", "E_select_product", "E3"],
         dynamic=True,
     )
-    graph = EvidenceGraph(run_id="run-1", evidence_ids=["run-1:E1", "run-1:E2_product", "run-1:E3_prod_1"])
+    graph = EvidenceGraph(
+        run_id="run-1",
+        evidence_ids=["run-1:E1", "run-1:E2_product", "run-1:E_select_product", "run-1:E3_prod_1"],
+    )
 
     result = executor.execute(ctx, action, graph)
 
@@ -425,15 +482,57 @@ def test_tool_executor_fails_fast_when_dynamic_element_cannot_be_resolved() -> N
             "dimension": "channel",
             "element": None,
         },
-        requires=["E1", "E2_channel"],
+        requires=["E1", "E2_channel", "E_select_channel"],
         dynamic=True,
     )
-    graph = EvidenceGraph(run_id="run-1", evidence_ids=["run-1:E1", "run-1:E2_channel"])
+    graph = EvidenceGraph(run_id="run-1", evidence_ids=["run-1:E1", "run-1:E2_channel", "run-1:E_select_channel"])
 
     result = executor.execute(ctx, action, graph)
 
     assert result.observation.ok is False
     assert result.observation.error_code == "DYNAMIC_ACTION_UNRESOLVED"
+
+
+def test_select_signal_element_uses_grouped_queries_not_per_candidate_queries() -> None:
+    repository = _GroupedSelectionRepository(
+        {
+            "run-1:E1": {
+                "evidence_id": "run-1:E1",
+                "guard_status": "passed",
+                "result_summary": {"is_anomaly": True},
+            },
+            "run-1:E2_channel": {
+                "evidence_id": "run-1:E2_channel",
+                "guard_status": "passed",
+                "result_summary": {
+                    "candidates": [{"element": f"ch_{index}"} for index in range(30)]
+                },
+            },
+        }
+    )
+
+    result = select_signal_element(
+        SelectSignalElementArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            signal_type="campaign",
+            dimension="channel",
+            evidence_ids=["run-1:E1", "run-1:E2_channel"],
+            element_selection="signal_anomaly",
+        ),
+        repository=repository,
+        metric_service=_MetricService(),
+        renderer=SQLRenderer(),
+        settings=SimpleNamespace(signal_metric_by_type={"campaign": "gmv"}),
+    )
+
+    assert result.observation.ok is True
+    assert result.observation.payload["selected_element"] == "ch_17"
+    assert result.evidences[0].evidence_id == "run-1:E_select_channel"
+    assert result.sql_count == 2
+    assert repository.executed_signal_queries == 2
+    assert repository.persisted_evidence["result_summary"]["candidate_count"] == 30
 
 
 class _Repository:
@@ -521,3 +620,44 @@ class _MetricService:
             allowed_dimensions=["channel", "product"],
             higher_is_better=True,
         )
+
+
+class _GroupedSelectionRepository(_Repository):
+    def __init__(self, rows: dict[str, dict[str, object]]) -> None:
+        super().__init__(rows)
+        self.executed_signal_queries = 0
+        self.persisted_evidence: dict[str, Any] = {}
+
+    def get_agent_run(self, run_id: str) -> dict[str, object]:
+        return {"run_id": run_id, "status": "running", "metric_id": "gmv", "target_date": date(2026, 6, 5)}
+
+    def execute_plan(self, plan, *, run_id: str):
+        assert plan.guard_status == "passed"
+        self.executed_signal_queries += 1
+        if "baseline_d0" in getattr(plan, "params", {}):
+            return SimpleNamespace(
+                rows=[
+                    {
+                        "business_date": date(2026, 5, 29),
+                        "channel": f"ch_{index}",
+                        "metric_value": 100.0,
+                    }
+                    for index in range(30)
+                ],
+                row_count=30,
+                latency_ms=1,
+            )
+        return SimpleNamespace(
+            rows=[
+                {
+                    "channel": f"ch_{index}",
+                    "metric_value": 30.0 if index == 17 else 95.0,
+                }
+                for index in range(30)
+            ],
+            row_count=30,
+            latency_ms=1,
+        )
+
+    def create_evidence(self, row: dict[str, Any]) -> None:
+        self.persisted_evidence = row

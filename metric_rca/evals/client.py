@@ -58,10 +58,10 @@ PRIVATE_HTTP_GROUND_TRUTH_FIELDS = frozenset(
         "expected_business_date",
     }
 )
+ANSWER_BEARING_HTTP_FIELDS = PRIVATE_HTTP_GROUND_TRUTH_FIELDS - {"case_id"}
 
 
 def load_http_cases(path: Path = DEFAULT_CASES_PATH) -> list[dict[str, Any]]:
-    cases: list[dict[str, Any]] = []
     public_rows: list[dict[str, Any]] = []
     for line_number, line in enumerate(path.read_text().splitlines(), start=1):
         if not line.strip():
@@ -69,22 +69,20 @@ def load_http_cases(path: Path = DEFAULT_CASES_PATH) -> list[dict[str, Any]]:
         payload = json.loads(line)
         if not isinstance(payload, dict):
             raise EvalRuntimeError("EVAL_CASE_INVALID", f"invalid HTTP eval case at line {line_number}")
-        if REQUIRED_HTTP_CASE_FIELDS <= set(payload):
-            if not isinstance(payload["case_id"], str) or not isinstance(payload["question"], str):
-                raise EvalRuntimeError("EVAL_CASE_INVALID", f"invalid HTTP eval case at line {line_number}")
-            cases.append(payload)
-            continue
+        leaked_fields = sorted(set(payload) & ANSWER_BEARING_HTTP_FIELDS)
+        if leaked_fields:
+            raise EvalRuntimeError(
+                "EVAL_CASE_PRIVATE_FIELD_LEAKED",
+                f"answer-bearing fields in HTTP public case at line {line_number}: {leaked_fields}",
+            )
         if set(payload) == PUBLIC_HTTP_CASE_FIELDS:
             public_rows.append(payload)
             continue
         raise EvalRuntimeError("EVAL_CASE_INVALID", f"invalid HTTP eval case at line {line_number}")
-    if public_rows and cases:
-        raise EvalRuntimeError("EVAL_CASE_INVALID", "mixed public and combined HTTP eval cases")
     if public_rows:
-        cases = _merge_public_cases_with_private_ground_truth(public_rows, DEFAULT_PRIVATE_GROUND_TRUTH_PATH)
-    if not cases:
+        return _merge_public_cases_with_private_ground_truth(public_rows, DEFAULT_PRIVATE_GROUND_TRUTH_PATH)
+    if not public_rows:
         raise EvalRuntimeError("EVAL_CASE_INVALID", "no HTTP eval cases configured")
-    return cases
 
 
 def _merge_public_cases_with_private_ground_truth(

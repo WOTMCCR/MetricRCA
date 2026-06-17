@@ -11,10 +11,22 @@ from metric_rca.runtime.run_context import RunContext
 
 
 DATA_FETCHING_ACTIONS = frozenset(
-    {"detect_anomaly", "drilldown_dimension", "fetch_related_signal", "calculate_contribution"}
+    {
+        "detect_anomaly",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+    }
 )
 DOWNSTREAM_ACTIONS = frozenset(
-    {"drilldown_dimension", "fetch_related_signal", "calculate_contribution", "rank_root_causes"}
+    {
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "rank_root_causes",
+    }
 )
 
 

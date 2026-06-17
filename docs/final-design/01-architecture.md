@@ -1,3 +1,6 @@
+> Historical v2 design. Active production runtime decisions are superseded by
+> `docs/final-design/06-v3-repair-plan.md`.
+
 # 最终版架构（v2）— deepagents 编排 + 确定性核心
 
 ## 1. 分层总览

@@ -27,7 +27,7 @@ def test_settings_defaults_and_required_dsn_failure(monkeypatch: pytest.MonkeyPa
     assert settings.thresh_pct == 0.15
     assert settings.z_thresh == 2.0
     assert settings.max_steps == 8
-    assert settings.max_query == 12
+    assert settings.max_query == 20
     assert settings.max_drilldown_depth == 3
     assert settings.max_repair == 1
     assert settings.memory_enabled is True

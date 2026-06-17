@@ -1,0 +1,1 @@
+{"case_id":"M01_gmv_memory_product_prior","expected_metric_id":"gmv","expected_anomaly":true,"expected_root_cause_type":"aov_drop","expected_dimension":"product","expected_element":"2","expected_business_date":"2026-06-05"}

@@ -202,6 +202,21 @@ class RootCauseCandidate(StrictModel):
     evidence_ids: list[str] = Field(default_factory=list)
 
 
+class ContributionSet(StrictModel):
+    """Canonical E4 attribution payload.
+
+    Compatibility fields such as result_summary.selected_candidate and
+    result_summary.candidates are projections of this object, not independent
+    ranking truth.
+    """
+
+    candidates: list[RootCauseCandidate]
+    selected_candidate: RootCauseCandidate
+    evidence_ids: list[str] = Field(default_factory=list)
+    factor_graph: dict[str, Any] = Field(default_factory=dict)
+    selection_evidence_id: str | None = None
+
+
 class AgentAction(StrictModel):
     """ReAct 动作（受控）：action 必须 ∈ 白名单；rationale 仅记录，不作为事实。"""
 

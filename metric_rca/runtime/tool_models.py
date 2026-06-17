@@ -20,4 +20,5 @@ class ToolExecutionResult(StrictModel):
     observation: Observation
     evidence_ids: list[str] = []
     candidates: list[RootCauseCandidate] = []
-
+    sql_count: int = 0
+    sql_audit_delta: int = 0

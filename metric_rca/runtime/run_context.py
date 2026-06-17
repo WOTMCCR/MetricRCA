@@ -9,7 +9,7 @@ from metric_rca.runtime.dependencies import RuntimeRepository
 
 
 def _default_budget() -> dict[str, int]:
-    return {"max_steps": 8, "max_query": 12, "max_drilldown_depth": 3}
+    return {"max_steps": 8, "max_query": 20, "max_drilldown_depth": 3}
 
 
 @dataclass
@@ -31,9 +31,15 @@ class RunContext:
         self.failed = True
         self.error_code = error_code
 
-    def record_allowed_action(self, action_kind: str) -> None:
+    def record_allowed_action(self, action_kind: str, *, sql_count: int = 0) -> None:
         self.step_count += 1
-        if action_kind in {"detect_anomaly", "drilldown_dimension", "fetch_related_signal", "calculate_contribution"}:
-            self.query_count += 1
+        if action_kind in {
+            "detect_anomaly",
+            "drilldown_dimension",
+            "select_signal_element",
+            "fetch_related_signal",
+            "calculate_contribution",
+        }:
+            self.query_count += int(sql_count)
         if action_kind == "drilldown_dimension":
             self.drilldown_depth += 1

@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from metric_rca.config.settings import Settings
+from metric_rca.business.policy_registry import MetricPolicyRegistry, RootCausePolicy
 from metric_rca.domain.models import MetricDefinition
 import metric_rca.services.attribution_service as attribution_service
 from metric_rca.services.attribution_service import (
@@ -136,18 +136,13 @@ def test_attribution_uses_relative_element_severity_when_contribution_is_close()
     assert result.candidates[0].signal_severity > result.candidates[1].signal_severity
 
 
-def test_root_cause_mapping_uses_config_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = Settings(
-        db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
-        readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
-        llm_model="gpt-test",
-        llm_api_key="key",
-        llm_required=False,
-        root_cause_type_by_metric={},
-        root_cause_type_by_dimension={"channel": "custom_channel_rule"},
-        root_cause_type_by_dimension_element={},
+def test_root_cause_mapping_uses_policy_registry_override() -> None:
+    registry = MetricPolicyRegistry(
+        signal_policies=(),
+        discovery_policy_rules=(),
+        factor_graph_policies=(),
+        root_cause_policies=(RootCausePolicy(metric_id="gmv", dimension="channel", root_cause_type="custom_channel_rule"),),
     )
-    monkeypatch.setattr(attribution_service, "get_settings", lambda: settings)
 
     result = compute_dimension_contribution(
         metric_definition=_metric("gmv"),
@@ -158,6 +153,7 @@ def test_root_cause_mapping_uses_config_override(monkeypatch: pytest.MonkeyPatch
         ],
         baseline_rows=_baseline("channel", {"paid_ads": 100.0, "organic": 100.0}),
         evidence_ids=["run-1:E1", "run-1:E2", "run-1:E3"],
+        policy_registry=registry,
         top_threshold=0.60,
     )
 
@@ -227,7 +223,23 @@ def test_empty_rows_do_not_create_candidate() -> None:
     )
 
     assert result.ok is False
-    assert result.error_code == "ATTRIBUTION_COVERAGE_LOW"
+    assert result.error_code == "NO_CURRENT_DATA"
+    assert result.candidates == []
+
+
+def test_missing_baseline_rows_do_not_create_candidate() -> None:
+    result = compute_dimension_contribution(
+        metric_definition=_metric("gmv"),
+        dimension="channel",
+        current_rows=[
+            {"channel": "paid_ads", "metric_value": 20.0},
+        ],
+        baseline_rows=[],
+        evidence_ids=["run-1:E1"],
+    )
+
+    assert result.ok is False
+    assert result.error_code == "INSUFFICIENT_BASELINE_DATA"
     assert result.candidates == []
 
 

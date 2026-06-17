@@ -3,11 +3,21 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import date, timedelta
+from pathlib import Path
 
 from sqlalchemy import create_engine, text
+import yaml
 
 from metric_rca.config.settings import get_settings
-from metric_rca.data.seed_data import DEFAULT_SEED, _resolve_seed, main as seed_main
+from metric_rca.data.seed_data import (
+    DEFAULT_SEED,
+    _assert_destructive_seed_allowed,
+    _ground_truth_row_with_metadata,
+    _resolve_seed,
+    _resolve_seed_profile,
+    _seed_profile_config,
+    main as seed_main,
+)
 from metric_rca.domain.models import METRIC_ALLOWED_DIMENSIONS
 from metric_rca.guardrails.renderer import METRIC_TEMPLATES
 
@@ -28,6 +38,11 @@ TARGET_DATE = date(2026, 6, 5)
 GMV_NO_ANOMALY_DATE = date(2026, 6, 4)
 BORDERLINE_DATE = date(2026, 6, 3)
 SPIKE_DATE = date(2026, 6, 2)
+SCENARIO_DIR = Path("metric_rca/data/scenarios")
+PUBLIC_CASES_PATH = Path("metric_rca/evals/regression_public_cases.jsonl")
+PRIVATE_GROUND_TRUTH_PATH = Path("metric_rca/evals/regression_private_ground_truth.jsonl")
+MEMORY_TREATMENT_PUBLIC_CASES_PATH = Path("metric_rca/evals/memory_treatment_public_cases.jsonl")
+MEMORY_TREATMENT_PRIVATE_GROUND_TRUTH_PATH = Path("metric_rca/evals/memory_treatment_private_ground_truth.jsonl")
 EXPECTED_GROUND_TRUTH = {
     "gmv_paid_ads_drop": ("gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", TARGET_DATE),
     "gmv_stockout_electronics": ("gmv", 1, "stockout", "category", "electronics", TARGET_DATE),
@@ -58,6 +73,9 @@ EXPECTED_GROUND_TRUTH = {
     "C27_composite_cause": ("gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", TARGET_DATE),
     "C28_multi_day_drift": ("gmv", 1, "campaign_traffic_drop", "channel", "organic", TARGET_DATE),
 }
+EXPECTED_MEMORY_TREATMENT_GROUND_TRUTH = {
+    "M01_gmv_memory_product_prior": ("gmv", 1, "aov_drop", "product", "2", TARGET_DATE),
+}
 
 
 def test_seed_override_is_explicit_and_typed(monkeypatch) -> None:
@@ -74,6 +92,184 @@ def test_seed_override_is_explicit_and_typed(monkeypatch) -> None:
         assert str(exc).startswith("SEED_INVALID")
     else:
         raise AssertionError("invalid seed must fail fast")
+
+
+def test_seed_profile_defaults_to_regression_and_rejects_unknown_profile(monkeypatch) -> None:
+    monkeypatch.delenv("METRIC_RCA_SEED_PROFILE", raising=False)
+    assert _resolve_seed_profile() == "regression"
+
+    monkeypatch.setenv("METRIC_RCA_SEED_PROFILE", "acceptance")
+    assert _resolve_seed_profile() == "acceptance"
+
+    monkeypatch.setenv("METRIC_RCA_SEED_PROFILE", "demo")
+    try:
+        _resolve_seed_profile()
+    except ValueError as exc:
+        assert str(exc).startswith("SEED_PROFILE_INVALID")
+    else:
+        raise AssertionError("invalid seed profile must fail fast")
+
+
+def test_seed_profile_metadata_files_define_regression_data_slice(monkeypatch) -> None:
+    registry = _load_yaml(SCENARIO_DIR / "scenario_registry.yaml")
+    profiles = _load_yaml(SCENARIO_DIR / "seed_profiles.yaml")
+
+    assert profiles["default_profile"] == "regression"
+    assert set(profiles["profiles"]) == {"smoke", "regression", "acceptance", "stress"}
+    for profile_name, profile in profiles["profiles"].items():
+        monkeypatch.setenv("METRIC_RCA_SEED_PROFILE", profile_name)
+        assert _resolve_seed_profile() == profile_name
+        assert profile["scenario_suite"] in registry["suites"]
+        assert profile["destructive_reset"] == "local_test_dsn_or_explicit_allow"
+    assert profiles["profiles"]["acceptance"]["opt_in"] is True
+    assert profiles["profiles"]["stress"]["opt_in"] is True
+    assert profiles["profiles"]["acceptance"]["cardinality"] == {
+        "products": 200,
+        "categories": 20,
+        "channels": 8,
+        "devices": 4,
+        "warehouses": 10,
+        "campaigns": 100,
+        "users": 10000,
+        "history_days": 180,
+    }
+
+    regression = registry["suites"]["regression"]
+    assert regression["seed_profile"] == "regression"
+    assert regression["case_count"] == 28
+    assert (SCENARIO_DIR / regression["public_cases_file"]).resolve() == PUBLIC_CASES_PATH.resolve()
+    assert (SCENARIO_DIR / regression["private_ground_truth_file"]).resolve() == PRIVATE_GROUND_TRUTH_PATH.resolve()
+    assert regression["data_slice"] == {
+        "business_today": "2026-06-06",
+        "target_date": "2026-06-05",
+        "history_days": 60,
+    }
+    public_rows = _read_jsonl(PUBLIC_CASES_PATH)
+    private_rows = _read_jsonl(PRIVATE_GROUND_TRUTH_PATH)
+    assert len(public_rows) == regression["case_count"]
+    assert len(private_rows) == regression["case_count"]
+    assert {row["case_id"] for row in private_rows} == set(EXPECTED_GROUND_TRUTH)
+    private_by_id = {row["case_id"]: row for row in private_rows}
+    for case_id, (metric_id, expected_anomaly, root_cause, dimension, element, business_date) in EXPECTED_GROUND_TRUTH.items():
+        assert private_by_id[case_id] == {
+            "case_id": case_id,
+            "expected_metric_id": metric_id,
+            "expected_anomaly": bool(expected_anomaly),
+            "expected_root_cause_type": root_cause,
+            "expected_dimension": dimension,
+            "expected_element": element,
+            "expected_business_date": business_date.isoformat(),
+        }
+
+    acceptance = registry["suites"]["acceptance"]
+    assert acceptance["seed_profile"] == "acceptance"
+    assert acceptance["data_slice"]["products"] == 200
+    assert acceptance["data_slice"]["history_days"] == 180
+
+    treatment = registry["suites"]["memory-treatment"]
+    assert treatment["seed_profile"] == "regression"
+    assert treatment["case_count"] == 1
+    assert (SCENARIO_DIR / treatment["public_cases_file"]).resolve() == MEMORY_TREATMENT_PUBLIC_CASES_PATH.resolve()
+    assert (
+        (SCENARIO_DIR / treatment["private_ground_truth_file"]).resolve()
+        == MEMORY_TREATMENT_PRIVATE_GROUND_TRUTH_PATH.resolve()
+    )
+    treatment_public_rows = _read_jsonl(MEMORY_TREATMENT_PUBLIC_CASES_PATH)
+    treatment_private_rows = _read_jsonl(MEMORY_TREATMENT_PRIVATE_GROUND_TRUTH_PATH)
+    assert len(treatment_public_rows) == 1
+    assert len(treatment_private_rows) == 1
+    assert set(treatment_public_rows[0]) == {"case_id", "question", "tags"}
+    assert set(treatment_private_rows[0]) == {
+        "case_id",
+        "expected_metric_id",
+        "expected_anomaly",
+        "expected_root_cause_type",
+        "expected_dimension",
+        "expected_element",
+        "expected_business_date",
+    }
+    assert treatment_private_rows[0]["case_id"] == treatment_public_rows[0]["case_id"]
+    assert "memory_treatment" in treatment_public_rows[0]["tags"]
+
+
+def test_seed_profile_config_expands_acceptance_and_stress_entity_scale() -> None:
+    regression = _seed_profile_config("regression")
+    assert len(regression.products) == 9
+    assert len(regression.channels) == 4
+    assert len(regression.devices) == 2
+    assert len(regression.warehouses) == 2
+    assert regression.user_count == 80
+    assert regression.history_days == 60
+
+    acceptance = _seed_profile_config("acceptance")
+    assert len(acceptance.products) >= 200
+    assert len({category for _, _, category, _ in acceptance.products}) >= 20
+    assert len(acceptance.channels) >= 8
+    assert len(acceptance.devices) >= 4
+    assert len(acceptance.warehouses) >= 10
+    assert acceptance.campaign_count >= 100
+    assert acceptance.user_count >= 10_000
+    assert acceptance.history_days >= 180
+    assert acceptance.products[:9] == regression.products
+    assert acceptance.min_pay_user_per_cell == 0
+
+    stress = _seed_profile_config("stress")
+    assert len(stress.products) > len(acceptance.products)
+    assert stress.campaign_count > acceptance.campaign_count
+    assert stress.history_days > acceptance.history_days
+    assert stress.min_pay_user_per_cell == 0
+
+
+def test_acceptance_ground_truth_projects_broad_merchandise_case_to_category() -> None:
+    base = {
+        "case_id": "C08_gmv_aov_drop",
+        "business_date": TARGET_DATE,
+        "metric_id": "gmv",
+        "expected_anomaly": 1,
+        "root_cause_type": "aov_drop",
+        "dimension": "product",
+        "element": "2",
+    }
+
+    regression = _ground_truth_row_with_metadata(base, seed=DEFAULT_SEED, seed_profile="regression")
+    acceptance = _ground_truth_row_with_metadata(base, seed=DEFAULT_SEED, seed_profile="acceptance")
+
+    assert regression["dimension"] == "product"
+    assert regression["element"] == "2"
+    assert acceptance["dimension"] == "category"
+    assert acceptance["element"] == "fashion"
+    assert _json_value(acceptance["root_causes"]) == [
+        {
+            "root_cause_type": "aov_drop",
+            "dimension": "category",
+            "element": "fashion",
+            "weight": 1.0,
+        }
+    ]
+
+
+def test_destructive_seed_requires_allow_flag_or_local_dsn(monkeypatch) -> None:
+    monkeypatch.delenv("METRIC_RCA_ALLOW_DESTRUCTIVE_SEED", raising=False)
+    _assert_destructive_seed_allowed(
+        db_dsn="mysql+pymysql://metric_rca_app:metric_rca_app@127.0.0.1:3307/metric_rca",
+        seed_profile="regression",
+    )
+
+    try:
+        _assert_destructive_seed_allowed(
+            db_dsn="mysql+pymysql://metric_rca_app:metric_rca_app@prod-db:3306/metric_rca",
+            seed_profile="acceptance",
+        )
+    except RuntimeError as exc:
+        assert str(exc).startswith("DESTRUCTIVE_SEED_NOT_ALLOWED")
+    else:
+        raise AssertionError("non-local destructive seed must require explicit allow")
+
+    monkeypatch.setenv("METRIC_RCA_ALLOW_DESTRUCTIVE_SEED", "true")
+    _assert_destructive_seed_allowed(
+        db_dsn="mysql+pymysql://metric_rca_app:metric_rca_app@prod-db:3306/metric_rca",
+        seed_profile="acceptance",
+    )
 
 
 def _gmv_anomaly_stats(conn, business_date: date) -> dict[str, float | bool]:
@@ -123,6 +319,24 @@ def _content_hash() -> str:
     finally:
         engine.dispose()
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _load_yaml(path: Path) -> dict:
+    payload = yaml.safe_load(path.read_text())
+    assert isinstance(payload, dict)
+    return payload
+
+
+def _read_jsonl(path: Path) -> list[dict]:
+    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    assert all(isinstance(row, dict) for row in rows)
+    return rows
+
+
+def _json_value(value):
+    if isinstance(value, str):
+        return json.loads(value)
+    return value
 
 
 def test_seed_makes_aov_cases_decomposition_dominant() -> None:
@@ -248,7 +462,9 @@ def test_seed_metric_definitions_and_ground_truth_cases() -> None:
 
             cases = {
                 row.case_id: dict(row)
-                for row in conn.execute(text("SELECT * FROM anomaly_ground_truth")).mappings()
+                for row in conn.execute(
+                    text("SELECT * FROM anomaly_ground_truth WHERE split = 'regression'")
+                ).mappings()
             }
             assert set(cases) == set(EXPECTED_GROUND_TRUTH)
             assert len(cases) == 28
@@ -259,6 +475,21 @@ def test_seed_metric_definitions_and_ground_truth_cases() -> None:
                 assert cases[case_id]["dimension"] == dimension
                 assert cases[case_id]["element"] == element
                 assert cases[case_id]["business_date"] == business_date
+                assert cases[case_id]["scenario_id"] == case_id
+                assert cases[case_id]["split"] == "regression"
+                assert cases[case_id]["profile"] == "regression"
+                root_causes = _json_value(cases[case_id]["root_causes"])
+                if expected_anomaly:
+                    assert root_causes == [
+                        {
+                            "root_cause_type": root_cause,
+                            "dimension": dimension,
+                            "element": element,
+                            "weight": 1.0,
+                        }
+                    ]
+                else:
+                    assert root_causes == []
             assert cases["gmv_paid_ads_drop"]["root_cause_type"] == "campaign_traffic_drop"
             assert cases["gmv_stockout_electronics"]["root_cause_type"] == "stockout"
             assert cases["cvr_mobile_drop"]["root_cause_type"] == "conversion_drop"
@@ -278,6 +509,25 @@ def test_seed_metric_definitions_and_ground_truth_cases() -> None:
             assert cases["C24_gmv_positive_spike"]["business_date"] == SPIKE_DATE
             assert cases["gmv_paid_ads_drop"]["business_date"] == TARGET_DATE
             assert cases["gmv_stockout_electronics"]["business_date"] == TARGET_DATE
+
+            treatment_cases = {
+                row.case_id: dict(row)
+                for row in conn.execute(
+                    text("SELECT * FROM anomaly_ground_truth WHERE split = 'memory-treatment'")
+                ).mappings()
+            }
+            assert set(treatment_cases) == set(EXPECTED_MEMORY_TREATMENT_GROUND_TRUTH)
+            for case_id, (metric_id, expected_anomaly, root_cause, dimension, element, business_date) in (
+                EXPECTED_MEMORY_TREATMENT_GROUND_TRUTH.items()
+            ):
+                assert treatment_cases[case_id]["metric_id"] == metric_id
+                assert treatment_cases[case_id]["expected_anomaly"] == expected_anomaly
+                assert treatment_cases[case_id]["root_cause_type"] == root_cause
+                assert treatment_cases[case_id]["dimension"] == dimension
+                assert treatment_cases[case_id]["element"] == element
+                assert treatment_cases[case_id]["business_date"] == business_date
+                assert treatment_cases[case_id]["scenario_id"] == case_id
+                assert treatment_cases[case_id]["profile"] == "regression"
     finally:
         engine.dispose()
 
@@ -316,6 +566,26 @@ def test_seed_writes_semantic_memory_from_metric_definitions() -> None:
                 "higher_is_better": bool(metrics["gmv"]["higher_is_better"]),
                 "source_table": metrics["gmv"]["source_table"],
             }
+            treatment_memory = conn.execute(
+                text(
+                    """
+                    SELECT payload, confidence, source
+                    FROM memory_record
+                    WHERE memory_id = 'memory-treatment-gmv-product-prior'
+                    """
+                )
+            ).mappings().one()
+            treatment_payload = json.loads(treatment_memory["payload"])
+            assert treatment_memory["source"] == "system_verified"
+            assert float(treatment_memory["confidence"]) >= 0.70
+            assert treatment_payload["eval_suites"] == ["memory-treatment"]
+            assert treatment_payload["question_family"] == "gmv_drop"
+            assert treatment_payload["analysis_strategy"] == "standard"
+            assert treatment_payload["preferred_dimensions"] == ["product"]
+            assert treatment_payload["preferred_signal_types"] == ["inventory"]
+            assert treatment_payload["prior_root_causes"] == ["aov_drop"]
+            assert "expected_element" not in treatment_payload
+            assert "expected_root_cause_type" not in treatment_payload
             assert set(gmv_payload["allowed_dimensions"]) == set(
                 json.loads(metrics["gmv"]["allowed_dimensions"])
             )

@@ -106,12 +106,19 @@ CREATE TABLE metric_definition (
 -- 评估真因：eval 据此逐 case 判定 anomaly / top1 / top3（不靠人读）。
 CREATE TABLE anomaly_ground_truth (
   case_id          VARCHAR(64) PRIMARY KEY,
+  scenario_id      VARCHAR(96),
+  split            VARCHAR(32) NOT NULL DEFAULT 'regression',
+  seed             INT,
+  profile          VARCHAR(32) NOT NULL DEFAULT 'regression',
   business_date    DATE NOT NULL,
   metric_id        VARCHAR(32) NOT NULL,
   expected_anomaly TINYINT NOT NULL,
   root_cause_type  VARCHAR(64),
   dimension        VARCHAR(32),
-  element          VARCHAR(64)
+  element          VARCHAR(64),
+  root_causes      JSON,
+  confounders      JSON,
+  expected_behavior JSON
 ) ENGINE=InnoDB;
 
 -- ========== Agent 系统表 ==========
@@ -123,6 +130,7 @@ CREATE TABLE agent_run (
   target_date DATE NOT NULL,
   status      VARCHAR(16) NOT NULL,
   error_code  VARCHAR(48),
+  runtime_version INT NOT NULL DEFAULT 3,
   total_tokens INT,
   total_latency_ms INT,
   token_breakdown JSON NULL,

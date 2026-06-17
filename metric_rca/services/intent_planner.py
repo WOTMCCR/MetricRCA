@@ -125,6 +125,9 @@ RULES:
   supported KPI such as GMV. For example, "Why did yesterday's GMV decline in
   merchandise sales?" is metric_id=gmv, question_family=gmv_drop,
   analysis_strategy=product_first, with no explicit dimension/filter.
+  "Why did yesterday's GMV decline?" is metric_id=gmv,
+  question_family=gmv_drop, analysis_strategy=standard, with no explicit
+  dimension/filter.
   "Why was yesterday's GMV below expectation across the store?" and "Was
   yesterday's GMV meaningfully below its normal seasonal range?" are
   metric_id=gmv, question_family=gmv_drop, analysis_strategy=channel_first,

@@ -35,8 +35,10 @@ def test_eval_http_client_uses_only_api_endpoints_and_scores_locally(tmp_path: P
         if request.method == "POST" and request.url.path == "/api/rca/runs":
             assert payload is not None
             assert payload["question"] in {"Why did paid ads GMV drop?", "Was GMV normal yesterday?"}
-            assert payload["target_date"] == "2026-06-05"
-            assert payload["business_today"] == "2026-06-06"
+            expected_target_date = "2026-06-04" if payload["question"] == "Was GMV normal yesterday?" else "2026-06-05"
+            expected_business_today = "2026-06-05" if payload["question"] == "Was GMV normal yesterday?" else "2026-06-06"
+            assert payload["target_date"] == expected_target_date
+            assert payload["business_today"] == expected_business_today
             assert payload["llm_provider"] == "openai"
             assert payload["llm_model"] == "gpt-5-nano"
             assert payload["llm_api_key"] == "secret-http-eval"
@@ -524,6 +526,33 @@ def test_public_cases_keep_expected_fields_private_for_http_eval() -> None:
     assert all(required <= set(case) for case in loaded_cases)
 
 
+def test_eval_http_client_rejects_answer_bearing_combined_case_rows(tmp_path: Path) -> None:
+    from metric_rca.evals.client import load_http_cases
+    from metric_rca.evals.models import EvalRuntimeError
+
+    path = tmp_path / "cases.jsonl"
+    path.write_text(
+        json.dumps(
+            {
+                "case_id": "gmv_paid_ads_drop",
+                "question": "Why did paid ads GMV drop?",
+                "tags": ["regression"],
+                "expected_metric_id": "gmv",
+                "expected_anomaly": True,
+                "expected_root_cause_type": "campaign_traffic_drop",
+                "expected_dimension": "channel",
+                "expected_element": "paid_ads",
+                "expected_business_date": "2026-06-05",
+            }
+        )
+    )
+
+    with pytest.raises(EvalRuntimeError) as exc_info:
+        load_http_cases(path)
+
+    assert exc_info.value.code == "EVAL_CASE_PRIVATE_FIELD_LEAKED"
+
+
 def test_makefile_has_eval_http_target() -> None:
     source = Path("Makefile").read_text()
 
@@ -669,22 +698,12 @@ def _http_cases_file(tmp_path: Path) -> Path:
         {
             "case_id": "gmv_paid_ads_drop",
             "question": "Why did paid ads GMV drop?",
-            "expected_metric_id": "gmv",
-            "expected_anomaly": True,
-            "expected_root_cause_type": "campaign_traffic_drop",
-            "expected_dimension": "channel",
-            "expected_element": "paid_ads",
-            "expected_business_date": "2026-06-05",
+            "tags": ["regression", "campaign"],
         },
         {
             "case_id": "gmv_no_anomaly",
             "question": "Was GMV normal yesterday?",
-            "expected_metric_id": "gmv",
-            "expected_anomaly": False,
-            "expected_root_cause_type": None,
-            "expected_dimension": None,
-            "expected_element": None,
-            "expected_business_date": "2026-06-05",
+            "tags": ["regression", "no_anomaly"],
         },
     ]
     path.write_text("\n".join(json.dumps(row) for row in rows))
@@ -781,13 +800,34 @@ def _evidences(run_id: str) -> list[dict[str, Any]]:
             "evidence_id": f"{run_id}:E4",
             "run_id": run_id,
             "guard_status": "passed",
-            "result_summary": {"selected_candidate": candidate, "candidates": [candidate]},
+            "result_summary": {
+                "selected_candidate": candidate,
+                "candidates": [candidate],
+                "contribution_set": {
+                    "selected_candidate": candidate,
+                    "candidates": [candidate],
+                    "evidence_ids": candidate["evidence_ids"],
+                    "factor_graph": {},
+                    "selection_evidence_id": None,
+                },
+            },
         },
         {
             "evidence_id": f"{run_id}:E_rank",
             "run_id": run_id,
             "guard_status": "passed",
-            "result_summary": {"ranker": "v1", "selected_candidate": candidate, "candidates": [candidate]},
+            "result_summary": {
+                "ranker": "v1",
+                "selected_candidate": candidate,
+                "candidates": [candidate],
+                "contribution_set": {
+                    "selected_candidate": candidate,
+                    "candidates": [candidate],
+                    "evidence_ids": candidate["evidence_ids"],
+                    "factor_graph": {},
+                    "selection_evidence_id": None,
+                },
+            },
         },
     ]
 

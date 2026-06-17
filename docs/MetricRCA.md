@@ -507,7 +507,7 @@ class RCAState(TypedDict, total=False):
 - `react_step` 路由：若 `step_count >= MAX_STEPS` 或动作为 `finish` → `attribute_rank`；若动作为 `detect_anomaly / drilldown_dimension / fetch_related_signal / calculate_contribution` → `execute_tool`；若检测到 `NO_ANOMALY_DETECTED` → `generate_report(status=no_anomaly)` 并跳过 `attribute_rank/create_tasks`；非法动作 → 记录 `ACTION_SCHEMA_INVALID`，在不掩盖原错误的前提下走显式 repair 或 `error_return`。
 - `reflection_verify` 路由：`passed` → `generate_report`；`has_error_issues and repair_count < MAX_REPAIR` → `react_step`（执行修复查询）；`repair_count >= MAX_REPAIR` → `error_return`。
 
-**终止条件 / fail-fast 边界**：`MAX_STEPS=8`、`MAX_QUERY=12`、`MAX_DRILLDOWN_DEPTH=3`、`MAX_REPAIR=1`。任何工具失败不静默继续，而是写 Observation(ok=False)；retryable 工具最多重试 1 次，仍失败必须进入 `error_return`，不得带缺失 evidence 继续归因。
+**终止条件 / fail-fast 边界**：`MAX_STEPS=8`、`MAX_QUERY=20`、`MAX_DRILLDOWN_DEPTH=3`、`MAX_REPAIR=1`。`MAX_QUERY` 按 sql_audit delta 的真实 SQL 数计费，而不是按工具 action 数计费。任何工具失败不静默继续，而是写 Observation(ok=False)；retryable 工具最多重试 1 次，仍失败必须进入 `error_return`，不得带缺失 evidence 继续归因。
 
 ```mermaid
 stateDiagram-v2

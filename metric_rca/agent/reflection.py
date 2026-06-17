@@ -10,8 +10,9 @@ from typing import Any
 
 from metric_rca.agent.evidence_aliases import E2_ALIAS_BY_DIMENSION, e2_alias_for_e3_id
 from metric_rca.agent.tools.registry import select_signal_type
+from metric_rca.business.policy_registry import root_cause_type_for_metric_dimension
 from metric_rca.domain.enums import RootCauseType
-from metric_rca.domain.models import AgentAction, Evidence, ReflectionIssue, ReflectionResult, RootCauseCandidate
+from metric_rca.domain.models import AgentAction, ContributionSet, Evidence, ReflectionIssue, ReflectionResult, RootCauseCandidate
 
 
 REQUIRED_EVIDENCE_ALIASES = ("E1", "E2", "E3", "E4", "E_rank")
@@ -301,12 +302,25 @@ def _top_candidate_matches_persisted_e4(
     if not isinstance(summary, dict):
         return False
 
-    selected = summary.get("selected_candidate")
-    if not isinstance(selected, dict):
+    selected_candidate = _selected_candidate_from_e4_summary(summary)
+    if selected_candidate is None:
         return False
-
-    selected_candidate = RootCauseCandidate.model_validate(selected)
     return _canonical(candidate) == _canonical(selected_candidate)
+
+
+def _selected_candidate_from_e4_summary(summary: dict[str, Any]) -> RootCauseCandidate | None:
+    contribution_set = summary.get("contribution_set")
+    if isinstance(contribution_set, dict):
+        canonical = ContributionSet.model_validate(contribution_set).selected_candidate
+        selected = summary.get("selected_candidate")
+        if isinstance(selected, dict) and _canonical_candidate(selected) != _canonical(canonical.model_dump(mode="json")):
+            return None
+        return canonical
+    return None
+
+
+def _canonical_candidate(value: Any) -> Any:
+    return _canonical(RootCauseCandidate.model_validate(value).model_dump(mode="json"))
 
 
 def _missing_required_aliases(state: dict[str, Any], evidence_ids: list[str]) -> list[str]:
@@ -426,8 +440,8 @@ def _suggested_action_for_no_candidates(state: dict[str, Any]) -> AgentAction | 
         element = _first_candidate_element(summary)
         if dimension is None or element is None:
             continue
-        root_cause_type = _repair_root_cause_type(metric_id=str(state.get("metric_id")), dimension=str(dimension))
         try:
+            root_cause_type = _repair_root_cause_type(metric_id=str(state.get("metric_id")), dimension=str(dimension))
             signal_type = select_signal_type(
                 metric_id=str(state.get("metric_id")),
                 dimension=str(dimension),
@@ -509,13 +523,7 @@ def _first_candidate_element(summary: dict[str, Any]) -> str | None:
 
 
 def _repair_root_cause_type(*, metric_id: str, dimension: str) -> str:
-    if metric_id in {"refund_rate", "complaint_rate", "net_gmv"}:
-        return RootCauseType.COMPLAINT_OR_QUALITY_ISSUE.value
-    if metric_id == "pay_cvr" or dimension == "device":
-        return RootCauseType.CONVERSION_DROP.value
-    if dimension == "channel":
-        return RootCauseType.CAMPAIGN_TRAFFIC_DROP.value
-    return RootCauseType.STOCKOUT.value
+    return root_cause_type_for_metric_dimension(metric_id=metric_id, dimension=dimension)
 
 
 def _contribution_repair_chain(state: dict[str, Any], e3_id: str) -> list[str]:
@@ -552,7 +560,12 @@ def _time_range_matches(evidence: Evidence, target_date: Any) -> bool:
 
 def _metric_matches(evidence: Evidence, metric_id: Any) -> bool:
     alias = evidence.evidence_id.split(":", maxsplit=1)[1] if ":" in evidence.evidence_id else ""
-    if (alias == "E3" or alias.startswith("E3_")) and evidence.result_summary.get("signal_metric_id"):
+    if (
+        alias == "E3"
+        or alias.startswith("E3_")
+        or alias == "E_select"
+        or alias.startswith("E_select_")
+    ) and evidence.result_summary.get("signal_metric_id"):
         return True
     return evidence.query_spec.metric_id == metric_id
 

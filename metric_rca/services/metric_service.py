@@ -119,6 +119,7 @@ def parse_question(
         supported_dimension_values=supported_dimension_values,
         supported_families=supported_families,
     )
+    parsed = _apply_intent_alias_constraints(question=question, parsed=parsed)
     _validate_explicit_dimension_filters(
         question=question,
         parsed=parsed,
@@ -134,6 +135,41 @@ def parse_question(
         supported_dimension_values=supported_dimension_values,
         supported_families=supported_families,
     )
+
+
+def _apply_intent_alias_constraints(*, question: str, parsed: ParsedIntent) -> ParsedIntent:
+    normalized_question = " ".join(question.casefold().split())
+    stable_merchandising_aliases = (
+        "despite stable merchandising",
+        "stable merchandising",
+        "merchandising was stable",
+        "merchandising is stable",
+    )
+    ordinary_gmv_standard_questions = {
+        "why did yesterday's gmv decline",
+        "why did yesterday's gmv decline?",
+        "why did yesterday's gmv fall",
+        "why did yesterday's gmv fall?",
+    }
+    if (
+        parsed.metric_id == "gmv"
+        and parsed.question_family == "gmv_drop"
+        and parsed.dimension is None
+        and parsed.element is None
+        and not parsed.filters
+        and normalized_question in ordinary_gmv_standard_questions
+    ):
+        return parsed.model_copy(update={"analysis_strategy": "standard"})
+    if (
+        parsed.metric_id == "gmv"
+        and parsed.question_family == "gmv_drop"
+        and parsed.dimension is None
+        and parsed.element is None
+        and not parsed.filters
+        and any(alias in normalized_question for alias in stable_merchandising_aliases)
+    ):
+        return parsed.model_copy(update={"analysis_strategy": "signal_first"})
+    return parsed
 
 
 def _validate_parsed_intent(

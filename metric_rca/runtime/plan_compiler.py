@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from metric_rca.business.discovery_policy import DiscoveryPolicy, discovery_policy_from_intent
+from metric_rca.business.policy_registry import allowed_dimensions_validator_from_metric_definition
 from metric_rca.runtime.plan_models import CasePrior, RcaAction, RcaPlan
 from metric_rca.services.metric_contracts import ParsedIntent
 
@@ -46,10 +47,36 @@ class RcaPlanCompiler:
             )
         ]
         explicit_dimension, explicit_element = _explicit_dimension_element(parsed_intent)
+        validate_dimensions = self._allowed_dimensions_validator()
         if explicit_dimension is not None and explicit_element is not None:
-            actions.extend(_explicit_actions(parsed_intent, explicit_dimension, explicit_element, explicit_scope))
+            actions.extend(
+                _explicit_actions(
+                    parsed_intent,
+                    explicit_dimension,
+                    explicit_element,
+                    explicit_scope,
+                    validate_dimensions=validate_dimensions,
+                )
+            )
         else:
-            actions.extend(_broad_actions(parsed_intent, discovery_policy_from_intent(parsed_intent)))
+            try:
+                discovery_policy = discovery_policy_from_intent(
+                    parsed_intent,
+                    validate_dimensions=validate_dimensions,
+                )
+            except ValueError as exc:
+                raise PlanCompilerError("DISCOVERY_POLICY_INVALID", str(exc)) from exc
+            actions.extend(
+                _broad_actions(
+                    parsed_intent,
+                    _policy_with_memory_hints(
+                        parsed_intent,
+                        discovery_policy,
+                        memory_hints or [],
+                        validate_dimensions=validate_dimensions,
+                    ),
+                )
+            )
         return RcaPlan(
             run_id=run_id,
             metric_id=parsed_intent.metric_id,
@@ -58,7 +85,7 @@ class RcaPlanCompiler:
             family=self._metric_family(parsed_intent.metric_id),
             explicit_scope=explicit_scope,
             actions=actions,
-            budget=budget or {"max_steps": 8, "max_query": 12, "max_drilldown_depth": 3},
+            budget=budget or {"max_steps": 8, "max_query": 20, "max_drilldown_depth": 3},
             memory_hints=memory_hints or [],
         )
 
@@ -71,14 +98,25 @@ class RcaPlanCompiler:
             raise PlanCompilerError("METRIC_METADATA_INVALID", "metric_family must be gmv_family or rate_family")
         return str(family)
 
+    def _allowed_dimensions_validator(self):
+        if self._metric_service is None:
+            raise PlanCompilerError("METRIC_METADATA_REQUIRED", "plan compiler requires metric metadata")
+        return allowed_dimensions_validator_from_metric_definition(self._metric_service.get_metric_definition)
+
 
 def _explicit_actions(
     parsed_intent: ParsedIntent,
     dimension: str,
     element: str,
     filters: dict[str, str],
+    *,
+    validate_dimensions: Any,
 ) -> list[RcaAction]:
-    signal_type = _signal_type_for_metric_dimension(parsed_intent.metric_id, dimension)
+    signal_type = _signal_type_for_metric_dimension(
+        parsed_intent.metric_id,
+        dimension,
+        validate_dimensions=validate_dimensions,
+    )
     return [
         RcaAction(
             action_id="A2",
@@ -153,9 +191,26 @@ def _broad_actions(parsed_intent: ParsedIntent, policy: DiscoveryPolicy) -> list
     if signal_dimension is None or signal_type is None:
         raise PlanCompilerError("DISCOVERY_POLICY_MISSING", "broad RCA policy requires first signal")
     next_index = len(actions) + 2
+    selection_alias = f"E_select_{signal_dimension}"
     actions.append(
         RcaAction(
             action_id=f"A{next_index}",
+            kind="select_signal_element",
+            args={
+                "metric_id": parsed_intent.metric_id,
+                "target_date": parsed_intent.target_date,
+                "signal_type": signal_type,
+                "dimension": signal_dimension,
+                "filters": {},
+                "element_selection": policy.element_selection,
+            },
+            requires=["E1", f"E2_{signal_dimension}"],
+            produces=[selection_alias],
+        )
+    )
+    actions.append(
+        RcaAction(
+            action_id=f"A{next_index + 1}",
             kind="fetch_related_signal",
             args={
                 "metric_id": parsed_intent.metric_id,
@@ -166,14 +221,14 @@ def _broad_actions(parsed_intent: ParsedIntent, policy: DiscoveryPolicy) -> list
                 "filters": {},
                 "element_selection": policy.element_selection,
             },
-            requires=["E1", f"E2_{signal_dimension}"],
+            requires=["E1", f"E2_{signal_dimension}", selection_alias],
             produces=["E3"],
             dynamic=policy.first_signal_element is None,
         )
     )
     actions.append(
         RcaAction(
-            action_id=f"A{next_index + 1}",
+            action_id=f"A{next_index + 2}",
             kind="calculate_contribution",
             args={
                 "metric_id": parsed_intent.metric_id,
@@ -183,17 +238,17 @@ def _broad_actions(parsed_intent: ParsedIntent, policy: DiscoveryPolicy) -> list
                 "filters": {},
                 "element_selection": policy.element_selection,
             },
-            requires=["E1", f"E2_{signal_dimension}", "E3"],
+            requires=["E1", f"E2_{signal_dimension}", selection_alias, "E3"],
             produces=["E4"],
             dynamic=policy.first_signal_element is None,
         )
     )
     actions.append(
         RcaAction(
-            action_id=f"A{next_index + 2}",
+            action_id=f"A{next_index + 3}",
             kind="rank_root_causes",
             args={"metric_id": parsed_intent.metric_id, "target_date": parsed_intent.target_date},
-            requires=["E1", *[f"E2_{dimension}" for dimension in policy.required_drilldowns], "E3", "E4"],
+            requires=["E1", *[f"E2_{dimension}" for dimension in policy.required_drilldowns], selection_alias, "E3", "E4"],
             produces=["E_rank"],
         )
     )
@@ -215,10 +270,54 @@ def _explicit_dimension_element(parsed_intent: ParsedIntent) -> tuple[str | None
         return next(iter(parsed_intent.filters.items()))
     return None, None
 
-def _signal_type_for_metric_dimension(metric_id: str, dimension: str) -> str:
+
+def _policy_with_memory_hints(
+    parsed_intent: ParsedIntent,
+    policy: DiscoveryPolicy,
+    memory_hints: list[CasePrior],
+    *,
+    validate_dimensions: Any,
+) -> DiscoveryPolicy:
+    if parsed_intent.analysis_strategy != "standard":
+        return policy
+    if not memory_hints or not policy.required_drilldowns:
+        return policy
+    for hint in sorted(memory_hints, key=lambda item: item.confidence, reverse=True):
+        if hint.metric_id != parsed_intent.metric_id or hint.confidence < 0.70:
+            continue
+        preferred_signal_types = set(hint.preferred_signal_types)
+        for dimension in hint.preferred_dimensions:
+            if dimension not in policy.required_drilldowns:
+                continue
+            try:
+                signal_type = _signal_type_for_metric_dimension(
+                    parsed_intent.metric_id,
+                    dimension,
+                    validate_dimensions=validate_dimensions,
+                )
+            except PlanCompilerError:
+                continue
+            if preferred_signal_types and signal_type not in preferred_signal_types:
+                continue
+            return DiscoveryPolicy(
+                required_drilldowns=policy.required_drilldowns,
+                first_signal_dimension=dimension,
+                first_signal_type=signal_type,
+                first_signal_element=None,
+                enforce_first_signal_top_candidate=False,
+                element_selection=policy.element_selection,
+            )
+    return policy
+
+
+def _signal_type_for_metric_dimension(metric_id: str, dimension: str, *, validate_dimensions: Any = None) -> str:
     from metric_rca.business.signal_policy import select_signal_type_for_metric_dimension
 
     try:
-        return select_signal_type_for_metric_dimension(metric_id=metric_id, dimension=dimension)
+        return select_signal_type_for_metric_dimension(
+            metric_id=metric_id,
+            dimension=dimension,
+            validate_dimensions=validate_dimensions,
+        )
     except ValueError as exc:
         raise PlanCompilerError("SIGNAL_POLICY_MISSING", "signal policy missing for metric/dimension") from exc
