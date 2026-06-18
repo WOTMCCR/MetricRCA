@@ -59,6 +59,12 @@ class RcaPlanCompiler:
                     validate_dimensions=validate_dimensions,
                 )
             )
+        elif scoped_interaction_actions := _scoped_interaction_actions(
+            parsed_intent,
+            explicit_scope,
+            validate_dimensions=validate_dimensions,
+        ):
+            actions.extend(scoped_interaction_actions)
         else:
             try:
                 discovery_policy = discovery_policy_from_intent(
@@ -169,6 +175,62 @@ def _explicit_actions(
     ]
 
 
+def _scoped_interaction_actions(
+    parsed_intent: ParsedIntent,
+    explicit_scope: dict[str, str],
+    *,
+    validate_dimensions: Any,
+) -> list[RcaAction] | None:
+    if parsed_intent.question_family not in {"interaction_gmv_anomaly", "interaction_uv_anomaly"}:
+        return None
+    if not {"channel", "category"}.issubset(explicit_scope):
+        return None
+    try:
+        validate_dimensions(parsed_intent.metric_id, ("channel", "category"))
+    except ValueError as exc:
+        raise PlanCompilerError("DISCOVERY_POLICY_INVALID", str(exc)) from exc
+    policy = DiscoveryPolicy(
+        required_drilldowns=("channel", "category"),
+        first_signal_dimension="channel",
+        first_signal_type="interaction",
+        element_selection="signal_anomaly",
+    )
+    scoped_filters = {
+        "channel": _filters_except(explicit_scope, "channel"),
+        "category": _filters_except(explicit_scope, "category"),
+    }
+    actions: list[RcaAction] = []
+    for index, dimension in enumerate(policy.required_drilldowns, start=2):
+        actions.append(
+            RcaAction(
+                action_id=f"A{index}",
+                kind="drilldown_dimension",
+                args={
+                    "metric_id": parsed_intent.metric_id,
+                    "target_date": parsed_intent.target_date,
+                    "dimension": dimension,
+                    "filters": scoped_filters[dimension],
+                },
+                requires=["E1"],
+                produces=[f"E2_{dimension}"],
+            )
+        )
+    actions.extend(
+        _parallel_broad_contribution_chains(
+            parsed_intent=parsed_intent,
+            policy=policy,
+            first_action_index=len(actions) + 2,
+            validate_dimensions=validate_dimensions,
+            scoped_elements={
+                "channel": explicit_scope["channel"],
+                "category": explicit_scope["category"],
+            },
+            scoped_filters=scoped_filters,
+        )
+    )
+    return actions
+
+
 def _broad_actions(parsed_intent: ParsedIntent, policy: DiscoveryPolicy, *, validate_dimensions: Any) -> list[RcaAction]:
     if not policy.required_drilldowns:
         raise PlanCompilerError("DISCOVERY_POLICY_MISSING", "unscoped RCA requires discovery policy")
@@ -273,6 +335,8 @@ def _parallel_broad_contribution_chains(
     policy: DiscoveryPolicy,
     first_action_index: int,
     validate_dimensions: Any,
+    scoped_elements: dict[str, str] | None = None,
+    scoped_filters: dict[str, dict[str, str]] | None = None,
 ) -> list[RcaAction]:
     signal_dimension = policy.first_signal_dimension
     signal_type = policy.first_signal_type
@@ -288,6 +352,8 @@ def _parallel_broad_contribution_chains(
     next_index = first_action_index
     for dimension in chain_dimensions:
         is_primary_chain = dimension == signal_dimension
+        chain_filters = dict(scoped_filters.get(dimension, {}) if scoped_filters else {})
+        scoped_element = scoped_elements.get(dimension) if scoped_elements else None
         chain_signal_type = (
             signal_type
             if is_primary_chain or signal_type == "interaction"
@@ -298,7 +364,12 @@ def _parallel_broad_contribution_chains(
             )
         )
         element_selection = policy.element_selection if is_primary_chain else "top_candidate"
-        first_signal_element = policy.first_signal_element if is_primary_chain else None
+        if scoped_element is not None:
+            first_signal_element = scoped_element
+        elif is_primary_chain:
+            first_signal_element = policy.first_signal_element
+        else:
+            first_signal_element = None
         selection_alias = f"E_select_{dimension}"
         e3_alias = e3_alias_for_dimension(dimension) or f"E3_{dimension}"
         e4_alias = f"E4_{dimension}"
@@ -312,7 +383,7 @@ def _parallel_broad_contribution_chains(
                         "target_date": parsed_intent.target_date,
                         "signal_type": chain_signal_type,
                         "dimension": dimension,
-                        "filters": {},
+                        "filters": chain_filters,
                         "element_selection": element_selection,
                     },
                     requires=["E1", f"E2_{dimension}"],
@@ -327,7 +398,7 @@ def _parallel_broad_contribution_chains(
                         "signal_type": chain_signal_type,
                         "dimension": dimension,
                         "element": first_signal_element,
-                        "filters": {},
+                        "filters": chain_filters,
                         "element_selection": element_selection,
                     },
                     requires=["E1", f"E2_{dimension}", selection_alias],
@@ -342,7 +413,7 @@ def _parallel_broad_contribution_chains(
                         "target_date": parsed_intent.target_date,
                         "dimension": dimension,
                         "element": first_signal_element,
-                        "filters": {},
+                        "filters": chain_filters,
                         "element_selection": element_selection,
                         "evidence_alias": e4_alias,
                     },
@@ -385,6 +456,10 @@ def _parallel_broad_contribution_chains(
         )
     )
     return actions
+
+
+def _filters_except(filters: dict[str, str], excluded_dimension: str) -> dict[str, str]:
+    return {dimension: element for dimension, element in filters.items() if dimension != excluded_dimension}
 
 
 def _plan_budget(actions: list[RcaAction], budget: dict[str, int] | None) -> dict[str, int]:

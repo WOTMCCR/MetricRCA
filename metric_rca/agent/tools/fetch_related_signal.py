@@ -83,11 +83,12 @@ def fetch_related_signal(
             "QUERY_SPEC_INVALID",
             f"signal_type must be {expected_signal_type} for metric_id={args.metric_id} dimension={args.dimension}",
         )
-    if args.filters and {str(key): str(value) for key, value in args.filters.items()} != {args.dimension: args.element}:
+    filters = {str(key): str(value) for key, value in args.filters.items()}
+    if filters.get(args.dimension) not in {None, args.element}:
         return tool_error(
             action,
             "QUERY_SPEC_INVALID",
-            "filters must be empty or exactly match the selected signal dimension/element",
+            "filters conflict with selected signal dimension/element",
         )
     existing = _existing_signal_result(args, repository=repository)
     if existing is not None:
@@ -97,7 +98,7 @@ def fetch_related_signal(
     signal_metric_id = _signal_metric_id(args.metric_id, args.signal_type, settings=settings)
     if signal_metric_id is None:
         return tool_error(action, "CONFIG_INVALID", f"signal metric missing: {args.signal_type}")
-    filters = {args.dimension: args.element}
+    filters = {**filters, args.dimension: args.element}
     signal_hint = "campaign" if args.signal_type == "campaign" else "metric"
     try:
         metric_definition = metric_service.get_metric_definition(signal_metric_id)
@@ -143,6 +144,7 @@ def fetch_related_signal(
         "signal_metric_id": signal_metric_id,
         "dimension": args.dimension,
         "element": args.element,
+        "filters": filters,
         "input_evidence_ids": args.evidence_ids,
         "query_sources": query_sources(current_plan=current_plan, baseline_plan=baseline_plan),
         **signal.result_summary,

@@ -213,6 +213,36 @@ def test_plan_compiler_builds_cross_dimension_interaction_chains(metric_id: str,
     assert merge_action.args["source_evidence_aliases"] == ["E4_channel", "E4_category"]
 
 
+def test_plan_compiler_builds_scoped_channel_category_interaction_chains() -> None:
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date=date(2026, 5, 31),
+        question_family="interaction_gmv_anomaly",
+        analysis_strategy="standard",
+        filters={"channel": "paid_ads", "category": "electronics"},
+    )
+
+    plan = _compiler().compile(run_id="run-1", parsed_intent=parsed)
+
+    drilldowns = [action for action in plan.actions if action.kind == "drilldown_dimension"]
+    signal_actions = [action for action in plan.actions if action.kind == "fetch_related_signal"]
+    contribution_actions = [action for action in plan.actions if action.kind == "calculate_contribution"]
+    merge_action = next(action for action in plan.actions if action.kind == "merge_contribution_sets")
+
+    assert plan.explicit_scope == {"channel": "paid_ads", "category": "electronics"}
+    assert [action.args["dimension"] for action in drilldowns] == ["channel", "category"]
+    assert drilldowns[0].args["filters"] == {"category": "electronics"}
+    assert drilldowns[1].args["filters"] == {"channel": "paid_ads"}
+    assert [action.args["dimension"] for action in signal_actions] == ["channel", "category"]
+    assert all(action.args["signal_type"] == "interaction" for action in signal_actions)
+    assert signal_actions[0].args["element"] == "paid_ads"
+    assert signal_actions[0].args["filters"] == {"category": "electronics"}
+    assert signal_actions[1].args["element"] == "electronics"
+    assert signal_actions[1].args["filters"] == {"channel": "paid_ads"}
+    assert [action.args["element"] for action in contribution_actions] == ["paid_ads", "electronics"]
+    assert merge_action.args["source_evidence_aliases"] == ["E4_channel", "E4_category"]
+
+
 def test_plan_compiler_uses_memory_prior_to_change_discovery_signal_dimension() -> None:
     parsed = ParsedIntent(
         metric_id="gmv",

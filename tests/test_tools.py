@@ -854,6 +854,36 @@ def test_fetch_related_signal_rejects_filters_that_conflict_with_selected_elemen
     assert repo.evidence_rows == []
 
 
+def test_fetch_related_signal_accepts_complementary_interaction_filters() -> None:
+    repo = SpyRepository()
+    repo.seed_e2_family("E2_channel")
+
+    result = fetch_related_signal(
+        FetchRelatedSignalArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            signal_type="interaction",
+            dimension="channel",
+            element="paid_ads",
+            filters={"category": "electronics"},
+            evidence_ids=["run-1:E1", "run-1:E2_channel"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is True
+    assert result.evidence_alias == "E3_ch_paid_ads"
+    assert result.evidences[0].result_summary["filters"] == {
+        "category": "electronics",
+        "channel": "paid_ads",
+    }
+    assert len(repo.executed) == 2
+    assert all(plan.params["filter_channel"] == "paid_ads" for plan in repo.executed)
+    assert all(plan.params["filter_category"] == "electronics" for plan in repo.executed)
+
+
 def test_fetch_related_signal_accepts_e2_family_alias_and_hints_missing_e1() -> None:
     repo = SpyRepository()
     repo.persisted_evidence.pop("run-1:E2")
