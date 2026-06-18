@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 
-KNOWN_ASPECTS = frozenset({"intent", "execution", "evidence", "memory", "outcome"})
+KNOWN_ASPECTS = frozenset({"intent", "execution", "evidence", "memory", "outcome", "multi_cause_outcome"})
 NO_ANOMALY_FORBIDDEN_TOOLS = frozenset(
     {"drilldown_dimension", "fetch_related_signal", "calculate_contribution", "rank_root_causes"}
 )
@@ -20,6 +20,7 @@ ASPECT_REQUIRED_KEYS: dict[str, tuple[str, ...]] = {
     "evidence": ("chain",),
     "memory": ("influence",),
     "outcome": ("root_cause_type",),
+    "multi_cause_outcome": ("root_causes", "top3_ok"),
 }
 
 
@@ -97,6 +98,13 @@ def validate_prediction(pred: AspectPrediction) -> list[str]:
         warnings.append(
             "aspect 'execution' missing one of 'step_count', 'tool_sequence', or 'critical_decisions'"
         )
+    if pred.aspect == "multi_cause_outcome":
+        root_causes = pred.prediction.get("root_causes")
+        if "root_causes" in pred.prediction and not isinstance(root_causes, list):
+            warnings.append("aspect 'multi_cause_outcome' key 'root_causes' must be a list")
+        top3_ok = pred.prediction.get("top3_ok")
+        if "top3_ok" in pred.prediction and not isinstance(top3_ok, bool):
+            warnings.append("aspect 'multi_cause_outcome' key 'top3_ok' must be a boolean")
     if not 0.0 <= pred.confidence <= 1.0:
         warnings.append(f"confidence {pred.confidence} outside [0.0, 1.0]")
     return warnings

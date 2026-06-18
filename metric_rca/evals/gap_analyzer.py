@@ -295,6 +295,58 @@ def _analyze_outcome(pred: AspectPrediction, actual: dict[str, Any]) -> AspectGa
     )
 
 
+def _analyze_multi_cause_outcome(pred: AspectPrediction, actual: dict[str, Any]) -> AspectGap:
+    actual_top3 = bool(actual.get("top3_ok", actual.get("top3_contains_all_major_causes", 0)))
+    actual_recall = float(actual.get("root_cause_set_recall", 0.0) or 0.0)
+    actual_weighted_coverage = float(actual.get("weighted_explanation_coverage", 0.0) or 0.0)
+    actual_all_major = bool(actual.get("top3_contains_all_major_causes", actual.get("top3_ok", 0)))
+    actual_data = {
+        "top3_ok": actual_top3,
+        "top3_contains_all_major_causes": actual_all_major,
+        "root_cause_set_recall": actual_recall,
+        "weighted_explanation_coverage": actual_weighted_coverage,
+    }
+    predicted_top3 = pred.prediction.get("top3_ok")
+    if predicted_top3 is True and not actual_top3:
+        return AspectGap(
+            case_id=pred.case_id,
+            aspect="multi_cause_outcome",
+            divergence=DIVERGENCE_COMPLEXITY_GAP,
+            predicted=pred.prediction,
+            actual=actual_data,
+            detail="predicted multi-cause top3 pass but actual fail",
+        )
+    if predicted_top3 is True and (actual_recall < 0.85 or actual_weighted_coverage < 0.85):
+        return AspectGap(
+            case_id=pred.case_id,
+            aspect="multi_cause_outcome",
+            divergence=DIVERGENCE_COMPLEXITY_GAP,
+            predicted=pred.prediction,
+            actual=actual_data,
+            detail=(
+                "predicted complete multi-cause set but actual recall or weighted coverage "
+                f"is below threshold (recall={actual_recall}, weighted={actual_weighted_coverage})"
+            ),
+        )
+    if predicted_top3 is False and actual_top3:
+        return AspectGap(
+            case_id=pred.case_id,
+            aspect="multi_cause_outcome",
+            divergence=DIVERGENCE_OVERFIT,
+            predicted=pred.prediction,
+            actual=actual_data,
+            detail="predicted multi-cause top3 fail but actual pass",
+        )
+    return AspectGap(
+        case_id=pred.case_id,
+        aspect="multi_cause_outcome",
+        divergence=DIVERGENCE_CORRECT,
+        predicted=pred.prediction,
+        actual=actual_data,
+        detail="multi-cause outcome matches prediction",
+    )
+
+
 def _analyze_unknown(pred: AspectPrediction, actual: dict[str, Any]) -> AspectGap:
     return AspectGap(
         case_id=pred.case_id, aspect=pred.aspect,
@@ -310,6 +362,7 @@ _ASPECT_ANALYZERS: dict[str, Any] = {
     "evidence": _analyze_evidence,
     "memory": _analyze_memory,
     "outcome": _analyze_outcome,
+    "multi_cause_outcome": _analyze_multi_cause_outcome,
 }
 
 

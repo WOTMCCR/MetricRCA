@@ -115,6 +115,40 @@ def test_eval_require_predictions_fails_before_running_cases(tmp_path: Path) -> 
     assert repo.eval_run_updates == []
 
 
+def test_eval_cli_default_does_not_require_predictions(monkeypatch: pytest.MonkeyPatch) -> None:
+    from metric_rca.evals import runner as runner_module
+
+    captured: dict[str, Any] = {}
+
+    def fake_run_eval(**kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {"summary": {"thresholds_met": True}}
+
+    monkeypatch.setattr(runner_module, "run_eval", fake_run_eval)
+    monkeypatch.setattr("sys.argv", ["runner", "--stream", "--eval-id", "ptv-round-01"])
+
+    assert runner_module.main() == 0
+    assert captured["eval_id"] == "ptv-round-01"
+    assert captured["require_predictions"] is False
+
+
+def test_eval_cli_can_still_require_predictions_explicitly(monkeypatch: pytest.MonkeyPatch) -> None:
+    from metric_rca.evals import runner as runner_module
+
+    captured: dict[str, Any] = {}
+
+    def fake_run_eval(**kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {"summary": {"thresholds_met": True}}
+
+    monkeypatch.setattr(runner_module, "run_eval", fake_run_eval)
+    monkeypatch.setattr("sys.argv", ["runner", "--eval-id", "eval-legacy", "--require-predictions"])
+
+    assert runner_module.main() == 0
+    assert captured["eval_id"] == "eval-legacy"
+    assert captured["require_predictions"] is True
+
+
 def test_eval_loader_defaults_to_public_regression_cases_without_expected_fields() -> None:
     cases = load_cases()
     public_rows = _read_jsonl(PUBLIC_CASES_PATH)

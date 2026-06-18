@@ -528,6 +528,12 @@ def main() -> int:
     parser.add_argument("--stream", action="store_true", default=False, help="emit per-case JSONL to stdout")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--eval-id", type=str, default=None)
+    parser.add_argument(
+        "--require-predictions",
+        action="store_true",
+        default=False,
+        help="fail before eval if predictions.jsonl is missing",
+    )
     args = parser.parse_args()
 
     def _stream_callback(score: dict[str, Any]) -> None:
@@ -538,7 +544,7 @@ def main() -> int:
             output_dir=args.output_dir,
             eval_id=args.eval_id,
             on_case_complete=_stream_callback if args.stream else None,
-            require_predictions=True,
+            require_predictions=args.require_predictions,
         )
     except EvalRuntimeError as exc:
         print(json.dumps({"error_code": exc.code, "message": str(exc)}, ensure_ascii=False))
