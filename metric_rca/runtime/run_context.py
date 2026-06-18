@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from metric_rca.runtime.dependencies import RuntimeRepository
+from metric_rca.runtime.plan_models import ScopeMode
 
 
 def _default_budget() -> dict[str, int]:
@@ -18,6 +19,7 @@ class RunContext:
     metric_id: str
     target_date: date
     explicit_scope: dict[str, str] = field(default_factory=dict)
+    scope_mode: ScopeMode = "unscoped"
     budget: dict[str, int] = field(default_factory=_default_budget)
     repository: RuntimeRepository | None = None
     step_count: int = 0

@@ -6,6 +6,7 @@ from metric_rca.business.policy_registry import (
     DEFAULT_POLICY_REGISTRY,
     GMV_DISCOVERY_REQUIRED_DRILLDOWNS,
     AllowedDimensionsValidator,
+    DiscoveryLane,
     DiscoveryPolicy,
     MetricPolicyRegistry,
     discovery_policy_from_intent as _discovery_policy_from_intent,
@@ -28,6 +29,7 @@ def discovery_policy_from_intent(
 
 __all__ = [
     "DiscoveryPolicy",
+    "DiscoveryLane",
     "GMV_DISCOVERY_REQUIRED_DRILLDOWNS",
     "discovery_policy_from_intent",
 ]

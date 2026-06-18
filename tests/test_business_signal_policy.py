@@ -251,6 +251,45 @@ def test_interaction_discovery_policy_enables_cross_dimension_analysis(metric_id
     assert policy.element_selection == "signal_anomaly"
 
 
+def test_pay_cvr_discovery_policy_uses_channel_and_device_conversion_lanes() -> None:
+    parsed = ParsedIntent(
+        metric_id="pay_cvr",
+        target_date="2026-05-28",
+        question_family="pay_cvr_drop",
+        analysis_strategy="standard",
+    )
+
+    policy = discovery_policy_from_intent(parsed)
+
+    assert policy.required_drilldowns == ("channel", "device")
+    assert policy.first_signal_dimension == "channel"
+    assert policy.first_signal_type == "conversion"
+
+
+def test_net_gmv_explicit_channel_policy_declares_multi_driver_lanes() -> None:
+    parsed = ParsedIntent(
+        metric_id="net_gmv",
+        target_date="2026-05-29",
+        question_family="net_gmv_drop",
+        analysis_strategy="standard",
+        dimension="channel",
+        element="paid_ads",
+    )
+
+    policy = discovery_policy_from_intent(parsed)
+
+    assert policy.scope_mode == "explicit_multi_driver"
+    assert policy.required_drilldowns == ("channel", "category")
+    assert [
+        (lane.dimension, lane.signal_type, lane.element_binding, lane.evidence_alias)
+        for lane in policy.lanes
+    ] == [
+        ("channel", "campaign", "explicit_scope", "E4_channel"),
+        ("category", "inventory", "dynamic", "E4_category"),
+        ("channel", "conversion", "dynamic", "E4_channel_conversion"),
+    ]
+
+
 def test_factor_graph_policy_reads_registry() -> None:
     registry = MetricPolicyRegistry(
         signal_policies=(),
@@ -310,6 +349,22 @@ def test_root_cause_policy_reads_registry_and_validates_dimensions() -> None:
             signal_type="refund_quality",
         )
         == "complaint_or_quality_issue"
+    )
+    assert (
+        root_cause_type_for_metric_dimension(
+            metric_id="net_gmv",
+            dimension="category",
+            signal_type="inventory",
+        )
+        == "stockout"
+    )
+    assert (
+        root_cause_type_for_metric_dimension(
+            metric_id="net_gmv",
+            dimension="channel",
+            signal_type="conversion",
+        )
+        == "conversion_drop"
     )
     assert root_cause_type_for_metric_dimension(metric_id="net_gmv", dimension="channel") == "campaign_traffic_drop"
 

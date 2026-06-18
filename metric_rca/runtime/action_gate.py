@@ -94,12 +94,36 @@ def _explicit_scope_error(ctx: RunContext, action: RcaAction) -> str | None:
         if filters.get(dimension) != element:
             return f"explicit question scope requires filters.{dimension}={element}"
         return None
+    if ctx.scope_mode == "explicit_multi_driver":
+        return _explicit_multi_driver_scope_error(dimension, element, action, filters)
     if action.args.get("dimension") != dimension:
         return f"explicit question scope requires dimension={dimension}"
     if action.kind in {"fetch_related_signal", "calculate_contribution"} and str(action.args.get("element")) != element:
         return f"explicit question scope requires element={element}"
     if action.kind in {"drilldown_dimension", "calculate_contribution"} and filters.get(dimension) != element:
         return f"explicit question scope requires filters.{dimension}={element}"
+    return None
+
+
+def _explicit_multi_driver_scope_error(
+    dimension: str,
+    element: str,
+    action: RcaAction,
+    filters: dict[str, str],
+) -> str | None:
+    filtered_element = filters.get(dimension)
+    if filtered_element is not None and filtered_element != element:
+        return (
+            f"action {action.action_id} filters.{dimension}={filtered_element} "
+            f"contradicts explicit question scope {dimension}={element}"
+        )
+    if (
+        action.kind in {"fetch_related_signal", "calculate_contribution"}
+        and action.args.get("dimension") == dimension
+        and filtered_element == element
+        and action.args.get("element") not in {None, element}
+    ):
+        return f"action {action.action_id} conflicts with explicit question scope {dimension}={element}"
     return None
 
 

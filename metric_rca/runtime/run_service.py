@@ -81,6 +81,7 @@ class RunService:
                     metric_id=parsed_intent.metric_id,
                     target_date=parsed_intent.target_date,
                     explicit_scope=plan.explicit_scope,
+                    scope_mode=plan.scope_mode,
                     budget=plan.budget,
                     repository=self.dependencies.repository,
                 ),

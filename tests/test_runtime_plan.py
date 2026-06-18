@@ -101,6 +101,28 @@ def test_plan_compiler_builds_refund_discovery_even_with_nonstandard_strategy() 
     assert signal_action.dynamic is True
 
 
+def test_plan_compiler_builds_pay_cvr_channel_first_multi_signal_discovery() -> None:
+    parsed = ParsedIntent(
+        metric_id="pay_cvr",
+        target_date=date(2026, 5, 28),
+        question_family="pay_cvr_drop",
+        analysis_strategy="standard",
+    )
+
+    plan = _compiler(family="rate_family").compile(run_id="run-1", parsed_intent=parsed)
+
+    drilldowns = [action.args.get("dimension") for action in plan.actions if action.kind == "drilldown_dimension"]
+    signal_actions = [action for action in plan.actions if action.kind == "fetch_related_signal"]
+    contribution_actions = [action for action in plan.actions if action.kind == "calculate_contribution"]
+    merge_action = next(action for action in plan.actions if action.kind == "merge_contribution_sets")
+
+    assert drilldowns == ["channel", "device"]
+    assert [action.args["dimension"] for action in signal_actions] == ["channel", "device"]
+    assert all(action.args["signal_type"] == "conversion" for action in signal_actions)
+    assert [action.args["dimension"] for action in contribution_actions] == ["channel", "device"]
+    assert merge_action.args["source_evidence_aliases"] == ["E4_channel", "E4_device"]
+
+
 def test_plan_compiler_builds_broad_gmv_product_first_with_all_required_drilldowns() -> None:
     parsed = ParsedIntent(
         metric_id="gmv",
@@ -241,6 +263,47 @@ def test_plan_compiler_builds_scoped_channel_category_interaction_chains() -> No
     assert signal_actions[1].args["filters"] == {"channel": "paid_ads"}
     assert [action.args["element"] for action in contribution_actions] == ["paid_ads", "electronics"]
     assert merge_action.args["source_evidence_aliases"] == ["E4_channel", "E4_category"]
+
+
+def test_plan_compiler_expands_net_gmv_paid_ads_slice_to_multi_driver_discovery() -> None:
+    parsed = ParsedIntent(
+        metric_id="net_gmv",
+        target_date=date(2026, 5, 29),
+        question_family="net_gmv_drop",
+        analysis_strategy="standard",
+        dimension="channel",
+        element="paid_ads",
+    )
+
+    plan = _compiler().compile(run_id="run-1", parsed_intent=parsed)
+
+    drilldowns = [action for action in plan.actions if action.kind == "drilldown_dimension"]
+    selections = [action for action in plan.actions if action.kind == "select_signal_element"]
+    signal_actions = [action for action in plan.actions if action.kind == "fetch_related_signal"]
+    contribution_actions = [action for action in plan.actions if action.kind == "calculate_contribution"]
+    merge_action = next(action for action in plan.actions if action.kind == "merge_contribution_sets")
+
+    assert plan.explicit_scope == {"channel": "paid_ads"}
+    assert [action.args["dimension"] for action in drilldowns] == ["channel", "category"]
+    assert [action.args["filters"] for action in drilldowns] == [{}, {}]
+    assert [(action.args["dimension"], action.args["signal_type"]) for action in selections] == [
+        ("category", "inventory"),
+        ("channel", "conversion"),
+    ]
+    assert [(action.args["dimension"], action.args["signal_type"], action.args["element"]) for action in signal_actions] == [
+        ("channel", "campaign", "paid_ads"),
+        ("category", "inventory", None),
+        ("channel", "conversion", None),
+    ]
+    assert [action.dynamic for action in signal_actions] == [False, True, True]
+    assert [(action.args["dimension"], action.args["element"], action.args["evidence_alias"]) for action in contribution_actions] == [
+        ("channel", "paid_ads", "E4_channel"),
+        ("category", None, "E4_category"),
+        ("channel", None, "E4_channel_conversion"),
+    ]
+    assert merge_action.args["source_evidence_aliases"] == ["E4_channel", "E4_category", "E4_channel_conversion"]
+    assert plan.scope_mode == "explicit_multi_driver"
+    assert "metric_rca/runtime/ranking.py" not in str(plan.model_dump(mode="json"))
 
 
 def test_plan_compiler_uses_memory_prior_to_change_discovery_signal_dimension() -> None:

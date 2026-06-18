@@ -16,6 +16,8 @@ from metric_rca.domain.enums import DimensionId, MetricId, RootCauseType
 SignalType = Literal["campaign", "inventory", "conversion", "refund_quality", "interaction"]
 ElementSelection = Literal["top_candidate", "signal_anomaly", "signal_level"]
 FactorGraphType = Literal["uv_pay_cvr_aov", "net_gmv_chain", "dimension_delta"]
+DiscoveryScopeMode = Literal["unscoped", "explicit_single", "explicit_multi_driver"]
+LaneElementBinding = Literal["dynamic", "explicit_scope", "policy"]
 AllowedDimensionsValidator = Callable[[str, tuple[str, ...]], None]
 MetricDefinitionProvider = Callable[[str], Any]
 
@@ -43,6 +45,16 @@ class MetricSignalPolicy:
 
 
 @dataclass(frozen=True)
+class DiscoveryLane:
+    dimension: str
+    signal_type: SignalType
+    element_binding: LaneElementBinding = "dynamic"
+    element: str | None = None
+    element_selection: ElementSelection = "top_candidate"
+    evidence_alias: str | None = None
+
+
+@dataclass(frozen=True)
 class DiscoveryPolicy:
     required_drilldowns: tuple[str, ...] = ()
     first_signal_dimension: str | None = None
@@ -50,6 +62,9 @@ class DiscoveryPolicy:
     first_signal_element: str | None = None
     enforce_first_signal_top_candidate: bool = False
     element_selection: ElementSelection = "top_candidate"
+    scope_mode: DiscoveryScopeMode = "unscoped"
+    explicit_scope_dimensions: tuple[str, ...] = ()
+    lanes: tuple[DiscoveryLane, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -63,6 +78,9 @@ class DiscoveryPolicyRule:
     first_signal_element: str | None = None
     enforce_first_signal_top_candidate: bool = False
     element_selection: ElementSelection = "top_candidate"
+    scope_mode: DiscoveryScopeMode = "unscoped"
+    explicit_scope_dimensions: tuple[str, ...] = ()
+    lanes: tuple[DiscoveryLane, ...] = ()
 
     def to_policy(self) -> DiscoveryPolicy:
         return DiscoveryPolicy(
@@ -72,6 +90,9 @@ class DiscoveryPolicyRule:
             first_signal_element=self.first_signal_element,
             enforce_first_signal_top_candidate=self.enforce_first_signal_top_candidate,
             element_selection=self.element_selection,
+            scope_mode=self.scope_mode,
+            explicit_scope_dimensions=self.explicit_scope_dimensions,
+            lanes=self.lanes,
         )
 
 
@@ -223,6 +244,11 @@ DEFAULT_SIGNAL_POLICIES: tuple[MetricSignalPolicy, ...] = (
     ),
     MetricSignalPolicy(
         metric_id=MetricId.NET_GMV.value,
+        dimension=DimensionId.CATEGORY.value,
+        signal_type="inventory",
+    ),
+    MetricSignalPolicy(
+        metric_id=MetricId.NET_GMV.value,
         dimension=DimensionId.PRODUCT.value,
         signal_type="refund_quality",
     ),
@@ -267,6 +293,18 @@ DEFAULT_SIGNAL_POLICIES: tuple[MetricSignalPolicy, ...] = (
         metric_id=MetricId.NET_GMV.value,
         dimension=DimensionId.CHANNEL.value,
         signal_type="campaign",
+    ),
+    MetricSignalPolicy(
+        root_cause_type=RootCauseType.CONVERSION_DROP.value,
+        metric_id=MetricId.NET_GMV.value,
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="conversion",
+    ),
+    MetricSignalPolicy(
+        root_cause_type=RootCauseType.STOCKOUT.value,
+        metric_id=MetricId.NET_GMV.value,
+        dimension=DimensionId.CATEGORY.value,
+        signal_type="inventory",
     ),
     MetricSignalPolicy(
         root_cause_type=RootCauseType.CAMPAIGN_TRAFFIC_DROP.value,
@@ -374,10 +412,40 @@ DEFAULT_DISCOVERY_POLICY_RULES: tuple[DiscoveryPolicyRule, ...] = (
         metric_id=MetricId.PAY_CVR.value,
         question_family=None,
         analysis_strategy=None,
-        required_drilldowns=(DimensionId.DEVICE.value,),
-        first_signal_dimension=DimensionId.DEVICE.value,
+        required_drilldowns=(DimensionId.CHANNEL.value, DimensionId.DEVICE.value),
+        first_signal_dimension=DimensionId.CHANNEL.value,
         first_signal_type="conversion",
         enforce_first_signal_top_candidate=True,
+    ),
+    DiscoveryPolicyRule(
+        metric_id=MetricId.NET_GMV.value,
+        question_family="net_gmv_drop",
+        analysis_strategy="standard",
+        required_drilldowns=(DimensionId.CHANNEL.value, DimensionId.CATEGORY.value),
+        first_signal_dimension=DimensionId.CHANNEL.value,
+        first_signal_type="campaign",
+        scope_mode="explicit_multi_driver",
+        explicit_scope_dimensions=(DimensionId.CHANNEL.value,),
+        lanes=(
+            DiscoveryLane(
+                dimension=DimensionId.CHANNEL.value,
+                signal_type="campaign",
+                element_binding="explicit_scope",
+                evidence_alias="E4_channel",
+            ),
+            DiscoveryLane(
+                dimension=DimensionId.CATEGORY.value,
+                signal_type="inventory",
+                element_binding="dynamic",
+                evidence_alias="E4_category",
+            ),
+            DiscoveryLane(
+                dimension=DimensionId.CHANNEL.value,
+                signal_type="conversion",
+                element_binding="dynamic",
+                evidence_alias="E4_channel_conversion",
+            ),
+        ),
     ),
     DiscoveryPolicyRule(
         metric_id=MetricId.REFUND_RATE.value,
@@ -575,6 +643,18 @@ DEFAULT_ROOT_CAUSE_POLICIES: tuple[RootCausePolicy, ...] = (
     RootCausePolicy(
         metric_id=MetricId.NET_GMV.value,
         dimension=DimensionId.CHANNEL.value,
+        root_cause_type=RootCauseType.CONVERSION_DROP.value,
+        signal_type="conversion",
+    ),
+    RootCausePolicy(
+        metric_id=MetricId.NET_GMV.value,
+        dimension=DimensionId.CATEGORY.value,
+        root_cause_type=RootCauseType.STOCKOUT.value,
+        signal_type="inventory",
+    ),
+    RootCausePolicy(
+        metric_id=MetricId.NET_GMV.value,
+        dimension=DimensionId.CHANNEL.value,
         root_cause_type=RootCauseType.COMPLAINT_OR_QUALITY_ISSUE.value,
         signal_type="refund_quality",
     ),
@@ -709,6 +789,18 @@ def discovery_policy_from_intent(
     scoped_dimensions = _parsed_scope_dimensions(parsed_intent)
     if scoped_dimensions:
         _validate_dimensions(validate_dimensions, parsed_intent.metric_id, scoped_dimensions)
+        policy = registry.discovery_policy(
+            metric_id=parsed_intent.metric_id,
+            question_family=parsed_intent.question_family,
+            analysis_strategy=parsed_intent.analysis_strategy,
+        )
+        if (
+            policy.scope_mode == "explicit_multi_driver"
+            and policy.explicit_scope_dimensions
+            and set(scoped_dimensions).issubset(set(policy.explicit_scope_dimensions))
+        ):
+            _validate_dimensions(validate_dimensions, parsed_intent.metric_id, _policy_dimensions(policy))
+            return policy
         return DiscoveryPolicy()
     policy = registry.discovery_policy(
         metric_id=parsed_intent.metric_id,
@@ -785,6 +877,7 @@ def _policy_dimensions(policy: DiscoveryPolicy) -> tuple[str, ...]:
     dimensions: list[str] = [*policy.required_drilldowns]
     if policy.first_signal_dimension is not None:
         dimensions.append(policy.first_signal_dimension)
+    dimensions.extend(lane.dimension for lane in policy.lanes)
     return _ordered_unique(tuple(dimensions))
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from metric_rca.agent.evidence_aliases import e3_alias_for_dimension
-from metric_rca.business.discovery_policy import DiscoveryPolicy, discovery_policy_from_intent
+from metric_rca.business.discovery_policy import DiscoveryLane, DiscoveryPolicy, discovery_policy_from_intent
 from metric_rca.business.policy_registry import allowed_dimensions_validator_from_metric_definition
 from metric_rca.runtime.plan_models import CasePrior, RcaAction, RcaPlan
 from metric_rca.services.metric_contracts import ParsedIntent
@@ -49,30 +49,39 @@ class RcaPlanCompiler:
         ]
         explicit_dimension, explicit_element = _explicit_dimension_element(parsed_intent)
         validate_dimensions = self._allowed_dimensions_validator()
+        scope_mode = "unscoped"
         if explicit_dimension is not None and explicit_element is not None:
-            actions.extend(
-                _explicit_actions(
-                    parsed_intent,
-                    explicit_dimension,
-                    explicit_element,
-                    explicit_scope,
-                    validate_dimensions=validate_dimensions,
+            discovery_policy = _discovery_policy_for_intent(parsed_intent, validate_dimensions=validate_dimensions)
+            if discovery_policy.scope_mode == "explicit_multi_driver":
+                actions.extend(
+                    _discovery_actions(
+                        parsed_intent,
+                        discovery_policy,
+                        validate_dimensions=validate_dimensions,
+                        explicit_scope=explicit_scope,
+                    )
                 )
-            )
+                scope_mode = "explicit_multi_driver"
+            else:
+                actions.extend(
+                    _explicit_actions(
+                        parsed_intent,
+                        explicit_dimension,
+                        explicit_element,
+                        explicit_scope,
+                        validate_dimensions=validate_dimensions,
+                    )
+                )
+                scope_mode = "explicit_single"
         elif scoped_interaction_actions := _scoped_interaction_actions(
             parsed_intent,
             explicit_scope,
             validate_dimensions=validate_dimensions,
         ):
             actions.extend(scoped_interaction_actions)
+            scope_mode = "scoped_interaction"
         else:
-            try:
-                discovery_policy = discovery_policy_from_intent(
-                    parsed_intent,
-                    validate_dimensions=validate_dimensions,
-                )
-            except ValueError as exc:
-                raise PlanCompilerError("DISCOVERY_POLICY_INVALID", str(exc)) from exc
+            discovery_policy = _discovery_policy_for_intent(parsed_intent, validate_dimensions=validate_dimensions)
             actions.extend(
                 _broad_actions(
                     parsed_intent,
@@ -92,6 +101,7 @@ class RcaPlanCompiler:
             question_family=parsed_intent.question_family,
             family=self._metric_family(parsed_intent.metric_id),
             explicit_scope=explicit_scope,
+            scope_mode=scope_mode,
             actions=actions,
             budget=_plan_budget(actions, budget),
             memory_hints=memory_hints or [],
@@ -173,6 +183,53 @@ def _explicit_actions(
             produces=["E_rank"],
         ),
     ]
+
+
+def _discovery_policy_for_intent(parsed_intent: ParsedIntent, *, validate_dimensions: Any) -> DiscoveryPolicy:
+    try:
+        return discovery_policy_from_intent(
+            parsed_intent,
+            validate_dimensions=validate_dimensions,
+        )
+    except ValueError as exc:
+        raise PlanCompilerError("DISCOVERY_POLICY_INVALID", str(exc)) from exc
+
+
+def _discovery_actions(
+    parsed_intent: ParsedIntent,
+    policy: DiscoveryPolicy,
+    *,
+    validate_dimensions: Any,
+    explicit_scope: dict[str, str] | None = None,
+) -> list[RcaAction]:
+    if not policy.required_drilldowns:
+        raise PlanCompilerError("DISCOVERY_POLICY_MISSING", "discovery policy requires drilldowns")
+    actions: list[RcaAction] = []
+    for index, dimension in enumerate(policy.required_drilldowns, start=2):
+        actions.append(
+            RcaAction(
+                action_id=f"A{index}",
+                kind="drilldown_dimension",
+                args={
+                    "metric_id": parsed_intent.metric_id,
+                    "target_date": parsed_intent.target_date,
+                    "dimension": dimension,
+                    "filters": {},
+                },
+                requires=["E1"],
+                produces=[f"E2_{dimension}"],
+            )
+        )
+    actions.extend(
+        _parallel_broad_contribution_chains(
+            parsed_intent=parsed_intent,
+            policy=policy,
+            first_action_index=len(actions) + 2,
+            validate_dimensions=validate_dimensions,
+            explicit_scope=explicit_scope,
+        )
+    )
+    return actions
 
 
 def _scoped_interaction_actions(
@@ -337,94 +394,100 @@ def _parallel_broad_contribution_chains(
     validate_dimensions: Any,
     scoped_elements: dict[str, str] | None = None,
     scoped_filters: dict[str, dict[str, str]] | None = None,
+    explicit_scope: dict[str, str] | None = None,
 ) -> list[RcaAction]:
-    signal_dimension = policy.first_signal_dimension
-    signal_type = policy.first_signal_type
-    if signal_dimension is None or signal_type is None:
-        raise PlanCompilerError("DISCOVERY_POLICY_MISSING", "broad RCA policy requires first signal")
-
-    chain_dimensions = [
-        signal_dimension,
-        *[dimension for dimension in policy.required_drilldowns if dimension != signal_dimension],
-    ]
+    lanes = _discovery_lanes(
+        parsed_intent=parsed_intent,
+        policy=policy,
+        validate_dimensions=validate_dimensions,
+    )
     actions: list[RcaAction] = []
     e4_aliases: list[str] = []
+    selection_aliases: list[str] = []
+    e3_aliases: list[str] = []
     next_index = first_action_index
-    for dimension in chain_dimensions:
-        is_primary_chain = dimension == signal_dimension
+    dynamic_selection_dimensions: set[str] = set()
+    for lane in lanes:
+        dimension = lane.dimension
         chain_filters = dict(scoped_filters.get(dimension, {}) if scoped_filters else {})
         scoped_element = scoped_elements.get(dimension) if scoped_elements else None
-        chain_signal_type = (
-            signal_type
-            if is_primary_chain or signal_type == "interaction"
-            else _signal_type_for_metric_dimension(
-                parsed_intent.metric_id,
-                dimension,
-                validate_dimensions=validate_dimensions,
-            )
-        )
-        element_selection = policy.element_selection if is_primary_chain else "top_candidate"
-        if scoped_element is not None:
-            first_signal_element = scoped_element
-        elif is_primary_chain:
-            first_signal_element = policy.first_signal_element
-        else:
-            first_signal_element = None
+        first_signal_element = _lane_element(lane, scoped_element=scoped_element, explicit_scope=explicit_scope)
         selection_alias = f"E_select_{dimension}"
         e3_alias = e3_alias_for_dimension(dimension) or f"E3_{dimension}"
-        e4_alias = f"E4_{dimension}"
-        actions.extend(
-            [
+        e4_alias = lane.evidence_alias or f"E4_{dimension}"
+        e4_aliases.append(e4_alias)
+        e3_aliases.append(e3_alias)
+
+        if first_signal_element is None:
+            if dimension in dynamic_selection_dimensions:
+                raise PlanCompilerError(
+                    "DISCOVERY_LANE_ALIAS_CONFLICT",
+                    f"multiple dynamic discovery lanes require {selection_alias}",
+                )
+            dynamic_selection_dimensions.add(dimension)
+            selection_aliases.append(selection_alias)
+            actions.append(
                 RcaAction(
                     action_id=f"A{next_index}",
                     kind="select_signal_element",
                     args={
                         "metric_id": parsed_intent.metric_id,
                         "target_date": parsed_intent.target_date,
-                        "signal_type": chain_signal_type,
+                        "signal_type": lane.signal_type,
                         "dimension": dimension,
                         "filters": chain_filters,
-                        "element_selection": element_selection,
+                        "element_selection": lane.element_selection,
                     },
                     requires=["E1", f"E2_{dimension}"],
                     produces=[selection_alias],
                 ),
-                RcaAction(
-                    action_id=f"A{next_index + 1}",
-                    kind="fetch_related_signal",
-                    args={
-                        "metric_id": parsed_intent.metric_id,
-                        "target_date": parsed_intent.target_date,
-                        "signal_type": chain_signal_type,
-                        "dimension": dimension,
-                        "element": first_signal_element,
-                        "filters": chain_filters,
-                        "element_selection": element_selection,
-                    },
-                    requires=["E1", f"E2_{dimension}", selection_alias],
-                    produces=[e3_alias],
-                    dynamic=first_signal_element is None,
-                ),
-                RcaAction(
-                    action_id=f"A{next_index + 2}",
-                    kind="calculate_contribution",
-                    args={
-                        "metric_id": parsed_intent.metric_id,
-                        "target_date": parsed_intent.target_date,
-                        "dimension": dimension,
-                        "element": first_signal_element,
-                        "filters": chain_filters,
-                        "element_selection": element_selection,
-                        "evidence_alias": e4_alias,
-                    },
-                    requires=["E1", f"E2_{dimension}", selection_alias, e3_alias],
-                    produces=[e4_alias],
-                    dynamic=first_signal_element is None,
-                ),
-            ]
+            )
+            next_index += 1
+
+        fetch_requires = ["E1", f"E2_{dimension}"]
+        if first_signal_element is None:
+            fetch_requires.append(selection_alias)
+        actions.append(
+            RcaAction(
+                action_id=f"A{next_index}",
+                kind="fetch_related_signal",
+                args={
+                    "metric_id": parsed_intent.metric_id,
+                    "target_date": parsed_intent.target_date,
+                    "signal_type": lane.signal_type,
+                    "dimension": dimension,
+                    "element": first_signal_element,
+                    "filters": chain_filters,
+                    "element_selection": lane.element_selection,
+                },
+                requires=fetch_requires,
+                produces=[e3_alias],
+                dynamic=first_signal_element is None,
+            )
         )
-        e4_aliases.append(e4_alias)
-        next_index += 3
+        calculate_requires = ["E1", f"E2_{dimension}"]
+        if first_signal_element is None:
+            calculate_requires.append(selection_alias)
+        calculate_requires.append(e3_alias)
+        actions.append(
+            RcaAction(
+                action_id=f"A{next_index + 1}",
+                kind="calculate_contribution",
+                args={
+                    "metric_id": parsed_intent.metric_id,
+                    "target_date": parsed_intent.target_date,
+                    "dimension": dimension,
+                    "element": first_signal_element,
+                    "filters": chain_filters,
+                    "element_selection": lane.element_selection,
+                    "evidence_alias": e4_alias,
+                },
+                requires=calculate_requires,
+                produces=[e4_alias],
+                dynamic=first_signal_element is None,
+            )
+        )
+        next_index += 2
 
     actions.append(
         RcaAction(
@@ -444,22 +507,101 @@ def _parallel_broad_contribution_chains(
             action_id=f"A{next_index + 1}",
             kind="rank_root_causes",
             args={"metric_id": parsed_intent.metric_id, "target_date": parsed_intent.target_date},
-            requires=[
-                "E1",
-                *[f"E2_{dimension}" for dimension in policy.required_drilldowns],
-                *[f"E_select_{dimension}" for dimension in chain_dimensions],
-                *[e3_alias_for_dimension(dimension) or f"E3_{dimension}" for dimension in chain_dimensions],
-                *e4_aliases,
-                "E4",
-            ],
+            requires=_ordered_unique_list(
+                [
+                    "E1",
+                    *[f"E2_{dimension}" for dimension in policy.required_drilldowns],
+                    *selection_aliases,
+                    *e3_aliases,
+                    *e4_aliases,
+                    "E4",
+                ]
+            ),
             produces=["E_rank"],
         )
     )
     return actions
 
 
+def _discovery_lanes(
+    *,
+    parsed_intent: ParsedIntent,
+    policy: DiscoveryPolicy,
+    validate_dimensions: Any,
+) -> list[DiscoveryLane]:
+    if policy.lanes:
+        return list(policy.lanes)
+    signal_dimension = policy.first_signal_dimension
+    signal_type = policy.first_signal_type
+    if signal_dimension is None or signal_type is None:
+        raise PlanCompilerError("DISCOVERY_POLICY_MISSING", "broad RCA policy requires first signal")
+    dimensions = [
+        signal_dimension,
+        *[dimension for dimension in policy.required_drilldowns if dimension != signal_dimension],
+    ]
+    lanes: list[DiscoveryLane] = []
+    for dimension in dimensions:
+        is_primary = dimension == signal_dimension
+        if is_primary:
+            lanes.append(
+                DiscoveryLane(
+                    dimension=dimension,
+                    signal_type=signal_type,
+                    element_binding="policy",
+                    element=policy.first_signal_element,
+                    element_selection=policy.element_selection,
+                    evidence_alias=f"E4_{dimension}",
+                )
+            )
+            continue
+        lanes.append(
+            DiscoveryLane(
+                dimension=dimension,
+                signal_type=(
+                    signal_type
+                    if signal_type == "interaction"
+                    else _signal_type_for_metric_dimension(
+                        parsed_intent.metric_id,
+                        dimension,
+                        validate_dimensions=validate_dimensions,
+                    )
+                ),
+                evidence_alias=f"E4_{dimension}",
+            )
+        )
+    return lanes
+
+
+def _lane_element(
+    lane: DiscoveryLane,
+    *,
+    scoped_element: str | None,
+    explicit_scope: dict[str, str] | None,
+) -> str | None:
+    if scoped_element is not None:
+        return scoped_element
+    if lane.element_binding == "dynamic":
+        return None
+    if lane.element_binding == "policy":
+        return lane.element
+    if explicit_scope is None or lane.dimension not in explicit_scope:
+        raise PlanCompilerError(
+            "DISCOVERY_LANE_SCOPE_MISSING",
+            f"lane for dimension={lane.dimension} requires explicit scope",
+        )
+    return explicit_scope[lane.dimension]
+
+
 def _filters_except(filters: dict[str, str], excluded_dimension: str) -> dict[str, str]:
     return {dimension: element for dimension, element in filters.items() if dimension != excluded_dimension}
+
+
+def _ordered_unique_list(values: list[str]) -> list[str]:
+    unique: list[str] = []
+    for value in values:
+        if value not in unique:
+            unique.append(value)
+    return unique
 
 
 def _plan_budget(actions: list[RcaAction], budget: dict[str, int] | None) -> dict[str, int]:
