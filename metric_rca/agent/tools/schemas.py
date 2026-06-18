@@ -30,7 +30,7 @@ class SelectSignalElementArgs(StrictModel):
     run_id: str
     metric_id: str
     target_date: date
-    signal_type: Literal["campaign", "inventory", "conversion", "refund_quality"]
+    signal_type: Literal["campaign", "inventory", "conversion", "refund_quality", "interaction"]
     dimension: str
     evidence_ids: list[str]
     filters: dict[str, str] = Field(default_factory=dict)
@@ -41,7 +41,7 @@ class FetchRelatedSignalArgs(StrictModel):
     run_id: str
     metric_id: str
     target_date: date
-    signal_type: Literal["campaign", "inventory", "conversion", "refund_quality"]
+    signal_type: Literal["campaign", "inventory", "conversion", "refund_quality", "interaction"]
     dimension: str
     element: str
     evidence_ids: list[str]

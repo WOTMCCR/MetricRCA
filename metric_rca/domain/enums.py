@@ -51,6 +51,7 @@ class RootCauseType(str, Enum):
     CONVERSION_DROP = "conversion_drop"
     COMPLAINT_OR_QUALITY_ISSUE = "complaint_or_quality_issue"
     AOV_DROP = "aov_drop"
+    INTERACTION_CHANNEL_CATEGORY = "interaction_channel_category"
     NO_ANOMALY = "no_anomaly"
 
 

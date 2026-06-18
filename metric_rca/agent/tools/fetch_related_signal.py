@@ -20,7 +20,8 @@ from metric_rca.agent.tools.runtime import (
     tool_error,
 )
 from metric_rca.agent.tools.schemas import FetchRelatedSignalArgs, ToolResult
-from metric_rca.agent.tools.signal_policy import select_signal_type_for_metric_dimension
+from metric_rca.agent.tools.signal_policy import select_signal_type, select_signal_type_for_metric_dimension
+from metric_rca.business.policy_registry import root_cause_type_for_metric_dimension
 from metric_rca.config.settings import Settings, get_settings
 from metric_rca.domain.models import Evidence, Observation
 from metric_rca.guardrails.query_spec import QuerySpecError, build_query_spec
@@ -76,7 +77,7 @@ def fetch_related_signal(
         )
     except ValueError as exc:
         return tool_error(action, str(exc), "signal policy missing for metric/dimension")
-    if args.signal_type != expected_signal_type:
+    if args.signal_type != expected_signal_type and not _is_allowed_explicit_signal_type(args):
         return tool_error(
             action,
             "QUERY_SPEC_INVALID",
@@ -93,7 +94,7 @@ def fetch_related_signal(
         return existing
     renderer = renderer or SQLRenderer()
     settings = settings or get_settings()
-    signal_metric_id = settings.signal_metric_by_type.get(args.signal_type)
+    signal_metric_id = _signal_metric_id(args.metric_id, args.signal_type, settings=settings)
     if signal_metric_id is None:
         return tool_error(action, "CONFIG_INVALID", f"signal metric missing: {args.signal_type}")
     filters = {args.dimension: args.element}
@@ -213,6 +214,29 @@ def _signal_evidence_alias(args: FetchRelatedSignalArgs) -> str:
         else _alias_token(args.dimension)
     )
     return f"E3_{dimension_token}_{_alias_token(args.element)}"
+
+
+def _signal_metric_id(metric_id: str, signal_type: str, *, settings: Settings) -> str | None:
+    if signal_type == "interaction":
+        return metric_id
+    return settings.signal_metric_by_type.get(signal_type)
+
+
+def _is_allowed_explicit_signal_type(args: FetchRelatedSignalArgs) -> bool:
+    try:
+        root_cause_type = root_cause_type_for_metric_dimension(
+            metric_id=args.metric_id,
+            dimension=args.dimension,
+            signal_type=args.signal_type,
+        )
+        expected = select_signal_type(
+            metric_id=args.metric_id,
+            dimension=args.dimension,
+            root_cause_type=root_cause_type,
+        )
+    except ValueError:
+        return False
+    return expected == args.signal_type
 
 
 def _alias_token(value: str) -> str:

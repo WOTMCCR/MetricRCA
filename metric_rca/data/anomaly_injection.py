@@ -144,13 +144,19 @@ def interaction_multiplier(*, business_date: date, channel: str, category: str) 
     if business_date != INTERACTION_DATE:
         return 1.0, 1.0
     if channel == "paid_ads" and category == "electronics":
-        return 0.30, 1.0
-    uv_multiplier = 0.95 if channel == "paid_ads" else 1.0
+        return 0.02, 1.0
+    uv_multiplier = 0.75 if channel == "paid_ads" else 1.0
     pay_user_multiplier = 0.97 if category == "electronics" else 1.0
     return uv_multiplier, pay_user_multiplier
 
 
 def lagged_campaign_multiplier(*, business_date: date, channel: str) -> tuple[float, float, float, float]:
+    """Return (spend, clicks, observe-day UV, observe-day pay-user) multipliers.
+
+    The observe-date UV multiplier is a same-day campaign signal proxy for the
+    lagged effect. It lets current deterministic RCA tools see the manifested
+    traffic drop; it is not a lag scan or lagged causal detector.
+    """
     if channel != "social":
         return 1.0, 1.0, 1.0, 1.0
     if business_date == LAGGED_DATE:

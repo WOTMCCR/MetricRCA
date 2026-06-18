@@ -235,6 +235,24 @@ def test_phase_c_complex_cases_cover_required_families_with_weighted_root_causes
         assert all({"root_cause_type", "dimension", "element", "weight"} <= set(cause) for cause in root_causes)
 
 
+def test_legacy_composite_cases_have_root_causes_after_scorer_case_rules_removed() -> None:
+    private_by_id = {row["case_id"]: row for row in _read_jsonl(PRIVATE_GROUND_TRUTH_PATH)}
+
+    for case_id in [
+        "C06_gmv_multi_channel_drop",
+        "C07_gmv_category_channel_cross",
+        "C27_composite_cause",
+    ]:
+        assert private_by_id[case_id]["root_causes"] == [
+            {
+                "root_cause_type": "campaign_traffic_drop",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "weight": 1.0,
+            }
+        ]
+
+
 def test_seed_ground_truth_preserves_explicit_multi_cause_weights() -> None:
     from metric_rca.data.seed_data import _ground_truth_row_with_metadata
 

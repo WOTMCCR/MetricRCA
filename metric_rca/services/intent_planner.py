@@ -68,6 +68,18 @@ RULES:
 - Use analysis_strategy=product_first when an unscoped target KPI question should
   first verify product/inventory movement, including merchandise sales, price, or
   average-order-value wording.
+- Use question_family=interaction_gmv_anomaly or interaction_uv_anomaly with
+  analysis_strategy=standard when a GMV or UV question asks about a joint
+  channel-category slice, a cross-dimension interaction, or a drop larger than
+  individual drilldowns suggest.
+- Do not use interaction_gmv_anomaly or interaction_uv_anomaly for broad
+  multi-slice or multi-cause wording such as "across more than one slice".
+  Use the ordinary metric drop family unless the question explicitly asks for a
+  joint channel-category/campaign-category slice, a focused segment, a
+  cross-dimension interaction, or a larger-than-individual-drilldowns residual.
+- For UV/traffic questions, a focused segment on a specific date is an
+  interaction_uv_anomaly even when the question omits the concrete channel and
+  category values.
 - Product/merchandise/price wording takes priority over broad store/channel
   defaults. If a GMV question says "merchandise sales", product, SKU, item,
   price, AOV, basket size, or average order value, use
@@ -140,6 +152,13 @@ RULES:
   "GMV has been declining since the weekend, what's happening?" is metric_id=gmv,
   question_family=gmv_drop, analysis_strategy={stable_merch_strategy}, target_date equal
   to the most recent completed business day, with no explicit dimension/filter.
+  "Why did GMV fall for that campaign-category slice?" is metric_id=gmv,
+  question_family=interaction_gmv_anomaly, analysis_strategy=standard.
+  "Why did traffic collapse in the focused segment?" is metric_id=uv,
+  question_family=interaction_uv_anomaly, analysis_strategy=standard.
+  "Why did traffic collapse in the focused segment on the 31st?" is
+  metric_id=uv, question_family=interaction_uv_anomaly,
+  analysis_strategy=standard.
 {slice_examples}
 - Do not infer a category/product element from broad words such as merchandise
   unless a supported dimension value is explicit in the user question.
@@ -391,8 +410,7 @@ def _slice_examples(
                 f"question_family={family}, analysis_strategy=standard, dimension=product, "
                 f"element={product}, and filters containing dimension=product and value={product}."
             )
-        channel = _first_supported_value(supported_dimension_values, "channel")
-        if channel is not None:
+        for channel in supported_dimension_values.get("channel", []):
             channel_alias = channel.replace("_", " ")
             lines.append(
                 f'  "Why did {metric_phrase} fall in {channel_alias} yesterday?" is metric_id={metric_id}, '

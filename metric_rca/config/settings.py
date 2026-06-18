@@ -21,7 +21,7 @@ from metric_rca.domain.models import PHASE1_METRICS
 
 
 REQUIRED_SIGNAL_TYPES: frozenset[str] = frozenset(
-    {"campaign", "inventory", "conversion", "refund_quality"}
+    {"campaign", "inventory", "conversion", "refund_quality", "interaction"}
 )
 
 
@@ -85,6 +85,7 @@ class Settings(BaseSettings):
             "inventory": "stockout_rate",
             "conversion": "pay_cvr",
             "refund_quality": "complaint_rate",
+            "interaction": "gmv",
         }
     )
     @model_validator(mode="after")
@@ -95,7 +96,7 @@ class Settings(BaseSettings):
         if signal_keys != REQUIRED_SIGNAL_TYPES:
             raise ValueError(
                 "CONFIG_INVALID: signal_metric_by_type must contain exactly campaign, "
-                "inventory, conversion, refund_quality"
+                "inventory, conversion, refund_quality, interaction"
             )
         invalid_signal_metrics = [
             metric_id

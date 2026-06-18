@@ -183,6 +183,36 @@ def test_plan_compiler_builds_broad_gmv_anomaly_discovery_policy(
     assert signal_action.args["signal_type"] == expected_signal_type
 
 
+@pytest.mark.parametrize(
+    ("metric_id", "question_family"),
+    [
+        ("gmv", "interaction_gmv_anomaly"),
+        ("uv", "interaction_uv_anomaly"),
+    ],
+)
+def test_plan_compiler_builds_cross_dimension_interaction_chains(metric_id: str, question_family: str) -> None:
+    parsed = ParsedIntent(
+        metric_id=metric_id,
+        target_date=date(2026, 5, 31),
+        question_family=question_family,
+        analysis_strategy="standard",
+    )
+
+    plan = _compiler(family="gmv_family" if metric_id == "gmv" else "rate_family").compile(
+        run_id="run-1",
+        parsed_intent=parsed,
+    )
+
+    drilldowns = [action.args.get("dimension") for action in plan.actions if action.kind == "drilldown_dimension"]
+    signal_actions = [action for action in plan.actions if action.kind == "fetch_related_signal"]
+    merge_action = next(action for action in plan.actions if action.kind == "merge_contribution_sets")
+
+    assert drilldowns == ["channel", "category"]
+    assert [action.args["dimension"] for action in signal_actions] == ["channel", "category"]
+    assert all(action.args["signal_type"] == "interaction" for action in signal_actions)
+    assert merge_action.args["source_evidence_aliases"] == ["E4_channel", "E4_category"]
+
+
 def test_plan_compiler_uses_memory_prior_to_change_discovery_signal_dimension() -> None:
     parsed = ParsedIntent(
         metric_id="gmv",

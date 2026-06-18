@@ -290,7 +290,7 @@ def _parallel_broad_contribution_chains(
         is_primary_chain = dimension == signal_dimension
         chain_signal_type = (
             signal_type
-            if is_primary_chain
+            if is_primary_chain or signal_type == "interaction"
             else _signal_type_for_metric_dimension(
                 parsed_intent.metric_id,
                 dimension,

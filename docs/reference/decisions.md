@@ -1,3 +1,32 @@
+## ADL-0051: Phase C review fixes keep lagged proxy explicit and align MC08 truth to injected data
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-18 |
+| 状态 | accepted |
+| 关联迭代 | Phase C adversarial review fixes before Iteration 4 |
+| 影响范围 | anomaly_injection, regression ground truth, policy_registry, eval cases |
+
+### 背景与场景
+
+Adversarial review found that interaction root causes lacked enum/policy support, C06/C07/C27 private truth depended on legacy single-cause fields, LG01/LG02 could be misread as true lag detection, and MC08 expected stockout dominance even though the seeded 2026-06-01 data also contains a stronger social campaign drop.
+
+### 决策
+
+Add `interaction_channel_category` as a first-class root cause and `interaction` as a signal type, with policy-qualified root cause mapping. Treat LG01/LG02 as a same-day campaign signal proxy for a lagged effect until Phase D lag scan is promoted through validator evidence. Align MC08 ground truth to the injected data reality by making social campaign traffic the dominant cause, with electronics stockout and paid ads campaign as secondary causes. Strengthen the new interaction-date paid ads marginal multiplier only enough for the seeded aggregate UV/GMV cases to pass the existing E1 anomaly gate; do not describe this as Phase D additive-vs-actual interaction scanning. Add a default `uv/category` root-cause policy and return typed attribution policy errors so missing policy rows cannot crash eval as uncaught exceptions. Promote cross-chain channel/category contribution candidates to the interaction root-cause type only when the target KPI is a bad-direction anomaly and none of the paired channel/category elements has verified single-dimension bad-direction signal evidence.
+
+### 理由
+
+The scorer must judge against data reality, not stale intended labels. The deterministic runtime can only support lagged cases through current-run evidence visible on the observe date today; claiming true lag causality would overstate capability. Interaction support must enter through typed enum/policy/schema/tool contracts rather than string-only truth rows.
+
+### 被否决的方案
+
+Leaving LG01/LG02 documented as lagged causal detection was rejected because no lag scan exists yet. Keeping MC08 as stockout-dominant was rejected because it contradicted the seeded multi-cause date. Adding answer-bearing parser shortcuts for IX cases was rejected; interaction intent remains LLM-first via supported question families and policies.
+
+### 后续跟进
+
+Iteration 4 should optimize the deterministic interaction path. If interaction remains below gate after bounded rounds, Phase D should add promoted interaction scan evidence through the Python Analyst sandbox.
+
 ## ADL-0050: Python Analyst may compute hypotheses but cannot judge RCA conclusions
 
 | 字段 | 值 |

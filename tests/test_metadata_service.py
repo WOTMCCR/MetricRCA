@@ -533,13 +533,14 @@ def test_intent_planner_prompt_includes_net_gmv_slice_examples() -> None:
         run_target_date=date(2026, 6, 5),
         supported_metrics=["net_gmv"],
         supported_dimensions=["channel", "product"],
-        supported_dimension_values={"channel": ["paid_ads"], "product": ["1"]},
+        supported_dimension_values={"channel": ["affiliate", "paid_ads"], "product": ["1"]},
         supported_families=["net_gmv_drop"],
     )
 
     assert "net GMV" in prompt
     assert "metric_id=net_gmv" in prompt
     assert "paid ads -> paid_ads" in prompt
+    assert "Why did net GMV fall in paid ads yesterday?" in prompt
     assert "question_family=net_gmv_drop" in prompt
 
 
@@ -572,6 +573,21 @@ def test_intent_planner_prompt_includes_phase_b_alias_date_and_ambiguity_guidanc
     assert "GMV has been declining since the weekend" in prompt
     assert "analysis_strategy=signal_first" in prompt
     assert "Was GMV abnormal two days ago?" not in prompt
+
+
+def test_intent_planner_prompt_includes_focused_segment_interaction_guidance() -> None:
+    prompt = build_system_prompt(
+        business_today=date(2026, 6, 1),
+        run_target_date=date(2026, 5, 31),
+        supported_metrics=["uv"],
+        supported_dimensions=["channel", "category"],
+        supported_dimension_values={"channel": ["paid_ads"], "category": ["electronics"]},
+        supported_families=["uv_drop", "interaction_uv_anomaly"],
+    )
+
+    assert "focused segment on a specific date" in prompt
+    assert "interaction_uv_anomaly" in prompt
+    assert "Why did traffic collapse in the focused segment on the 31st?" in prompt
 
 
 def test_metric_service_passes_run_target_date_to_intent_planner() -> None:

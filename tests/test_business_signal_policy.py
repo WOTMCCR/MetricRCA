@@ -17,8 +17,13 @@ from metric_rca.business.signal_policy import (
     select_signal_type,
     select_signal_type_for_metric_dimension,
 )
+from metric_rca.domain.enums import RootCauseType
 from metric_rca.domain.models import MetricDefinition
 from metric_rca.services.metric_contracts import ParsedIntent
+
+
+def test_root_cause_type_enum_includes_cross_dimension_interaction() -> None:
+    assert RootCauseType.INTERACTION_CHANNEL_CATEGORY.value == "interaction_channel_category"
 
 
 def test_signal_policy_selects_related_signal_for_metric_dimension() -> None:
@@ -35,6 +40,42 @@ def test_signal_policy_selects_related_signal_for_root_cause() -> None:
         )
         == "conversion"
     )
+
+
+@pytest.mark.parametrize(
+    ("metric_id", "dimension"),
+    [
+        ("gmv", "channel"),
+        ("gmv", "category"),
+        ("uv", "channel"),
+        ("uv", "category"),
+    ],
+)
+def test_interaction_signal_policy_is_selected_by_interaction_root_cause(metric_id: str, dimension: str) -> None:
+    assert (
+        select_signal_type(
+            metric_id=metric_id,
+            dimension=dimension,
+            root_cause_type=RootCauseType.INTERACTION_CHANNEL_CATEGORY.value,
+        )
+        == "interaction"
+    )
+    assert (
+        root_cause_type_for_metric_dimension(
+            metric_id=metric_id,
+            dimension=dimension,
+            signal_type="interaction",
+        )
+        == RootCauseType.INTERACTION_CHANNEL_CATEGORY.value
+    )
+
+
+def test_default_signal_policy_stays_single_cause_when_no_interaction_root_cause_is_requested() -> None:
+    assert select_signal_type_for_metric_dimension(metric_id="gmv", dimension="channel") == "campaign"
+    assert select_signal_type_for_metric_dimension(metric_id="gmv", dimension="category") == "inventory"
+    assert root_cause_type_for_metric_dimension(metric_id="gmv", dimension="channel") == "campaign_traffic_drop"
+    assert root_cause_type_for_metric_dimension(metric_id="gmv", dimension="category") == "stockout"
+    assert root_cause_type_for_metric_dimension(metric_id="uv", dimension="category") == "campaign_traffic_drop"
 
 
 def test_signal_policy_fails_fast_for_missing_metric_dimension_rule() -> None:
@@ -185,6 +226,29 @@ def test_gmv_anomaly_discovery_policy_is_family_specific_across_analysis_strateg
 
     assert policy.first_signal_dimension == expected_dimension
     assert policy.first_signal_type == expected_signal_type
+
+
+@pytest.mark.parametrize(
+    ("metric_id", "question_family"),
+    [
+        ("gmv", "interaction_gmv_anomaly"),
+        ("uv", "interaction_uv_anomaly"),
+    ],
+)
+def test_interaction_discovery_policy_enables_cross_dimension_analysis(metric_id: str, question_family: str) -> None:
+    parsed = ParsedIntent(
+        metric_id=metric_id,
+        target_date="2026-05-31",
+        question_family=question_family,
+        analysis_strategy="standard",
+    )
+
+    policy = discovery_policy_from_intent(parsed)
+
+    assert policy.required_drilldowns == ("channel", "category")
+    assert policy.first_signal_dimension == "channel"
+    assert policy.first_signal_type == "interaction"
+    assert policy.element_selection == "signal_anomaly"
 
 
 def test_factor_graph_policy_reads_registry() -> None:

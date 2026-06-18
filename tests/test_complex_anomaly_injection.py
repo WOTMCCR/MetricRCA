@@ -70,12 +70,12 @@ def test_complex_injection_functions_are_deterministic_and_exact() -> None:
         business_date=INTERACTION_DATE,
         channel="paid_ads",
         category="electronics",
-    ) == (0.30, 1.0)
+    ) == (0.02, 1.0)
     assert interaction_multiplier(
         business_date=INTERACTION_DATE,
         channel="paid_ads",
         category="fashion",
-    ) == (0.95, 1.0)
+    ) == (0.75, 1.0)
     assert interaction_multiplier(
         business_date=INTERACTION_DATE,
         channel="organic",
@@ -94,6 +94,16 @@ def test_complex_injection_functions_are_deterministic_and_exact() -> None:
     assert weak_signal_multiplier(business_date=MULTI_CAUSE_DATE, channel="affiliate") == (
         weak_signal_multiplier(business_date=MULTI_CAUSE_DATE, channel="affiliate")
     )
+
+
+def test_lagged_campaign_observe_date_is_same_day_signal_proxy_not_lag_scan() -> None:
+    spend_mult, click_mult, observe_uv_mult, observe_pay_mult = lagged_campaign_multiplier(
+        business_date=LAGGED_OBSERVE_DATE,
+        channel="social",
+    )
+
+    assert (spend_mult, click_mult) == (1.0, 1.0)
+    assert (observe_uv_mult, observe_pay_mult) == (0.35, 1.0)
 
 
 def test_existing_injection_date_multipliers_are_unchanged() -> None:

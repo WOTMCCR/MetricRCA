@@ -82,7 +82,7 @@ EXPECTED_GROUND_TRUTH = {
     "MC05_gmv_lag_stockout_mix": ("gmv", 1, "campaign_traffic_drop", "channel", "social", LAGGED_OBSERVE_DATE),
     "MC06_net_gmv_multi_driver": ("net_gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", MULTI_CAUSE_DATE),
     "MC07_uv_weak_multi_driver": ("uv", 1, "campaign_traffic_drop", "channel", "social", LAGGED_OBSERVE_DATE),
-    "MC08_gmv_channel_category_mix": ("gmv", 1, "stockout", "category", "electronics", MULTI_CAUSE_DATE),
+    "MC08_gmv_channel_category_mix": ("gmv", 1, "campaign_traffic_drop", "channel", "social", MULTI_CAUSE_DATE),
     "IX01_gmv_channel_category_interaction": (
         "gmv",
         1,
@@ -128,6 +128,15 @@ EXPECTED_GROUND_TRUTH = {
     "WK02_gmv_no_anomaly_weak": ("gmv", 0, "no_anomaly", None, None, GMV_NO_ANOMALY_DATE),
 }
 EXPECTED_WEIGHTED_ROOT_CAUSES = {
+    "C06_gmv_multi_channel_drop": [
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 1.0},
+    ],
+    "C07_gmv_category_channel_cross": [
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 1.0},
+    ],
+    "C27_composite_cause": [
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 1.0},
+    ],
     "MC01_gmv_multi_cause_overall": [
         {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.48},
         {"root_cause_type": "stockout", "dimension": "category", "element": "electronics", "weight": 0.32},
@@ -162,9 +171,9 @@ EXPECTED_WEIGHTED_ROOT_CAUSES = {
         {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.25},
     ],
     "MC08_gmv_channel_category_mix": [
-        {"root_cause_type": "stockout", "dimension": "category", "element": "electronics", "weight": 0.4},
-        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.35},
-        {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "affiliate", "weight": 0.25},
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "social", "weight": 0.4},
+        {"root_cause_type": "stockout", "dimension": "category", "element": "electronics", "weight": 0.35},
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.25},
     ],
     "IX01_gmv_channel_category_interaction": [
         {"root_cause_type": "interaction_channel_category", "dimension": "channel", "element": "paid_ads", "weight": 1.0},

@@ -26,6 +26,20 @@ encode the docs, then make the implementation pass those tests.
 - Use deterministic `QuerySpec -> SQLRenderer -> SQLGuard -> Repository` as the only data access path.
 - Avoid fallback-like behavior: no LLM-only bypass, no broad exception swallowing, no silent degradation, no default provider substitution, and no empty-data continuation.
 
+## Project Operational Authorization
+
+- The user has explicitly authorized this project to reset local seed/eval data
+  when needed for implementation or verification. Routine commands such as
+  `make seed SEED_PROFILE=regression` may rebuild the local MetricRCA database
+  without additional project-level confirmation.
+- The user has explicitly authorized deleting files in this repository when the
+  deletion is required by the current task or project plan. Do not delete
+  unrelated user data, and continue to obey any higher-priority system or tool
+  safety rule that requires a separate warning or confirmation.
+- Subagents are enabled by default for this project. Prefer dispatching bounded
+  subagents for eval execution, architecture/flow review, code review, or other
+  parallelizable side work when it materially improves progress or verification.
+
 ## Environment
 
 - Last preflight refresh: 2026-06-16T23:09:37+08:00; see `docs/env-setup.md`.

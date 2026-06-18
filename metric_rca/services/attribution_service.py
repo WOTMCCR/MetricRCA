@@ -8,7 +8,12 @@ from typing import Any
 
 from pydantic import Field
 
-from metric_rca.business.policy_registry import DEFAULT_POLICY_REGISTRY, MetricPolicyRegistry, root_cause_type_for_metric_dimension
+from metric_rca.business.policy_registry import (
+    DEFAULT_POLICY_REGISTRY,
+    MetricPolicyRegistry,
+    PolicyRegistryError,
+    root_cause_type_for_metric_dimension,
+)
 from metric_rca.domain.enums import EvidenceVerdict
 from metric_rca.domain.models import MetricDefinition, RootCauseCandidate, StrictModel
 
@@ -60,6 +65,15 @@ def compute_dimension_contribution(
     if total_bad_delta <= 0:
         return AttributionResult(ok=False, error_code="ATTRIBUTION_COVERAGE_LOW")
 
+    try:
+        root_cause_type = _root_cause_type(
+            metric_definition.metric_id,
+            dimension,
+            registry=policy_registry,
+        )
+    except PolicyRegistryError as exc:
+        return AttributionResult(ok=False, error_code=exc.code)
+
     raw_candidates: list[RootCauseCandidate] = []
     for element, bad_delta in bad_delta_by_element.items():
         if bad_delta <= 0:
@@ -71,11 +85,7 @@ def compute_dimension_contribution(
             score = contribution_pct * signal_severity * evidence_support
             raw_candidates.append(
                 RootCauseCandidate(
-                    root_cause_type=_root_cause_type(
-                        metric_definition.metric_id,
-                        dimension,
-                        registry=policy_registry,
-                    ),
+                    root_cause_type=root_cause_type,
                     dimension=dimension,
                     element=element,
                     contribution_pct=contribution_pct,

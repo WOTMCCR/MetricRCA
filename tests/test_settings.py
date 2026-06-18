@@ -73,6 +73,7 @@ def test_signal_metric_mapping_must_be_complete_and_metric_whitelisted() -> None
         "inventory": "stockout_rate",
         "conversion": "pay_cvr",
         "refund_quality": "complaint_rate",
+        "interaction": "gmv",
     }
     settings = Settings(
         db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",

@@ -161,6 +161,32 @@ def test_root_cause_mapping_uses_policy_registry_override() -> None:
     assert result.candidates[0].root_cause_type == "custom_channel_rule"
 
 
+def test_attribution_returns_typed_error_for_missing_root_cause_policy() -> None:
+    registry = MetricPolicyRegistry(
+        signal_policies=(),
+        discovery_policy_rules=(),
+        factor_graph_policies=(),
+        root_cause_policies=(),
+    )
+
+    result = compute_dimension_contribution(
+        metric_definition=_metric("uv"),
+        dimension="category",
+        current_rows=[
+            {"category": "electronics", "metric_value": 20.0},
+            {"category": "fashion", "metric_value": 100.0},
+        ],
+        baseline_rows=_baseline("category", {"electronics": 100.0, "fashion": 100.0}),
+        evidence_ids=["run-1:E1", "run-1:E2"],
+        policy_registry=registry,
+        top_threshold=0.60,
+    )
+
+    assert result.ok is False
+    assert result.error_code == "ROOT_CAUSE_POLICY_MISSING"
+    assert result.candidates == []
+
+
 def test_attribution_refund_rate_uses_increase_direction() -> None:
     result = compute_dimension_contribution(
         metric_definition=_metric("refund_rate", higher_is_better=False),

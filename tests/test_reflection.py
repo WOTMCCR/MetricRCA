@@ -702,6 +702,77 @@ def test_reflection_warns_but_passes_when_cross_chain_contributions_overlap() ->
     assert issue.severity == "warning"
 
 
+def test_reflection_accepts_cross_chain_interaction_with_paired_non_causal_signals() -> None:
+    candidate = _candidate(
+        root_cause_type="interaction_channel_category",
+        dimension="channel",
+        element="paid_ads",
+        evidence_ids=[
+            "run-1:E1",
+            "run-1:E2_channel",
+            "run-1:E_select_channel",
+            "run-1:E3_ch_paid_ads",
+            "run-1:E4_channel",
+            "run-1:E2_category",
+            "run-1:E_select_category",
+            "run-1:E3_cat_electronics",
+            "run-1:E4_category",
+            "run-1:E4",
+            "run-1:E_rank",
+        ],
+        dimension_elements=[("channel", "paid_ads"), ("category", "electronics")],
+    )
+    summary = _contribution_summary(candidate)
+    summary["contribution_set"]["factor_graph"] = {
+        "chain_evidence_ids": ["run-1:E4_channel", "run-1:E4_category"]
+    }
+    evidences = [
+        _evidence("run-1:E1", summary={"metric_id": "gmv", "is_anomaly": True, "bad_direction": True}),
+        _evidence("run-1:E2_channel", summary={"metric_id": "gmv", "dimension": "channel"}),
+        _evidence(
+            "run-1:E_select_channel",
+            summary={"signal_type": "campaign", "signal_metric_id": "gmv", "dimension": "channel"},
+        ),
+        _evidence(
+            "run-1:E3_ch_paid_ads",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "is_anomaly": False,
+                "bad_direction": False,
+            },
+        ),
+        _evidence("run-1:E4_channel", summary={"metric_id": "gmv", "dimension": "channel"}),
+        _evidence("run-1:E2_category", summary={"metric_id": "gmv", "dimension": "category"}),
+        _evidence(
+            "run-1:E_select_category",
+            summary={"signal_type": "inventory", "signal_metric_id": "stockout_rate", "dimension": "category"},
+        ),
+        _evidence(
+            "run-1:E3_cat_electronics",
+            metric_id="stockout_rate",
+            summary={
+                "signal_type": "inventory",
+                "signal_metric_id": "stockout_rate",
+                "dimension": "category",
+                "element": "electronics",
+                "is_anomaly": False,
+                "bad_direction": False,
+            },
+        ),
+        _evidence("run-1:E4_category", summary={"metric_id": "gmv", "dimension": "category"}),
+        _evidence("run-1:E4", summary=summary),
+        _evidence("run-1:E_rank", summary=summary),
+    ]
+    state = _state(candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
+
+    assert result.passed is True
+
+
 def _checks(result) -> set[str]:
     return {issue.check for issue in result.issues}
 
@@ -747,6 +818,7 @@ def _candidate(
     contribution_pct: float = 0.90,
     verdict: str = "confirmed",
     evidence_ids: list[str] | None = None,
+    dimension_elements: list[tuple[str, str]] | None = None,
 ) -> RootCauseCandidate:
     return RootCauseCandidate(
         root_cause_type=root_cause_type,
@@ -760,6 +832,7 @@ def _candidate(
         evidence_ids=evidence_ids
         if evidence_ids is not None
         else ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4", "run-1:E_rank"],
+        dimension_elements=dimension_elements or [],
     )
 
 

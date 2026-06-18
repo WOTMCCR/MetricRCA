@@ -13,7 +13,7 @@ from typing import Any, Callable, Literal
 
 from metric_rca.domain.enums import DimensionId, MetricId, RootCauseType
 
-SignalType = Literal["campaign", "inventory", "conversion", "refund_quality"]
+SignalType = Literal["campaign", "inventory", "conversion", "refund_quality", "interaction"]
 ElementSelection = Literal["top_candidate", "signal_anomaly", "signal_level"]
 FactorGraphType = Literal["uv_pay_cvr_aov", "net_gmv_chain", "dimension_delta"]
 AllowedDimensionsValidator = Callable[[str, tuple[str, ...]], None]
@@ -109,8 +109,17 @@ class MetricPolicyRegistry:
             for policy in self.signal_policies
             if policy.metric_id == metric_id
             and policy.dimension == dimension
-            and (root_cause_type is None or policy.root_cause_type in {root_cause_type, None})
+            and (
+                (root_cause_type is None and policy.root_cause_type is None)
+                or (root_cause_type is not None and policy.root_cause_type in {root_cause_type, None})
+            )
         ]
+        if root_cause_type is None and not policies:
+            policies = [
+                policy
+                for policy in self.signal_policies
+                if policy.metric_id == metric_id and policy.dimension == dimension
+            ]
         if root_cause_type is not None:
             exact = [policy for policy in policies if policy.root_cause_type == root_cause_type]
             if exact:
@@ -193,6 +202,61 @@ class MetricPolicyRegistry:
 
 DEFAULT_SIGNAL_POLICIES: tuple[MetricSignalPolicy, ...] = (
     MetricSignalPolicy(
+        metric_id=MetricId.GMV.value,
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="campaign",
+    ),
+    MetricSignalPolicy(
+        metric_id=MetricId.GMV.value,
+        dimension=DimensionId.CATEGORY.value,
+        signal_type="inventory",
+    ),
+    MetricSignalPolicy(
+        metric_id=MetricId.GMV.value,
+        dimension=DimensionId.PRODUCT.value,
+        signal_type="inventory",
+    ),
+    MetricSignalPolicy(
+        metric_id=MetricId.NET_GMV.value,
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="campaign",
+    ),
+    MetricSignalPolicy(
+        metric_id=MetricId.NET_GMV.value,
+        dimension=DimensionId.PRODUCT.value,
+        signal_type="refund_quality",
+    ),
+    MetricSignalPolicy(
+        metric_id=MetricId.UV.value,
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="campaign",
+    ),
+    MetricSignalPolicy(
+        metric_id=MetricId.PAY_CVR.value,
+        dimension=DimensionId.DEVICE.value,
+        signal_type="conversion",
+    ),
+    MetricSignalPolicy(
+        metric_id=MetricId.PAY_CVR.value,
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="conversion",
+    ),
+    MetricSignalPolicy(
+        metric_id=MetricId.REFUND_RATE.value,
+        dimension=DimensionId.PRODUCT.value,
+        signal_type="refund_quality",
+    ),
+    MetricSignalPolicy(
+        metric_id=MetricId.REFUND_RATE.value,
+        dimension=DimensionId.CATEGORY.value,
+        signal_type="refund_quality",
+    ),
+    MetricSignalPolicy(
+        metric_id=MetricId.COMPLAINT_RATE.value,
+        dimension=DimensionId.CATEGORY.value,
+        signal_type="refund_quality",
+    ),
+    MetricSignalPolicy(
         root_cause_type=RootCauseType.CAMPAIGN_TRAFFIC_DROP.value,
         metric_id=MetricId.GMV.value,
         dimension=DimensionId.CHANNEL.value,
@@ -269,6 +333,30 @@ DEFAULT_SIGNAL_POLICIES: tuple[MetricSignalPolicy, ...] = (
         metric_id=MetricId.COMPLAINT_RATE.value,
         dimension=DimensionId.CATEGORY.value,
         signal_type="refund_quality",
+    ),
+    MetricSignalPolicy(
+        root_cause_type=RootCauseType.INTERACTION_CHANNEL_CATEGORY.value,
+        metric_id=MetricId.GMV.value,
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="interaction",
+    ),
+    MetricSignalPolicy(
+        root_cause_type=RootCauseType.INTERACTION_CHANNEL_CATEGORY.value,
+        metric_id=MetricId.GMV.value,
+        dimension=DimensionId.CATEGORY.value,
+        signal_type="interaction",
+    ),
+    MetricSignalPolicy(
+        root_cause_type=RootCauseType.INTERACTION_CHANNEL_CATEGORY.value,
+        metric_id=MetricId.UV.value,
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="interaction",
+    ),
+    MetricSignalPolicy(
+        root_cause_type=RootCauseType.INTERACTION_CHANNEL_CATEGORY.value,
+        metric_id=MetricId.UV.value,
+        dimension=DimensionId.CATEGORY.value,
+        signal_type="interaction",
     ),
 )
 
@@ -408,6 +496,24 @@ DEFAULT_DISCOVERY_POLICY_RULES: tuple[DiscoveryPolicyRule, ...] = (
         first_signal_type="inventory",
         element_selection="signal_anomaly",
     ),
+    DiscoveryPolicyRule(
+        metric_id=MetricId.GMV.value,
+        question_family="interaction_gmv_anomaly",
+        analysis_strategy="standard",
+        required_drilldowns=(DimensionId.CHANNEL.value, DimensionId.CATEGORY.value),
+        first_signal_dimension=DimensionId.CHANNEL.value,
+        first_signal_type="interaction",
+        element_selection="signal_anomaly",
+    ),
+    DiscoveryPolicyRule(
+        metric_id=MetricId.UV.value,
+        question_family="interaction_uv_anomaly",
+        analysis_strategy="standard",
+        required_drilldowns=(DimensionId.CHANNEL.value, DimensionId.CATEGORY.value),
+        first_signal_dimension=DimensionId.CHANNEL.value,
+        first_signal_type="interaction",
+        element_selection="signal_anomaly",
+    ),
 )
 
 DEFAULT_FACTOR_GRAPH_POLICIES: tuple[FactorGraphPolicy, ...] = (
@@ -483,6 +589,11 @@ DEFAULT_ROOT_CAUSE_POLICIES: tuple[RootCausePolicy, ...] = (
         root_cause_type=RootCauseType.CAMPAIGN_TRAFFIC_DROP.value,
     ),
     RootCausePolicy(
+        metric_id=MetricId.UV.value,
+        dimension=DimensionId.CATEGORY.value,
+        root_cause_type=RootCauseType.CAMPAIGN_TRAFFIC_DROP.value,
+    ),
+    RootCausePolicy(
         metric_id=MetricId.PAY_CVR.value,
         dimension=DimensionId.DEVICE.value,
         root_cause_type=RootCauseType.CONVERSION_DROP.value,
@@ -531,6 +642,30 @@ DEFAULT_ROOT_CAUSE_POLICIES: tuple[RootCausePolicy, ...] = (
         metric_id=MetricId.COMPLAINT_RATE.value,
         dimension=DimensionId.PRODUCT.value,
         root_cause_type=RootCauseType.COMPLAINT_OR_QUALITY_ISSUE.value,
+    ),
+    RootCausePolicy(
+        metric_id=MetricId.GMV.value,
+        dimension=DimensionId.CHANNEL.value,
+        root_cause_type=RootCauseType.INTERACTION_CHANNEL_CATEGORY.value,
+        signal_type="interaction",
+    ),
+    RootCausePolicy(
+        metric_id=MetricId.GMV.value,
+        dimension=DimensionId.CATEGORY.value,
+        root_cause_type=RootCauseType.INTERACTION_CHANNEL_CATEGORY.value,
+        signal_type="interaction",
+    ),
+    RootCausePolicy(
+        metric_id=MetricId.UV.value,
+        dimension=DimensionId.CHANNEL.value,
+        root_cause_type=RootCauseType.INTERACTION_CHANNEL_CATEGORY.value,
+        signal_type="interaction",
+    ),
+    RootCausePolicy(
+        metric_id=MetricId.UV.value,
+        dimension=DimensionId.CATEGORY.value,
+        root_cause_type=RootCauseType.INTERACTION_CHANNEL_CATEGORY.value,
+        signal_type="interaction",
     ),
 )
 

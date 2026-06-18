@@ -264,6 +264,12 @@ def _e3_signal_matches_candidate(
 ) -> bool:
     if _aov_drop_is_proven_by_e4_decomposition(state=state, candidate=candidate, evidence_by_id=evidence_by_id):
         return True
+    if _interaction_is_proven_by_cross_chain_evidence(
+        state=state,
+        candidate=candidate,
+        evidence_by_id=evidence_by_id,
+    ):
+        return True
     e3 = _candidate_e3_evidence(state=state, candidate=candidate, evidence_by_id=evidence_by_id)
     if e3 is None:
         return True
@@ -307,6 +313,81 @@ def _aov_drop_is_proven_by_e4_decomposition(
     if not isinstance(decomposition, dict):
         return False
     return str(decomposition.get("largest_drop_factor")) in {"aov", RootCauseType.AOV_DROP.value}
+
+
+def _interaction_is_proven_by_cross_chain_evidence(
+    *,
+    state: dict[str, Any],
+    candidate: RootCauseCandidate,
+    evidence_by_id: dict[str, Evidence],
+) -> bool:
+    if candidate.root_cause_type != RootCauseType.INTERACTION_CHANNEL_CATEGORY.value:
+        return False
+    pairs = _candidate_pairs(candidate)
+    if not _has_pair_dimension(pairs, "channel") or not _has_pair_dimension(pairs, "category"):
+        return False
+    if not _target_e1_is_bad_direction_anomaly(state=state, evidence_by_id=evidence_by_id):
+        return False
+    if not _candidate_has_alias(state=state, candidate=candidate, alias="E4_channel"):
+        return False
+    if not _candidate_has_alias(state=state, candidate=candidate, alias="E4_category"):
+        return False
+    for dimension, element in pairs:
+        if dimension not in {"channel", "category"}:
+            continue
+        if not _has_non_causal_single_dimension_signal(
+            candidate=candidate,
+            evidence_by_id=evidence_by_id,
+            dimension=dimension,
+            element=element,
+        ):
+            return False
+    return True
+
+
+def _candidate_pairs(candidate: RootCauseCandidate) -> set[tuple[str, str]]:
+    pairs = {(str(dimension), str(element)) for dimension, element in candidate.dimension_elements}
+    if candidate.dimension is not None and candidate.element is not None:
+        pairs.add((candidate.dimension, str(candidate.element)))
+    return pairs
+
+
+def _has_pair_dimension(pairs: set[tuple[str, str]], dimension: str) -> bool:
+    return any(pair_dimension == dimension for pair_dimension, _ in pairs)
+
+
+def _target_e1_is_bad_direction_anomaly(*, state: dict[str, Any], evidence_by_id: dict[str, Evidence]) -> bool:
+    e1 = evidence_by_id.get(f"{state.get('run_id')}:E1")
+    if e1 is None:
+        return False
+    summary = e1.result_summary or {}
+    return summary.get("is_anomaly") is True and summary.get("bad_direction") is True
+
+
+def _candidate_has_alias(*, state: dict[str, Any], candidate: RootCauseCandidate, alias: str) -> bool:
+    prefix = f"{state.get('run_id')}:"
+    return any(evidence_id == f"{prefix}{alias}" for evidence_id in candidate.evidence_ids)
+
+
+def _has_non_causal_single_dimension_signal(
+    *,
+    candidate: RootCauseCandidate,
+    evidence_by_id: dict[str, Evidence],
+    dimension: str,
+    element: str,
+) -> bool:
+    for evidence_id in candidate.evidence_ids:
+        evidence = evidence_by_id.get(evidence_id)
+        if evidence is None:
+            continue
+        alias = evidence_id.split(":", maxsplit=1)[1] if ":" in evidence_id else evidence_id
+        if alias != "E3" and not alias.startswith("E3_"):
+            continue
+        summary = evidence.result_summary or {}
+        if summary.get("dimension") != dimension or str(summary.get("element")) != element:
+            continue
+        return summary.get("is_anomaly") is not True or summary.get("bad_direction") is not True
+    return False
 
 
 def _candidate_e3_evidence(

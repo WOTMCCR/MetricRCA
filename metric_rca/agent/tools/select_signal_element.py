@@ -60,7 +60,7 @@ def select_signal_element(
 
     renderer = renderer or SQLRenderer()
     settings = settings or get_settings()
-    signal_metric_id = settings.signal_metric_by_type.get(args.signal_type)
+    signal_metric_id = _signal_metric_id(args.metric_id, args.signal_type, settings=settings)
     if signal_metric_id is None:
         return tool_error(action, "CONFIG_INVALID", f"signal metric missing: {args.signal_type}")
 
@@ -194,6 +194,12 @@ def _candidate_elements(args: SelectSignalElementArgs, *, repository: Any) -> li
         if isinstance(candidate, dict) and candidate.get("element") is not None:
             elements.append(str(candidate["element"]))
     return elements
+
+
+def _signal_metric_id(metric_id: str, signal_type: str, *, settings: Settings) -> str | None:
+    if signal_type == "interaction":
+        return metric_id
+    return settings.signal_metric_by_type.get(signal_type)
 
 
 def _score_candidates(

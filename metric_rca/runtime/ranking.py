@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any
 
+from metric_rca.domain.enums import RootCauseType
 from metric_rca.domain.models import ContributionSet, Evidence, Observation, QuerySpec, RootCauseCandidate, TimeRange
 from metric_rca.runtime.tool_models import ToolExecutionResult
 from metric_rca.services.adtributor_service import AdtributorElement, attribute_elements
@@ -55,6 +56,21 @@ def rank_from_persisted_e4(
         candidates = [
             selected_candidate,
             *[candidate for candidate in ranked_candidates if not _same_candidate_element(candidate, selected_candidate)],
+        ]
+    elif interaction_candidate := _interaction_promoted_candidate(
+        repository=repository,
+        run_id=run_id,
+        metric_id=metric_id,
+        ranked_candidates=ranked_candidates,
+    ):
+        selected_candidate = interaction_candidate
+        candidates = [
+            selected_candidate,
+            *[
+                candidate
+                for candidate in ranked_candidates
+                if not _same_dimension_element(candidate, selected_candidate)
+            ],
         ]
     elif adtributor_audit.get("adtributor_status") == "applied":
         candidates = ranked_candidates
@@ -171,6 +187,10 @@ def _same_candidate_element(left: RootCauseCandidate, right: RootCauseCandidate)
     )
 
 
+def _same_dimension_element(left: RootCauseCandidate, right: RootCauseCandidate) -> bool:
+    return left.dimension == right.dimension and str(left.element) == str(right.element)
+
+
 def _signal_verified_ranked_candidate(
     *,
     repository: Any,
@@ -184,6 +204,7 @@ def _signal_verified_ranked_candidate(
         repository=repository,
         run_id=run_id,
         candidate=persisted_selected_candidate,
+        required_bad_direction=_target_bad_direction(repository=repository, run_id=run_id),
     ):
         return None
     for candidate in ranked_candidates:
@@ -192,9 +213,32 @@ def _signal_verified_ranked_candidate(
     return _candidate_with_rank_evidence(persisted_selected_candidate, f"{run_id}:E_rank")
 
 
-def _has_matching_signal_evidence(*, repository: Any, run_id: str, candidate: RootCauseCandidate) -> bool:
+def _has_matching_signal_evidence(
+    *,
+    repository: Any,
+    run_id: str,
+    candidate: RootCauseCandidate,
+    required_bad_direction: bool | None = None,
+) -> bool:
     if candidate.dimension is None or candidate.element is None:
         return False
+    return _has_matching_signal_for_pair(
+        repository=repository,
+        run_id=run_id,
+        dimension=candidate.dimension,
+        element=str(candidate.element),
+        required_bad_direction=required_bad_direction,
+    )
+
+
+def _has_matching_signal_for_pair(
+    *,
+    repository: Any,
+    run_id: str,
+    dimension: str,
+    element: str,
+    required_bad_direction: bool | None = None,
+) -> bool:
     rows = repository.get_evidences(run_id)
     if not rows:
         return False
@@ -207,9 +251,164 @@ def _has_matching_signal_evidence(*, repository: Any, run_id: str, candidate: Ro
         summary = row.get("result_summary")
         if not isinstance(summary, dict):
             continue
-        if summary.get("dimension") == candidate.dimension and str(summary.get("element")) == str(candidate.element):
+        if summary.get("dimension") != dimension or str(summary.get("element")) != element:
+            continue
+        if summary.get("is_anomaly") is not True:
+            continue
+        if required_bad_direction is not None and summary.get("bad_direction") is not required_bad_direction:
+            continue
+        return True
+    return False
+
+
+def _interaction_promoted_candidate(
+    *,
+    repository: Any,
+    run_id: str,
+    metric_id: str,
+    ranked_candidates: list[RootCauseCandidate],
+) -> RootCauseCandidate | None:
+    if metric_id not in {"gmv", "uv"}:
+        return None
+    if not _target_is_bad_direction_anomaly(repository=repository, run_id=run_id):
+        return None
+    for candidate in ranked_candidates:
+        if candidate.root_cause_type == RootCauseType.INTERACTION_CHANNEL_CATEGORY.value:
+            return candidate.model_copy(
+                update={
+                    "evidence_ids": _interaction_evidence_ids(
+                        repository=repository,
+                        run_id=run_id,
+                        pairs=_candidate_pairs(candidate),
+                        base_evidence_ids=candidate.evidence_ids,
+                    )
+                }
+            )
+        if candidate.dimension not in {"channel", "category"}:
+            continue
+        if _has_matching_signal_evidence(
+            repository=repository,
+            run_id=run_id,
+            candidate=candidate,
+            required_bad_direction=True,
+        ):
+            continue
+        pairs = _candidate_pairs(candidate)
+        if not _has_dimension(pairs, "channel") or not _has_dimension(pairs, "category"):
+            continue
+        if _has_any_pair_matching_signal_evidence(
+            repository=repository,
+            run_id=run_id,
+            pairs=pairs,
+            required_bad_direction=True,
+        ):
+            continue
+        evidence_ids = _interaction_evidence_ids(
+            repository=repository,
+            run_id=run_id,
+            pairs=pairs,
+            base_evidence_ids=candidate.evidence_ids,
+        )
+        e_rank_id = f"{run_id}:E_rank"
+        if e_rank_id not in evidence_ids:
+            evidence_ids.append(e_rank_id)
+        return candidate.model_copy(
+            update={
+                "root_cause_type": RootCauseType.INTERACTION_CHANNEL_CATEGORY.value,
+                "evidence_ids": evidence_ids,
+            }
+        )
+    return None
+
+
+def _has_any_pair_matching_signal_evidence(
+    *,
+    repository: Any,
+    run_id: str,
+    pairs: set[tuple[str, str]],
+    required_bad_direction: bool,
+) -> bool:
+    for dimension, element in pairs:
+        if dimension not in {"channel", "category"}:
+            continue
+        if _has_matching_signal_for_pair(
+            repository=repository,
+            run_id=run_id,
+            dimension=dimension,
+            element=element,
+            required_bad_direction=required_bad_direction,
+        ):
             return True
     return False
+
+
+def _interaction_evidence_ids(
+    *,
+    repository: Any,
+    run_id: str,
+    pairs: set[tuple[str, str]],
+    base_evidence_ids: list[str],
+) -> list[str]:
+    evidence_ids = [*base_evidence_ids]
+    interaction_pairs = {(dimension, element) for dimension, element in pairs if dimension in {"channel", "category"}}
+    if not interaction_pairs:
+        return _ordered_unique(evidence_ids)
+    dimensions = {dimension for dimension, _ in interaction_pairs}
+    rows = repository.get_evidences(run_id)
+    for row in rows:
+        if not isinstance(row, dict) or row.get("guard_status") != "passed":
+            continue
+        evidence_id = str(row.get("evidence_id") or "")
+        if not evidence_id.startswith(f"{run_id}:"):
+            continue
+        alias = evidence_id.removeprefix(f"{run_id}:")
+        summary = row.get("result_summary")
+        if alias in {f"E2_{dimension}" for dimension in dimensions}:
+            evidence_ids.append(evidence_id)
+            continue
+        if alias in {f"E_select_{dimension}" for dimension in dimensions}:
+            evidence_ids.append(evidence_id)
+            continue
+        if alias in {f"E4_{dimension}" for dimension in dimensions}:
+            evidence_ids.append(evidence_id)
+            continue
+        if alias == "E3" or alias.startswith("E3_"):
+            if not isinstance(summary, dict):
+                continue
+            pair = (str(summary.get("dimension")), str(summary.get("element")))
+            if pair in interaction_pairs:
+                evidence_ids.append(evidence_id)
+    return _ordered_unique(evidence_ids)
+
+
+def _target_is_bad_direction_anomaly(*, repository: Any, run_id: str) -> bool:
+    return _target_bad_direction(repository=repository, run_id=run_id) is True
+
+
+def _target_bad_direction(*, repository: Any, run_id: str) -> bool | None:
+    row = repository.get_evidence(run_id=run_id, evidence_id=f"{run_id}:E1")
+    if not isinstance(row, dict) or row.get("guard_status") != "passed":
+        return None
+    summary = row.get("result_summary")
+    if not isinstance(summary, dict):
+        return None
+    if summary.get("is_anomaly") is not True:
+        return None
+    bad_direction = summary.get("bad_direction")
+    if isinstance(bad_direction, bool):
+        return bad_direction
+    return None
+
+
+def _candidate_pairs(candidate: RootCauseCandidate) -> set[tuple[str, str]]:
+    pairs = {(dimension, str(element)) for dimension, element in candidate.dimension_elements}
+    if candidate.dimension is not None and candidate.element is not None:
+        pairs.add((candidate.dimension, str(candidate.element)))
+    return pairs
+
+
+def _has_dimension(pairs: set[tuple[str, str]], dimension: str) -> bool:
+    return any(pair_dimension == dimension for pair_dimension, _ in pairs)
 
 
 def _enhance_with_adtributor(
