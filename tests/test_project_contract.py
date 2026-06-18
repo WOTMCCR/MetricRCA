@@ -159,9 +159,9 @@ def test_runner_entrypoint_has_no_legacy_runtime_memory_or_repair_methods() -> N
     assert not any(token in source for token in forbidden)
 
 
-def test_eval_stream_make_target_passes_eval_id() -> None:
+def test_eval_stream_make_target_passes_eval_id_and_output_dir() -> None:
     result = subprocess.run(
-        ["make", "-n", "eval-stream", "EVAL_ID=eval-predict-test"],
+        ["make", "-n", "eval-stream", "EVAL_ID=eval-predict-test", "EVAL_OUTPUT_DIR=eval_out/ptv/cycle-test"],
         cwd=ROOT,
         check=True,
         text=True,
@@ -172,7 +172,29 @@ def test_eval_stream_make_target_passes_eval_id() -> None:
         for line in result.stdout.splitlines()
         if line and not line.startswith("export ") and not line.startswith("make[")
     ]
-    assert lines[-1] == "python -m metric_rca.evals.runner --stream --eval-id eval-predict-test"
+    assert lines[-1] == (
+        "python -m metric_rca.evals.runner --stream --output-dir eval_out/ptv/cycle-test "
+        "--eval-id eval-predict-test"
+    )
+
+
+def test_eval_gaps_make_target_passes_eval_id_and_output_dir() -> None:
+    result = subprocess.run(
+        ["make", "-n", "eval-gaps", "EVAL_ID=eval-predict-test", "EVAL_OUTPUT_DIR=eval_out/ptv/cycle-test"],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    lines = [
+        line
+        for line in result.stdout.splitlines()
+        if line and not line.startswith("export ") and not line.startswith("make[")
+    ]
+    assert lines[-1] == (
+        "python -m metric_rca.evals.gap_analyzer --output-dir eval_out/ptv/cycle-test "
+        "--eval-id eval-predict-test"
+    )
 
 
 def test_compose_declares_mysql_only_contract() -> None:

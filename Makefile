@@ -7,6 +7,7 @@ ALLOW_DESTRUCTIVE_SEED ?= false
 .PHONY: up seed api ui eval eval-regression eval-blind eval-seed-sweep eval-mutation eval-memory-treatment eval-acceptance eval-stream eval-http eval-gaps test test-e2e
 
 EVAL_ID ?=
+EVAL_OUTPUT_DIR ?= eval_out
 
 BASE_URL ?= http://127.0.0.1:8000
 HTTP_TIMEOUT ?= 600
@@ -46,7 +47,7 @@ eval-acceptance:
 	METRIC_RCA_EVAL_SUITE=acceptance python -m metric_rca.evals.runner
 
 eval-stream:
-	python -m metric_rca.evals.runner --stream $(if $(EVAL_ID),--eval-id $(EVAL_ID),)
+	python -m metric_rca.evals.runner --stream --output-dir $(EVAL_OUTPUT_DIR) $(if $(EVAL_ID),--eval-id $(EVAL_ID),)
 
 eval-http:
 	@test -n "$(PROVIDER)" || (echo "PROVIDER is required for eval-http" >&2; exit 2)
@@ -54,7 +55,7 @@ eval-http:
 	python -m metric_rca.evals.client --base-url $(BASE_URL) --provider $(PROVIDER) --model $(MODEL) --timeout $(HTTP_TIMEOUT) --concurrency $(HTTP_CONCURRENCY)
 
 eval-gaps:
-	python -m metric_rca.evals.gap_analyzer --eval-id $(EVAL_ID)
+	python -m metric_rca.evals.gap_analyzer --output-dir $(EVAL_OUTPUT_DIR) --eval-id $(EVAL_ID)
 
 test:
 	pytest -q
