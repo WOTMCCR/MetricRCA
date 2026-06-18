@@ -36,7 +36,7 @@ def rank_from_persisted_e4(
     if not candidates:
         return _error("rank_root_causes", "ATTRIBUTION_COVERAGE_LOW", "persisted E4 contribution_set has no candidates")
     persisted_selected_candidate = contribution_set.selected_candidate
-    candidates, adtributor_audit = _enhance_with_adtributor(
+    candidates, adtributor_audit, adtributor_pair_ranks = _enhance_with_adtributor(
         repository=repository,
         settings=settings,
         run_id=run_id,
@@ -45,13 +45,24 @@ def rank_from_persisted_e4(
     )
     e_rank_id = f"{run_id}:E_rank"
     ranked_candidates = [_candidate_with_rank_evidence(candidate, e_rank_id) for candidate in _rank_candidates(candidates)]
+    embedded_verified_candidate = _embedded_verified_ranked_candidate(
+        repository=repository,
+        run_id=run_id,
+        persisted_selected_candidate=persisted_selected_candidate,
+        ranked_candidates=ranked_candidates,
+        adtributor_audit=adtributor_audit,
+        adtributor_pair_ranks=adtributor_pair_ranks,
+    )
     signal_verified_candidate = _signal_verified_ranked_candidate(
         repository=repository,
         run_id=run_id,
         persisted_selected_candidate=persisted_selected_candidate,
         ranked_candidates=ranked_candidates,
     )
-    if signal_verified_candidate is not None:
+    if embedded_verified_candidate is not None:
+        selected_candidate = embedded_verified_candidate
+        candidates = _selected_first_with_diverse_top3(selected_candidate, ranked_candidates)
+    elif signal_verified_candidate is not None:
         selected_candidate = signal_verified_candidate
         candidates = _selected_first_with_diverse_top3(selected_candidate, ranked_candidates)
     elif interaction_candidate := _interaction_promoted_candidate(
@@ -266,6 +277,72 @@ def _signal_verified_ranked_candidate(
     return _candidate_with_rank_evidence(persisted_selected_candidate, f"{run_id}:E_rank")
 
 
+def _embedded_verified_ranked_candidate(
+    *,
+    repository: Any,
+    run_id: str,
+    persisted_selected_candidate: RootCauseCandidate | None,
+    ranked_candidates: list[RootCauseCandidate],
+    adtributor_audit: dict[str, str],
+    adtributor_pair_ranks: dict[tuple[str, str], tuple[float, float]],
+) -> RootCauseCandidate | None:
+    if adtributor_audit.get("adtributor_status") != "applied":
+        return None
+    if persisted_selected_candidate is None:
+        return None
+    if persisted_selected_candidate.root_cause_type != RootCauseType.STOCKOUT.value:
+        return None
+
+    selected_candidate = _matching_ranked_candidate(ranked_candidates, persisted_selected_candidate)
+    if selected_candidate is None:
+        return None
+    selected_primary_pair = _primary_pair(selected_candidate)
+    if selected_primary_pair is None:
+        return None
+    selected_pairs = _candidate_pairs(selected_candidate)
+    selected_pair_rank = adtributor_pair_ranks.get(selected_primary_pair)
+    if selected_pair_rank is None:
+        return None
+
+    required_bad_direction = _target_bad_direction(repository=repository, run_id=run_id)
+    promotable: list[tuple[tuple[float, float], float, RootCauseCandidate]] = []
+    for candidate in ranked_candidates:
+        primary_pair = _primary_pair(candidate)
+        if primary_pair is None:
+            continue
+        if primary_pair not in selected_pairs:
+            continue
+        if candidate.root_cause_type != RootCauseType.CAMPAIGN_TRAFFIC_DROP.value:
+            continue
+        if candidate.dimension != "channel":
+            continue
+        if not _has_matching_signal_evidence(
+            repository=repository,
+            run_id=run_id,
+            candidate=candidate,
+            required_bad_direction=required_bad_direction,
+        ):
+            continue
+        candidate_pair_rank = adtributor_pair_ranks.get(primary_pair)
+        if candidate_pair_rank is None or candidate_pair_rank < selected_pair_rank:
+            continue
+        promotable.append((candidate_pair_rank, float(candidate.eng_confidence), candidate))
+
+    if not promotable:
+        return None
+    return max(promotable, key=lambda item: (item[0], item[1]))[2]
+
+
+def _matching_ranked_candidate(
+    ranked_candidates: list[RootCauseCandidate],
+    candidate: RootCauseCandidate,
+) -> RootCauseCandidate | None:
+    for ranked_candidate in ranked_candidates:
+        if _same_candidate_element(ranked_candidate, candidate):
+            return ranked_candidate
+    return None
+
+
 def _has_matching_signal_evidence(
     *,
     repository: Any,
@@ -471,10 +548,10 @@ def _enhance_with_adtributor(
     run_id: str,
     metric_id: str,
     candidates: list[RootCauseCandidate],
-) -> tuple[list[RootCauseCandidate], dict[str, str]]:
+) -> tuple[list[RootCauseCandidate], dict[str, str], dict[tuple[str, str], tuple[float, float]]]:
     elements = _adtributor_elements_from_persisted_evidence(repository=repository, run_id=run_id)
     if not elements:
-        return candidates, _adtributor_not_applicable("no persisted adtributor elements")
+        return candidates, _adtributor_not_applicable("no persisted adtributor elements"), {}
     result = attribute_elements(
         metric_id=metric_id,
         elements=elements,
@@ -482,14 +559,15 @@ def _enhance_with_adtributor(
         t_eep=float(getattr(settings, "adtributor_t_eep", 0.10)),
     )
     if not result.ok:
-        return candidates, _adtributor_not_applicable(result.error_code or "ADTRIBUTOR_NOT_APPLICABLE")
+        return candidates, _adtributor_not_applicable(result.error_code or "ADTRIBUTOR_NOT_APPLICABLE"), {}
     score_by_pair = {
         (score.dimension, str(score.element)): score
         for score in result.element_scores
         if score.explanatory_power > 0
     }
     if not score_by_pair:
-        return candidates, _adtributor_not_applicable("no positive adtributor scores")
+        return candidates, _adtributor_not_applicable("no positive adtributor scores"), {}
+    pair_ranks = {pair: _adtributor_pair_rank(score) for pair, score in score_by_pair.items()}
     top_pair_by_dimension: dict[str, tuple[str, str]] = {}
     for pair, score in score_by_pair.items():
         previous = top_pair_by_dimension.get(pair[0])
@@ -541,7 +619,7 @@ def _enhance_with_adtributor(
                 }
             )
         )
-    return enhanced, {"adtributor_status": "applied"}
+    return enhanced, {"adtributor_status": "applied"}, pair_ranks
 
 
 def _adtributor_not_applicable(reason: str) -> dict[str, str]:
