@@ -2260,6 +2260,83 @@ def test_rank_root_causes_preserves_e4_selection_when_adtributor_not_applicable(
     assert repo.evidence_rows[-1]["result_summary"]["selected_candidate"]["element"] == "social"
 
 
+def test_rank_root_causes_diversifies_top3_after_persisted_selection() -> None:
+    repo = SpyRepository()
+    selected = {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.82,
+        "evidence_support": 1.0,
+        "reflection_factor": 1.0,
+        "eng_confidence": 1.0,
+        "verdict": "confirmed",
+        "evidence_ids": ["run-1:E1", "run-1:E2_channel", "run-1:E3_ch_paid_ads", "run-1:E4"],
+        "dimension_elements": [["channel", "paid_ads"], ["category", "fashion"]],
+    }
+    stockout_product_6 = {
+        **selected,
+        "root_cause_type": "stockout",
+        "dimension": "product",
+        "element": "6",
+        "signal_severity": 0.63,
+        "eng_confidence": 0.76,
+        "dimension_elements": [["product", "6"], ["category", "fashion"]],
+    }
+    stockout_product_4 = {
+        **stockout_product_6,
+        "element": "4",
+        "signal_severity": 0.62,
+        "eng_confidence": 0.75,
+        "dimension_elements": [["product", "4"], ["category", "fashion"]],
+    }
+    aov_fashion = {
+        **selected,
+        "root_cause_type": "aov_drop",
+        "dimension": "category",
+        "element": "fashion",
+        "signal_severity": 0.61,
+        "eng_confidence": 0.74,
+        "dimension_elements": [["category", "fashion"]],
+    }
+    repo.persisted_evidence["run-1:E4"] = {
+        "evidence_id": "run-1:E4",
+        "run_id": "run-1",
+        "query_spec": {},
+        "sql_text": "SELECT SUM(order_amount) FROM fact_order WHERE business_date = :target_date LIMIT 1000",
+        "sql_hash": "e4" * 32,
+        "guard_status": "passed",
+        "data_source": "fact_order",
+        "result_summary": {
+            "selected_candidate": selected,
+            "candidates": [selected, stockout_product_6, stockout_product_4, aov_fashion],
+        },
+    }
+    repo.persisted_evidence["run-1:E4"]["result_summary"] = _with_contribution_set(
+        repo.persisted_evidence["run-1:E4"]["result_summary"]
+    )
+    deps = SimpleNamespace(
+        repository=repo,
+        metric_service=StaticMetricService(),
+        renderer=None,
+        settings=Settings(db_dsn="sqlite://", readonly_db_dsn="sqlite://"),
+        trace_writer=None,
+    )
+    rank_tool = next(tool for tool in build_metric_rca_tools(dependencies=deps, run_id="run-1") if tool.name == "rank_root_causes")
+
+    result = rank_tool.invoke({"metric_id": "gmv", "target_date": date(2026, 6, 5)})
+
+    assert result["observation"]["ok"] is True
+    candidates = result["observation"]["payload"]["candidates"]
+    assert candidates[0]["root_cause_type"] == "campaign_traffic_drop"
+    assert candidates[0]["element"] == "paid_ads"
+    assert ("aov_drop", "category", "fashion") in [
+        (candidate["root_cause_type"], candidate["dimension"], candidate["element"])
+        for candidate in candidates[:3]
+    ]
+
+
 def test_rank_root_causes_requires_persisted_e4_sql_text() -> None:
     repo = SpyRepository()
     repo.persisted_evidence["run-1:E4"] = {

@@ -53,10 +53,7 @@ def rank_from_persisted_e4(
     )
     if signal_verified_candidate is not None:
         selected_candidate = signal_verified_candidate
-        candidates = [
-            selected_candidate,
-            *[candidate for candidate in ranked_candidates if not _same_candidate_element(candidate, selected_candidate)],
-        ]
+        candidates = _selected_first_with_diverse_top3(selected_candidate, ranked_candidates)
     elif interaction_candidate := _interaction_promoted_candidate(
         repository=repository,
         run_id=run_id,
@@ -64,25 +61,18 @@ def rank_from_persisted_e4(
         ranked_candidates=ranked_candidates,
     ):
         selected_candidate = interaction_candidate
-        candidates = [
+        candidates = _selected_first_with_diverse_top3(
             selected_candidate,
-            *[
-                candidate
-                for candidate in ranked_candidates
-                if not _same_dimension_element(candidate, selected_candidate)
-            ],
-        ]
+            [candidate for candidate in ranked_candidates if not _same_dimension_element(candidate, selected_candidate)],
+        )
     elif adtributor_audit.get("adtributor_status") == "applied":
-        candidates = ranked_candidates
+        candidates = _diversify_ranked_top3(ranked_candidates)
         selected_candidate = candidates[0]
     elif persisted_selected_candidate is not None:
         selected_candidate = _candidate_with_rank_evidence(persisted_selected_candidate, e_rank_id)
-        candidates = [
-            selected_candidate,
-            *[candidate for candidate in ranked_candidates if not _same_candidate_element(candidate, selected_candidate)],
-        ]
+        candidates = _selected_first_with_diverse_top3(selected_candidate, ranked_candidates)
     else:
-        candidates = ranked_candidates
+        candidates = _diversify_ranked_top3(ranked_candidates)
         selected_candidate = candidates[0]
     sql_text = e4.get("sql_text")
     if not sql_text:
@@ -189,6 +179,69 @@ def _same_candidate_element(left: RootCauseCandidate, right: RootCauseCandidate)
 
 def _same_dimension_element(left: RootCauseCandidate, right: RootCauseCandidate) -> bool:
     return left.dimension == right.dimension and str(left.element) == str(right.element)
+
+
+def _diversify_ranked_top3(candidates: list[RootCauseCandidate]) -> list[RootCauseCandidate]:
+    if not candidates:
+        return []
+    return _selected_first_with_diverse_top3(candidates[0], candidates)
+
+
+def _selected_first_with_diverse_top3(
+    selected_candidate: RootCauseCandidate,
+    ranked_candidates: list[RootCauseCandidate],
+) -> list[RootCauseCandidate]:
+    remaining = [
+        candidate
+        for candidate in ranked_candidates
+        if not _same_candidate_element(candidate, selected_candidate)
+    ]
+    selected = [selected_candidate]
+    diversified: list[RootCauseCandidate] = []
+    target_size = min(3, len(remaining) + 1)
+    while len(selected) < target_size and remaining:
+        index = _next_diverse_candidate_index(remaining, selected)
+        diversified.append(remaining.pop(index))
+        selected.append(diversified[-1])
+    return [selected_candidate, *diversified, *remaining]
+
+
+def _next_diverse_candidate_index(
+    candidates: list[RootCauseCandidate],
+    selected: list[RootCauseCandidate],
+) -> int:
+    used_root_types = {candidate.root_cause_type for candidate in selected}
+    passes = (
+        lambda candidate: candidate.root_cause_type not in used_root_types
+        and not _is_redundant_with_selected(candidate, selected),
+        lambda candidate: not _is_redundant_with_selected(candidate, selected),
+        lambda candidate: candidate.root_cause_type not in used_root_types,
+    )
+    for predicate in passes:
+        for index, candidate in enumerate(candidates):
+            if predicate(candidate):
+                return index
+    return 0
+
+
+def _is_redundant_with_selected(
+    candidate: RootCauseCandidate,
+    selected: list[RootCauseCandidate],
+) -> bool:
+    primary_pair = _primary_pair(candidate)
+    if primary_pair is None:
+        return False
+    return any(
+        existing.root_cause_type == candidate.root_cause_type
+        and primary_pair in _candidate_pairs(existing)
+        for existing in selected
+    )
+
+
+def _primary_pair(candidate: RootCauseCandidate) -> tuple[str, str] | None:
+    if candidate.dimension is None or candidate.element is None:
+        return None
+    return (candidate.dimension, str(candidate.element))
 
 
 def _signal_verified_ranked_candidate(
