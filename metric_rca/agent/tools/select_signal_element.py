@@ -106,10 +106,20 @@ def select_signal_element(
         metric_definition=metric_definition,
     )
     if not scores:
-        return tool_error(action, "SIGNAL_SELECTION_UNRESOLVED", "signal selection found no scored drilldown candidate")
+        return tool_error(
+            action,
+            "SIGNAL_SELECTION_UNRESOLVED",
+            "signal selection found no scored drilldown candidate",
+            sql_count=2,
+        )
     selected = _select_element(scores=scores, element_selection=args.element_selection)
     if selected is None:
-        return tool_error(action, "SIGNAL_SELECTION_UNRESOLVED", "signal selection found no selected element")
+        return tool_error(
+            action,
+            "SIGNAL_SELECTION_UNRESOLVED",
+            "signal selection found no selected element",
+            sql_count=2,
+        )
 
     evidence_alias = f"E_select_{args.dimension}"
     result_summary = {

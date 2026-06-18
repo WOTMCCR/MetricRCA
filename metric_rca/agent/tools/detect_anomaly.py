@@ -85,7 +85,12 @@ def detect_anomaly(
         z_thresh=settings.z_thresh,
     )
     if not result.ok:
-        return tool_error(action, result.error_code or "ANOMALY_DETECTION_FAILED", "anomaly detection failed")
+        return tool_error(
+            action,
+            result.error_code or "ANOMALY_DETECTION_FAILED",
+            "anomaly detection failed",
+            sql_count=2,
+        )
 
     result_summary = {
         **result.result_summary,

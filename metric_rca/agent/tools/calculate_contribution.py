@@ -111,7 +111,12 @@ def calculate_contribution(
         anomaly_direction=anomaly_direction,
     )
     if not attribution.ok:
-        return tool_error(action, attribution.error_code or "ATTRIBUTION_COVERAGE_LOW", "attribution coverage low")
+        return tool_error(
+            action,
+            attribution.error_code or "ATTRIBUTION_COVERAGE_LOW",
+            "attribution coverage low",
+            sql_count=2,
+        )
 
     selected_candidate = _candidate_for_selected_element(
         candidates=attribution.candidates,
@@ -123,6 +128,7 @@ def calculate_contribution(
             action,
             "ATTRIBUTION_COVERAGE_LOW",
             "selected element is not an attributed candidate",
+            sql_count=2,
         )
     selected_candidate = _with_selected_signal_severity(
         selected_candidate,

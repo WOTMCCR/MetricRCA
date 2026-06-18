@@ -138,7 +138,12 @@ def fetch_related_signal(
         z_thresh=1.0,
     )
     if not signal.ok:
-        return tool_error(action, signal.error_code or "SIGNAL_INSUFFICIENT", "signal data insufficient")
+        return tool_error(
+            action,
+            signal.error_code or "SIGNAL_INSUFFICIENT",
+            "signal data insufficient",
+            sql_count=2,
+        )
     result_summary = {
         "signal_type": args.signal_type,
         "signal_metric_id": signal_metric_id,

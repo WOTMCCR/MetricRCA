@@ -283,11 +283,11 @@ def test_net_gmv_explicit_channel_policy_declares_multi_driver_lanes() -> None:
     assert [
         (lane.dimension, lane.signal_type, lane.element_binding, lane.evidence_alias)
         for lane in policy.lanes
-    ] == [
-        ("channel", "campaign", "explicit_scope", "E4_channel"),
-        ("category", "inventory", "dynamic", "E4_category"),
-        ("channel", "conversion", "dynamic", "E4_channel_conversion"),
-    ]
+        ] == [
+            ("channel", "campaign", "explicit_scope", "E4_channel"),
+            ("category", "inventory", "dynamic", "E4_category"),
+            ("channel", "conversion", "explicit_scope", "E4_channel_conversion"),
+        ]
 
 
 def test_factor_graph_policy_reads_registry() -> None:
@@ -358,6 +358,7 @@ def test_root_cause_policy_reads_registry_and_validates_dimensions() -> None:
         )
         == "stockout"
     )
+    assert root_cause_type_for_metric_dimension(metric_id="net_gmv", dimension="category") == "stockout"
     assert (
         root_cause_type_for_metric_dimension(
             metric_id="net_gmv",

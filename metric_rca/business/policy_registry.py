@@ -442,7 +442,7 @@ DEFAULT_DISCOVERY_POLICY_RULES: tuple[DiscoveryPolicyRule, ...] = (
             DiscoveryLane(
                 dimension=DimensionId.CHANNEL.value,
                 signal_type="conversion",
-                element_binding="dynamic",
+                element_binding="explicit_scope",
                 evidence_alias="E4_channel_conversion",
             ),
         ),
@@ -645,6 +645,11 @@ DEFAULT_ROOT_CAUSE_POLICIES: tuple[RootCausePolicy, ...] = (
         dimension=DimensionId.CHANNEL.value,
         root_cause_type=RootCauseType.CONVERSION_DROP.value,
         signal_type="conversion",
+    ),
+    RootCausePolicy(
+        metric_id=MetricId.NET_GMV.value,
+        dimension=DimensionId.CATEGORY.value,
+        root_cause_type=RootCauseType.STOCKOUT.value,
     ),
     RootCausePolicy(
         metric_id=MetricId.NET_GMV.value,

@@ -205,6 +205,10 @@ def _discovery_actions(
     if not policy.required_drilldowns:
         raise PlanCompilerError("DISCOVERY_POLICY_MISSING", "discovery policy requires drilldowns")
     actions: list[RcaAction] = []
+    scoped_filters = _scope_filters_by_dimension(
+        policy.required_drilldowns,
+        explicit_scope or {},
+    )
     for index, dimension in enumerate(policy.required_drilldowns, start=2):
         actions.append(
             RcaAction(
@@ -214,7 +218,7 @@ def _discovery_actions(
                     "metric_id": parsed_intent.metric_id,
                     "target_date": parsed_intent.target_date,
                     "dimension": dimension,
-                    "filters": {},
+                    "filters": scoped_filters[dimension],
                 },
                 requires=["E1"],
                 produces=[f"E2_{dimension}"],
@@ -227,6 +231,7 @@ def _discovery_actions(
             first_action_index=len(actions) + 2,
             validate_dimensions=validate_dimensions,
             explicit_scope=explicit_scope,
+            scoped_filters=scoped_filters if explicit_scope else None,
         )
     )
     return actions
@@ -594,6 +599,10 @@ def _lane_element(
 
 def _filters_except(filters: dict[str, str], excluded_dimension: str) -> dict[str, str]:
     return {dimension: element for dimension, element in filters.items() if dimension != excluded_dimension}
+
+
+def _scope_filters_by_dimension(dimensions: tuple[str, ...], explicit_scope: dict[str, str]) -> dict[str, dict[str, str]]:
+    return {dimension: _filters_except(explicit_scope, dimension) for dimension in dimensions}
 
 
 def _ordered_unique_list(values: list[str]) -> list[str]:

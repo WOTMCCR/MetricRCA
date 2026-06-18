@@ -111,14 +111,16 @@ def persist_evidence(*, repository: Any, row: dict[str, Any]) -> None:
         raise
 
 
-def tool_error(action: str, code: str, message: str) -> ToolResult:
+def tool_error(action: str, code: str, message: str, *, sql_count: int = 0) -> ToolResult:
     return ToolResult(
-        observation=Observation(action_name=action, ok=False, error_code=code, message=message)
+        observation=Observation(action_name=action, ok=False, error_code=code, message=message),
+        sql_count=sql_count,
+        sql_audit_delta=sql_count,
     )
 
 
-def runtime_error(action: str, error: ToolRuntimeError) -> ToolResult:
-    return tool_error(action, error.code, error.message)
+def runtime_error(action: str, error: ToolRuntimeError, *, sql_count: int = 0) -> ToolResult:
+    return tool_error(action, error.code, error.message, sql_count=sql_count)
 
 
 def query_sources(*, current_plan: SQLPlan, baseline_plan: SQLPlan) -> dict[str, Any]:

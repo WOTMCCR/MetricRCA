@@ -250,6 +250,23 @@ class EmptyContributionRepository(SpyRepository):
         return super().execute_plan(plan, run_id=run_id)
 
 
+class FlatDrilldownRepository(SpyRepository):
+    def execute_plan(self, plan: SQLPlan, *, run_id: str):
+        self.executed.append(plan)
+        if "GROUP BY fact_order.channel" in plan.sql and "business_date IN" in plan.sql:
+            rows = [
+                {"business_date": date(2026, 5, 29), "channel": "paid_ads", "metric_value": 100.0},
+                {"business_date": date(2026, 5, 22), "channel": "paid_ads", "metric_value": 100.0},
+                {"business_date": date(2026, 5, 15), "channel": "paid_ads", "metric_value": 100.0},
+                {"business_date": date(2026, 5, 8), "channel": "paid_ads", "metric_value": 100.0},
+            ]
+        elif "GROUP BY fact_order.channel" in plan.sql:
+            rows = [{"channel": "paid_ads", "metric_value": 100.0}]
+        else:
+            rows = [{"metric_value": 100.0}]
+        return type("QueryResult", (), {"rows": rows, "row_count": len(rows), "latency_ms": 1})()
+
+
 class FailingEvidenceRepository(SpyRepository):
     def create_evidence(self, row: dict[str, Any]) -> None:
         raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED")
@@ -569,6 +586,29 @@ def test_drilldown_repeated_same_evidence_slot_returns_persisted_result_without_
     assert result.observation.payload == persisted_summary
     assert result.candidates[0].element == "paid_ads"
     assert repo.executed == []
+    assert repo.evidence_rows == []
+
+
+def test_drilldown_post_query_attribution_error_reports_executed_sql_count() -> None:
+    repo = FlatDrilldownRepository()
+    repo.persisted_evidence.pop("run-1:E2")
+
+    result = drilldown_dimension(
+        DrilldownDimensionArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            dimension="channel",
+            evidence_ids=["run-1:E1"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == "ATTRIBUTION_COVERAGE_LOW"
+    assert result.sql_count == 2
+    assert len(repo.executed) == 2
     assert repo.evidence_rows == []
 
 

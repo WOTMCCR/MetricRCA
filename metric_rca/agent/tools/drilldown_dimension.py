@@ -85,7 +85,12 @@ def drilldown_dimension(
         anomaly_direction=_anomaly_direction(args.run_id, repository=repository),
     )
     if not attribution.ok:
-        return tool_error(action, attribution.error_code or "ATTRIBUTION_COVERAGE_LOW", "attribution coverage low")
+        return tool_error(
+            action,
+            attribution.error_code or "ATTRIBUTION_COVERAGE_LOW",
+            "attribution coverage low",
+            sql_count=2,
+        )
 
     result_summary = {
         "metric_id": args.metric_id,

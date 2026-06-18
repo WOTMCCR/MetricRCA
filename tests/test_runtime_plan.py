@@ -285,21 +285,21 @@ def test_plan_compiler_expands_net_gmv_paid_ads_slice_to_multi_driver_discovery(
 
     assert plan.explicit_scope == {"channel": "paid_ads"}
     assert [action.args["dimension"] for action in drilldowns] == ["channel", "category"]
-    assert [action.args["filters"] for action in drilldowns] == [{}, {}]
+    assert [action.args["filters"] for action in drilldowns] == [{}, {"channel": "paid_ads"}]
     assert [(action.args["dimension"], action.args["signal_type"]) for action in selections] == [
         ("category", "inventory"),
-        ("channel", "conversion"),
     ]
     assert [(action.args["dimension"], action.args["signal_type"], action.args["element"]) for action in signal_actions] == [
         ("channel", "campaign", "paid_ads"),
         ("category", "inventory", None),
-        ("channel", "conversion", None),
+        ("channel", "conversion", "paid_ads"),
     ]
-    assert [action.dynamic for action in signal_actions] == [False, True, True]
+    assert [action.dynamic for action in signal_actions] == [False, True, False]
+    assert [action.args["filters"] for action in signal_actions] == [{}, {"channel": "paid_ads"}, {}]
     assert [(action.args["dimension"], action.args["element"], action.args["evidence_alias"]) for action in contribution_actions] == [
         ("channel", "paid_ads", "E4_channel"),
         ("category", None, "E4_category"),
-        ("channel", None, "E4_channel_conversion"),
+        ("channel", "paid_ads", "E4_channel_conversion"),
     ]
     assert merge_action.args["source_evidence_aliases"] == ["E4_channel", "E4_category", "E4_channel_conversion"]
     assert plan.scope_mode == "explicit_multi_driver"
