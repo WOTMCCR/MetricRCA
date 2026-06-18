@@ -38,7 +38,9 @@ TARGET_DATE = date(2026, 6, 5)
 GMV_NO_ANOMALY_DATE = date(2026, 6, 4)
 BORDERLINE_DATE = date(2026, 6, 3)
 SPIKE_DATE = date(2026, 6, 2)
-MULTI_CAUSE_DATE = date(2026, 6, 1)
+MULTI_CAUSE_DATE = date(2026, 5, 29)
+MULTI_CAUSE_CVR_DATE = date(2026, 5, 28)
+RESIDUAL_DATE = date(2026, 5, 27)
 INTERACTION_DATE = date(2026, 5, 31)
 LAGGED_OBSERVE_DATE = date(2026, 6, 1)
 SCENARIO_DIR = Path("metric_rca/data/scenarios")
@@ -77,12 +79,12 @@ EXPECTED_GROUND_TRUTH = {
     "C28_multi_day_drift": ("gmv", 1, "campaign_traffic_drop", "channel", "organic", TARGET_DATE),
     "MC01_gmv_multi_cause_overall": ("gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", MULTI_CAUSE_DATE),
     "MC02_uv_multi_channel_drop": ("uv", 1, "campaign_traffic_drop", "channel", "paid_ads", LAGGED_OBSERVE_DATE),
-    "MC03_cvr_multi_signal_drop": ("pay_cvr", 1, "conversion_drop", "channel", "affiliate", MULTI_CAUSE_DATE),
+    "MC03_cvr_multi_signal_drop": ("pay_cvr", 1, "conversion_drop", "channel", "social", MULTI_CAUSE_CVR_DATE),
     "MC04_gmv_weak_set": ("gmv", 1, "campaign_traffic_drop", "channel", "affiliate", MULTI_CAUSE_DATE),
     "MC05_gmv_lag_stockout_mix": ("gmv", 1, "campaign_traffic_drop", "channel", "social", LAGGED_OBSERVE_DATE),
     "MC06_net_gmv_multi_driver": ("net_gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", MULTI_CAUSE_DATE),
     "MC07_uv_weak_multi_driver": ("uv", 1, "campaign_traffic_drop", "channel", "social", LAGGED_OBSERVE_DATE),
-    "MC08_gmv_channel_category_mix": ("gmv", 1, "campaign_traffic_drop", "channel", "social", MULTI_CAUSE_DATE),
+    "MC08_gmv_channel_category_mix": ("gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", MULTI_CAUSE_DATE),
     "IX01_gmv_channel_category_interaction": (
         "gmv",
         1,
@@ -126,6 +128,8 @@ EXPECTED_GROUND_TRUTH = {
         MULTI_CAUSE_DATE,
     ),
     "WK02_gmv_no_anomaly_weak": ("gmv", 0, "no_anomaly", None, None, GMV_NO_ANOMALY_DATE),
+    "RS01_gmv_residual_dual_mechanism": ("gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", RESIDUAL_DATE),
+    "RS02_gmv_residual_discovery": ("gmv", 1, "campaign_traffic_drop", "channel", "paid_ads", RESIDUAL_DATE),
 }
 EXPECTED_WEIGHTED_ROOT_CAUSES = {
     "C06_gmv_multi_channel_drop": [
@@ -148,8 +152,8 @@ EXPECTED_WEIGHTED_ROOT_CAUSES = {
         {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "affiliate", "weight": 0.15},
     ],
     "MC03_cvr_multi_signal_drop": [
-        {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "affiliate", "weight": 0.65},
-        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.35},
+        {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "social", "weight": 0.67},
+        {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "organic", "weight": 0.33},
     ],
     "MC04_gmv_weak_set": [
         {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "affiliate", "weight": 0.55},
@@ -171,9 +175,9 @@ EXPECTED_WEIGHTED_ROOT_CAUSES = {
         {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.25},
     ],
     "MC08_gmv_channel_category_mix": [
-        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "social", "weight": 0.4},
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.45},
         {"root_cause_type": "stockout", "dimension": "category", "element": "electronics", "weight": 0.35},
-        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.25},
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "affiliate", "weight": 0.20},
     ],
     "IX01_gmv_channel_category_interaction": [
         {"root_cause_type": "interaction_channel_category", "dimension": "channel", "element": "paid_ads", "weight": 1.0},
@@ -197,6 +201,14 @@ EXPECTED_WEIGHTED_ROOT_CAUSES = {
         {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "affiliate", "weight": 1.0},
     ],
     "WK02_gmv_no_anomaly_weak": [],
+    "RS01_gmv_residual_dual_mechanism": [
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.58},
+        {"root_cause_type": "aov_drop", "dimension": "category", "element": "fashion", "weight": 0.42},
+    ],
+    "RS02_gmv_residual_discovery": [
+        {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.58},
+        {"root_cause_type": "aov_drop", "dimension": "category", "element": "fashion", "weight": 0.42},
+    ],
 }
 EXPECTED_MEMORY_TREATMENT_GROUND_TRUTH = {
     "M01_gmv_memory_product_prior": ("gmv", 1, "aov_drop", "product", "2", TARGET_DATE),
@@ -261,7 +273,7 @@ def test_seed_profile_metadata_files_define_regression_data_slice(monkeypatch) -
 
     regression = registry["suites"]["regression"]
     assert regression["seed_profile"] == "regression"
-    assert regression["case_count"] == 44
+    assert regression["case_count"] == 46
     assert (SCENARIO_DIR / regression["public_cases_file"]).resolve() == PUBLIC_CASES_PATH.resolve()
     assert (SCENARIO_DIR / regression["private_ground_truth_file"]).resolve() == PRIVATE_GROUND_TRUTH_PATH.resolve()
     assert regression["data_slice"] == {
@@ -507,7 +519,7 @@ def _gmv_factor_drop_row(conn, where_clause: str) -> dict[str, float | str]:
               FROM fact_order o
               INNER JOIN dim_product p ON o.product_id = p.product_id
               WHERE {where_clause}
-                AND o.business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29','2026-06-05')
+                AND o.business_date IN ('2026-05-01','2026-05-08','2026-05-15','2026-05-22','2026-06-05')
               GROUP BY o.business_date
             ), traffic_daily AS (
               SELECT
@@ -517,7 +529,7 @@ def _gmv_factor_drop_row(conn, where_clause: str) -> dict[str, float | str]:
               FROM fact_traffic t
               INNER JOIN dim_product p ON t.product_id = p.product_id
               WHERE {where_clause.replace("o.", "t.")}
-                AND t.business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29','2026-06-05')
+                AND t.business_date IN ('2026-05-01','2026-05-08','2026-05-15','2026-05-22','2026-06-05')
               GROUP BY t.business_date
             ), daily AS (
               SELECT
@@ -608,7 +620,7 @@ def test_seed_metric_definitions_and_ground_truth_cases() -> None:
                 ).mappings()
             }
             assert set(cases) == set(EXPECTED_GROUND_TRUTH)
-            assert len(cases) == 44
+            assert len(cases) == 46
             for case_id, (metric_id, expected_anomaly, root_cause, dimension, element, business_date) in EXPECTED_GROUND_TRUTH.items():
                 assert cases[case_id]["metric_id"] == metric_id
                 assert cases[case_id]["expected_anomaly"] == expected_anomaly
@@ -772,7 +784,7 @@ def test_paid_ads_injection_below_same_weekday_baseline() -> None:
                       AVG(CASE WHEN business_date <> '2026-06-05' THEN clicks END) AS baseline_clicks
                     FROM fact_campaign
                     WHERE channel = 'paid_ads'
-                      AND business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29','2026-06-05')
+                      AND business_date IN ('2026-05-01','2026-05-08','2026-05-15','2026-05-22','2026-06-05')
                     """
                 )
             ).mappings().one()
@@ -789,7 +801,7 @@ def test_paid_ads_injection_below_same_weekday_baseline() -> None:
                       SELECT business_date, SUM(uv) AS daily_uv
                       FROM fact_traffic
                       WHERE channel = 'paid_ads'
-                        AND business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29','2026-06-05')
+                        AND business_date IN ('2026-05-01','2026-05-08','2026-05-15','2026-05-22','2026-06-05')
                       GROUP BY business_date
                     ) AS daily_paid_ads
                     """
@@ -823,7 +835,7 @@ def test_c09_organic_traffic_signal_is_strongest_channel_drop() -> None:
                       FROM (
                         SELECT business_date, channel, SUM(clicks) AS clicks
                         FROM fact_campaign
-                        WHERE business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29')
+                        WHERE business_date IN ('2026-05-01','2026-05-08','2026-05-15','2026-05-22')
                         GROUP BY business_date, channel
                       ) AS daily_campaign
                       GROUP BY channel
@@ -839,7 +851,7 @@ def test_c09_organic_traffic_signal_is_strongest_channel_drop() -> None:
                       FROM (
                         SELECT business_date, channel, SUM(uv) AS uv
                         FROM fact_traffic
-                        WHERE business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29')
+                        WHERE business_date IN ('2026-05-01','2026-05-08','2026-05-15','2026-05-22')
                         GROUP BY business_date, channel
                       ) AS daily_traffic
                       GROUP BY channel
@@ -872,7 +884,7 @@ def test_seed_injects_stockout_mobile_conversion_and_quality_refund_signals() ->
                       FROM fact_inventory fi
                       INNER JOIN dim_product dp ON fi.product_id = dp.product_id
                       WHERE dp.category = 'electronics'
-                        AND fi.business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29','2026-06-05')
+                        AND fi.business_date IN ('2026-05-01','2026-05-08','2026-05-15','2026-05-22','2026-06-05')
                       GROUP BY fi.business_date
                     ) AS daily
                     """
@@ -895,7 +907,7 @@ def test_seed_injects_stockout_mobile_conversion_and_quality_refund_signals() ->
                         SUM(pay_user_cnt) / NULLIF(SUM(uv), 0) AS daily_cvr
                       FROM fact_traffic
                       WHERE device = 'mobile'
-                        AND business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29','2026-06-05')
+                        AND business_date IN ('2026-05-01','2026-05-08','2026-05-15','2026-05-22','2026-06-05')
                       GROUP BY business_date
                     ) AS daily
                     """
@@ -915,7 +927,7 @@ def test_seed_injects_stockout_mobile_conversion_and_quality_refund_signals() ->
                       ON t.product_id = o.product_id
                      AND t.business_date = o.business_date
                     WHERE o.product_id = 1
-                      AND o.business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29','2026-06-05')
+                      AND o.business_date IN ('2026-05-01','2026-05-08','2026-05-15','2026-05-22','2026-06-05')
                     """
                 )
             ).mappings().one()
@@ -932,7 +944,7 @@ def test_seed_injects_stockout_mobile_conversion_and_quality_refund_signals() ->
                       SELECT business_date, SUM(is_complaint) / NULLIF(COUNT(ticket_id), 0) AS daily_rate
                       FROM fact_customer_ticket
                       WHERE product_id = 1
-                        AND business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29','2026-06-05')
+                        AND business_date IN ('2026-05-01','2026-05-08','2026-05-15','2026-05-22','2026-06-05')
                       GROUP BY business_date
                     ) AS daily
                     """
@@ -951,7 +963,7 @@ def test_seed_injects_stockout_mobile_conversion_and_quality_refund_signals() ->
                       FROM fact_customer_ticket t
                       INNER JOIN dim_product p ON t.product_id = p.product_id
                       WHERE p.category = 'electronics'
-                        AND t.business_date IN ('2026-05-08','2026-05-15','2026-05-22','2026-05-29','2026-06-05')
+                        AND t.business_date IN ('2026-05-01','2026-05-08','2026-05-15','2026-05-22','2026-06-05')
                       GROUP BY t.business_date
                     ) AS daily
                     """

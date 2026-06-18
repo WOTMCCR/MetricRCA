@@ -14,7 +14,9 @@ from datetime import date
 TARGET_DATE = date(2026, 6, 5)  # 固定目标日（昨天），4 个异常 case 注入于此
 BORDERLINE_DATE = date(2026, 6, 3)  # 弱 paid_ads 波动，预期不触发异常
 SPIKE_DATE = date(2026, 6, 2)  # paid_ads 正向 spike，用于正向异常 eval
-MULTI_CAUSE_DATE = date(2026, 6, 1)
+MULTI_CAUSE_DATE = date(2026, 5, 29)  # GMV 多主因（与 LAGGED_OBSERVE_DATE 解耦）
+MULTI_CAUSE_CVR_DATE = date(2026, 5, 28)  # CVR 多主因（独立日期避免 GMV 污染）
+RESIDUAL_DATE = date(2026, 5, 27)  # 残差解释：top1 + 显著残差归因
 INTERACTION_DATE = date(2026, 5, 31)
 LAGGED_DATE = date(2026, 5, 30)
 LAGGED_OBSERVE_DATE = date(2026, 6, 1)
@@ -78,6 +80,10 @@ def campaign_multiplier(*, business_date: date, channel: str) -> tuple[float, fl
         return 0.35, 0.38
     if business_date == TARGET_DATE and channel == "organic":
         return 0.18, 0.12
+    if business_date == INTERACTION_DATE and channel == "paid_ads":
+        return 0.40, 0.45
+    if business_date == RESIDUAL_DATE and channel == "paid_ads":
+        return 0.20, 0.25
     return 1.0, 1.0
 
 
@@ -125,28 +131,36 @@ def order_amount_multiplier(*, business_date: date, category: str, product_id: i
         return 0.03
     if business_date == TARGET_DATE and product_id == 2:
         return 0.03
+    if business_date == RESIDUAL_DATE and category == "fashion":
+        return 0.50
     return 1.0
 
 
 def multi_cause_traffic_multiplier(*, business_date: date, channel: str, category: str) -> tuple[float, float]:
-    if business_date == MULTI_CAUSE_DATE and channel == "paid_ads":
+    if business_date in {MULTI_CAUSE_DATE, LAGGED_OBSERVE_DATE} and channel == "paid_ads":
         return 0.55, 1.0
     return 1.0, 1.0
 
 
 def multi_cause_stockout_hours(*, business_date: date, category: str) -> float | None:
-    if business_date == MULTI_CAUSE_DATE and category == "electronics":
+    if business_date in {MULTI_CAUSE_DATE, LAGGED_OBSERVE_DATE} and category == "electronics":
         return 12.0
     return None
 
 
 def interaction_multiplier(*, business_date: date, channel: str, category: str) -> tuple[float, float]:
+    """Interaction effect: paid_ads × electronics cell drops far beyond marginal product.
+
+    Marginals are strong enough to trigger overall anomaly detection, but the
+    cross-cell (0.02 × 0.02) is orders of magnitude worse than the marginal
+    product (0.50 × 0.80 = 0.40), proving a genuine interaction effect.
+    """
     if business_date != INTERACTION_DATE:
         return 1.0, 1.0
     if channel == "paid_ads" and category == "electronics":
-        return 0.02, 1.0
-    uv_multiplier = 0.75 if channel == "paid_ads" else 1.0
-    pay_user_multiplier = 0.97 if category == "electronics" else 1.0
+        return 0.02, 0.02
+    uv_multiplier = 0.50 if channel == "paid_ads" else 1.0
+    pay_user_multiplier = 0.80 if category == "electronics" else 1.0
     return uv_multiplier, pay_user_multiplier
 
 
@@ -169,4 +183,26 @@ def lagged_campaign_multiplier(*, business_date: date, channel: str) -> tuple[fl
 def weak_signal_multiplier(*, business_date: date, channel: str) -> tuple[float, float]:
     if business_date == MULTI_CAUSE_DATE and channel == "affiliate":
         return 0.82, 0.85
+    return 1.0, 1.0
+
+
+def multi_cause_cvr_suppressor(*, business_date: date, channel: str) -> float:
+    """Pay-user suppressor for multi-cause CVR scenario (MULTI_CAUSE_CVR_DATE).
+
+    Only suppresses pay_mult (not UV), so CVR = base_cvr × pay_mult drops while
+    UV stays normal — producing a pure conversion drop signal.
+    """
+    if business_date != MULTI_CAUSE_CVR_DATE:
+        return 1.0
+    if channel == "social":
+        return 0.35
+    if channel == "organic":
+        return 0.70
+    return 1.0
+
+
+def residual_traffic_multiplier(*, business_date: date, channel: str) -> tuple[float, float]:
+    """Primary GMV driver for the residual scenario: paid_ads traffic collapse."""
+    if business_date == RESIDUAL_DATE and channel == "paid_ads":
+        return 0.25, 1.0
     return 1.0, 1.0

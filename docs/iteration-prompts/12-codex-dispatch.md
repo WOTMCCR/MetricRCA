@@ -61,34 +61,57 @@ Commit after each iteration.
 ## Session 3 Prompt (Iteration 4 — PTV Loop)
 
 ```text
-Read docs/iteration-prompts/12-phase-c-complex-causal-coverage.md
-in full. Execute Iteration 4: PTV optimization loop.
+Read the following documents in order:
+  1. docs/ptv/README.md                    — PTV overview and directory layout
+  2. docs/ptv/01-philosophy.md             — what PTV is and is not
+  3. docs/ptv/02-workflow.md               — loop structure, artifact isolation, subagent dispatch
+  4. docs/ptv/03-prediction-protocol.md    — prediction rules R1-R5
+  5. docs/ptv/04-diagnosis-protocol.md     — diagnosis schema, fix taxonomy
+  6. docs/ptv/06-enforcement.md            — anti-cheat detection (you will be audited)
+  7. docs/ptv/bindings/metricrca.md        — MetricRCA-specific aspects, commands, exit conditions
+  8. docs/iteration-prompts/12-phase-c-complex-causal-coverage.md (ITERATION 4 section only)
 
-You are on branch codex/c-complex-causal with Iterations 0-3 complete.
-Run make seed && make eval-regression to verify baseline.
+Execute Iteration 4: PTV optimization loop.
 
-Run the PTV loop:
-  round=1
-  PREDICT: write predictions for ALL cases (original 28 + new 16+)
-  EXECUTE: make eval-stream EVAL_ID=eval-c{round}
-  VERIFY: make eval-gaps EVAL_ID=eval-c{round}
-  CHECK: are exit conditions met?
-  DIAGNOSE: for failures, determine fix type (FIX-I/G/T/P/D/M/A/B)
-  FIX: implement minimal fix
-  make test (must pass)
-  round += 1, loop
+You are on branch codex/c-complex-causal with Iterations 0-3 and
+review fixes complete. Run make seed && make test to verify baseline.
 
-EXIT when:
-  - All families pass per-family gate
-  - root_cause_set_recall_avg >= 0.85
-  - weighted_explanation_coverage_avg >= 0.85
-  - Confirmed by 2 consecutive green runs
+EXECUTION INSTRUCTIONS:
 
-ESCALATION: if after 6 rounds, interaction or lagged cases are still
-below gate, record escalation ADL and stop. Do not implement Phase D
-sandbox in this session.
+1. Create a PTV cycle directory:
+     CYCLE_ID=$(date +%Y%m%d-%H%M)
+     mkdir -p eval_out/ptv/cycle-${CYCLE_ID}
+   Write meta.json with branch, base_commit, total_cases.
 
-Commit after each PTV round with "fix(phase-c/ptv-{round}):".
+2. Use the 3-AGENT SUBAGENT DISPATCH pattern from docs/ptv/02-workflow.md:
+   For each PTV round:
+     a. DISPATCH Prediction Agent → reads code, writes predictions.jsonl
+        to eval_out/ptv/cycle-{id}/round-{N}/
+     b. DISPATCH Eval Agent → runs make eval-stream, writes eval-result.json
+        and per-case artifacts to same round directory
+     c. DISPATCH PTV Analyst Agent → runs gap analyzer, reads predictions +
+        eval results, writes gap_report.json + diagnosis.jsonl +
+        ptv_trajectory.jsonl to same round directory
+     d. Controller reads diagnosis, decides fix or escalate
+     e. If fix: implement, test, commit, write fix_commit.txt
+     f. Increment round, go to step (a)
+
+   If your runtime does not support subagents, run steps (a)-(c)
+   sequentially but NEVER skip diagnosis.
+
+3. All PTV artifacts MUST go into eval_out/ptv/cycle-{id}/round-{N}/.
+   Do NOT scatter artifacts across eval_out/{eval_id}/ directories.
+
+4. After the session, your artifacts will be reviewed against the
+   anti-cheat checklist in docs/ptv/06-enforcement.md. Specifically:
+     - DETECT-1: predictions must NOT match ground truth
+     - DETECT-2: predictions must differ between rounds
+     - DETECT-3: every round must have a fix commit
+     - DETECT-4: diagnosis.jsonl must exist for every round with failures
+     - DETECT-5: reasoning must be case-specific, not templated
+
+5. EXIT when MetricRCA gates pass (see bindings/metricrca.md).
+   ESCALATE after 6 rounds with STRUCTURAL diagnosis.
 ```
 
 ## Session 4 Prompt (Iteration 5 — Conditional Sandbox)
@@ -140,17 +163,49 @@ All must pass. Create PR against main.
 After EACH Codex session, Claude reviews:
 
 ```
+CODE INTEGRITY:
 □ git diff main...codex/c-complex-causal — full diff read
-□ scorer.py UNMODIFIED (sha256 matches main)
-□ grpo_dataset.py UNMODIFIED
+□ scorer.py changes are additive scoring metrics only (no gate weakening)
+□ grpo_dataset.py changes are additive only (no reward logic weakening)
 □ regression_public_cases.jsonl has NO answer-bearing fields
 □ anomaly_injection.py: existing functions unchanged, new functions pure
 □ No keyword/regex intent parsers added
 □ No raw SQL outside QuerySpec path
+□ No silent fallbacks (grep for 'except.*continue')
+
+ENUM/POLICY COMPLETENESS:
+□ Every root_cause_type in ground truth exists in RootCauseType enum
+□ Every root_cause_type has matching policy in DEFAULT_POLICY_REGISTRY
+□ Every signal_type referenced has matching MetricSignalPolicy
+□ Every new action kind is registered in plan_executor + sdk_tools
+
+EVAL INTEGRITY:
 □ make test passes independently
 □ Original 28 cases still 28/28 in eval output
 □ New cases: per-family breakdown meets gates
 □ GRPO trajectories have valid schema
 □ ADLs recorded for non-trivial decisions
-□ No silent fallbacks (grep for 'except.*continue')
+
+PTV INTEGRITY (Session 3 — run docs/ptv/06-enforcement.md checklist):
+□ ARTIFACT ISOLATION:
+  □ All artifacts under eval_out/ptv/cycle-{id}/round-{N}/
+  □ meta.json exists with cycle metadata
+  □ Each round directory has: predictions.jsonl, eval-result.json,
+    gap_report.json, diagnosis.jsonl, ptv_trajectory.jsonl
+  □ round > 1 directories have prediction_diff.json
+  □ summary.json or escalation.json exists at cycle level
+□ ANTI-CHEAT (from docs/ptv/06-enforcement.md):
+  □ DETECT-1: predictions do NOT match ground truth
+  □ DETECT-2: predictions differ between consecutive rounds
+  □ DETECT-3: fix commit exists between every pair of rounds
+  □ DETECT-4: diagnosis.jsonl present for every round with failures
+  □ DETECT-5: unique reasoning count >= 50% of case count
+□ SUBAGENT DISPATCH:
+  □ Prediction Agent wrote predictions (not Controller copy-paste)
+  □ PTV Analyst wrote diagnosis (not Controller skip)
+  □ Eval Agent ran independently (not mixed with diagnosis)
+□ GRPO READINESS:
+  □ ptv_trajectory.jsonl records prediction accuracy per round
+  □ Signal B trajectories extractable from predictions + actuals
+  □ Signal C trajectories extractable from diagnosis entries
 ```

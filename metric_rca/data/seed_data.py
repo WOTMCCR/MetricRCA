@@ -28,17 +28,21 @@ from metric_rca.data.anomaly_injection import (
     INTERACTION_DATE,
     LAGGED_DATE,
     LAGGED_OBSERVE_DATE,
+    MULTI_CAUSE_CVR_DATE,
     MULTI_CAUSE_DATE,
+    RESIDUAL_DATE,
     SPIKE_DATE,
     TARGET_DATE,
     campaign_multiplier,
     complaint_count,
     interaction_multiplier,
     lagged_campaign_multiplier,
+    multi_cause_cvr_suppressor,
     multi_cause_stockout_hours,
     multi_cause_traffic_multiplier,
     order_amount_multiplier,
     refund_multiplier,
+    residual_traffic_multiplier,
     stockout_hours,
     support_ticket_count,
     traffic_multiplier,
@@ -54,7 +58,8 @@ HISTORY_DAYS = 60
 # 无异常 case 放在 TARGET_DATE 之外的另一天，避免与"目标日异常"在同指标同日冲突。
 GMV_NO_ANOMALY_DATE = date(2026, 6, 4)
 COMPLEX_INJECTION_DATES = frozenset(
-    {MULTI_CAUSE_DATE, INTERACTION_DATE, LAGGED_DATE, LAGGED_OBSERVE_DATE}
+    {MULTI_CAUSE_DATE, MULTI_CAUSE_CVR_DATE, RESIDUAL_DATE,
+     INTERACTION_DATE, LAGGED_DATE, LAGGED_OBSERVE_DATE}
 )
 
 # 9 个 canonical 商品横跨 electronics/fashion/home 三个类目，商品 1 为质量问题商品。
@@ -921,8 +926,16 @@ def _insert_business_facts(conn, rng: random.Random, *, profile: SeedProfileConf
                             business_date=business_date,
                             channel=channel,
                         )
-                        uv_mult *= multi_uv_mult * interaction_uv_mult * lagged_uv_mult * weak_uv_mult
-                        pay_mult *= multi_pay_mult * interaction_pay_mult * lagged_pay_mult * weak_pay_mult
+                        cvr_suppressor = multi_cause_cvr_suppressor(
+                            business_date=business_date,
+                            channel=channel,
+                        )
+                        residual_uv_mult, residual_pay_mult = residual_traffic_multiplier(
+                            business_date=business_date,
+                            channel=channel,
+                        )
+                        uv_mult *= multi_uv_mult * interaction_uv_mult * lagged_uv_mult * weak_uv_mult * residual_uv_mult
+                        pay_mult *= multi_pay_mult * interaction_pay_mult * lagged_pay_mult * weak_pay_mult * cvr_suppressor * residual_pay_mult
                     uv = max(1, int(uv_base * uv_mult + rng.randint(0, 6)))
                     base_cvr = 0.082 if device == "desktop" else 0.069
                     pay_user_cnt = max(profile.min_pay_user_per_cell, int(uv * base_cvr * pay_mult))
@@ -1431,15 +1444,15 @@ def _insert_ground_truth(conn, *, seed: int, seed_profile: str) -> None:
         },
         {
             "case_id": "MC03_cvr_multi_signal_drop",
-            "business_date": MULTI_CAUSE_DATE,
+            "business_date": MULTI_CAUSE_CVR_DATE,
             "metric_id": "pay_cvr",
             "expected_anomaly": 1,
             "root_cause_type": "conversion_drop",
             "dimension": "channel",
-            "element": "affiliate",
+            "element": "social",
             "root_causes": [
-                {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "affiliate", "weight": 0.65},
-                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.35},
+                {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "social", "weight": 0.67},
+                {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "organic", "weight": 0.33},
             ],
         },
         {
@@ -1504,11 +1517,11 @@ def _insert_ground_truth(conn, *, seed: int, seed_profile: str) -> None:
             "expected_anomaly": 1,
             "root_cause_type": "campaign_traffic_drop",
             "dimension": "channel",
-            "element": "social",
+            "element": "paid_ads",
             "root_causes": [
-                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "social", "weight": 0.40},
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.45},
                 {"root_cause_type": "stockout", "dimension": "category", "element": "electronics", "weight": 0.35},
-                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.25},
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "affiliate", "weight": 0.20},
             ],
         },
         {
@@ -1604,6 +1617,32 @@ def _insert_ground_truth(conn, *, seed: int, seed_profile: str) -> None:
             "dimension": None,
             "element": None,
             "root_causes": [],
+        },
+        {
+            "case_id": "RS01_gmv_residual_dual_mechanism",
+            "business_date": RESIDUAL_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_causes": [
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.58},
+                {"root_cause_type": "aov_drop", "dimension": "category", "element": "fashion", "weight": 0.42},
+            ],
+        },
+        {
+            "case_id": "RS02_gmv_residual_discovery",
+            "business_date": RESIDUAL_DATE,
+            "metric_id": "gmv",
+            "expected_anomaly": 1,
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_causes": [
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads", "weight": 0.58},
+                {"root_cause_type": "aov_drop", "dimension": "category", "element": "fashion", "weight": 0.42},
+            ],
         },
         {
             "case_id": "M01_gmv_memory_product_prior",

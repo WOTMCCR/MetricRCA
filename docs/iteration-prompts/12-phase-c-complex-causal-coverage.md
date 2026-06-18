@@ -356,88 +356,51 @@ Gate:
 ITERATION 4: PTV OPTIMIZATION LOOP
 ────────────────────────────────────────────────────────
 
-PTV = Predict → Test → Verify. Run the same loop as Phase B Prompt 11,
-but now covering ALL cases (original 28 + new 16+).
+PTV = Predict → Test → Verify. This is the CORE optimization loop.
 
-Set round=1. For each round:
+**AUTHORITATIVE SPEC: docs/ptv/**
 
-── STEP 1: PREDICT ──
+All PTV rules, schemas, anti-pattern detection, subagent dispatch
+patterns, artifact isolation layout, and GRPO bridge are defined in
+the `docs/ptv/` directory. This section provides the MetricRCA-specific
+execution instructions. Do NOT redefine PTV rules here — if a conflict
+exists, `docs/ptv/` wins.
 
-Create eval_out/eval-c{round}/predictions.jsonl with predictions for
-ALL cases. New aspects for multi-cause cases:
+REQUIRED READING before executing this iteration:
+  - docs/ptv/01-philosophy.md          — what PTV is (and is not)
+  - docs/ptv/02-workflow.md            — loop structure + artifact isolation
+  - docs/ptv/03-prediction-protocol.md — prediction rules R1-R5
+  - docs/ptv/04-diagnosis-protocol.md  — diagnosis schema + fix categories
+  - docs/ptv/06-enforcement.md         — anti-cheat detection rules
+  - docs/ptv/bindings/metricrca.md     — MetricRCA-specific config
 
-  multi_cause_outcome:
-    {"root_cause_types": [...], "expected_recall": 0.0-1.0,
-     "expected_coverage": 0.0-1.0, "critical_risks": [...]}
+════ EXECUTION ════
 
-Multi-cause prediction guidelines:
-  - MC01-MC08: predict which causes will be found vs missed.
-    If runtime only drills one dimension, predict recall < 1.0.
-  - IX01-IX04: predict whether interaction term is identified.
-    If no interaction detection exists, predict top1_ok=false.
-  - LG01-LG02: predict whether lagged signal is detected.
-    If baseline window (prev_4_same_weekday) doesn't cover lag,
-    predict top1_ok=false.
+1. Create a new PTV cycle directory:
+     mkdir -p eval_out/ptv/cycle-$(date +%Y%m%d-%H%M)
 
-── STEP 2: EXECUTE ──
+2. Follow the loop in docs/ptv/02-workflow.md:
+     - Use 3-agent parallel dispatch (Prediction Agent, Eval Agent,
+       PTV Analyst Agent) as described in "Codex Subagent Dispatch Pattern"
+     - All artifacts go into eval_out/ptv/cycle-{id}/round-{N}/
+     - Every round writes: predictions.jsonl, eval-result.json,
+       gap_report.json, diagnosis.jsonl, ptv_trajectory.jsonl
 
-  make eval-stream EVAL_ID=eval-c{round}
+3. MetricRCA exit conditions (from bindings/metricrca.md):
+     a) Original 28 single-cause: 28/28 green
+     b) Multi-cause family: top3_rate >= 0.85
+     c) root_cause_set_recall_avg >= 0.85
+     d) weighted_explanation_coverage_avg >= 0.85
+     e) top3_contains_all_major_causes_rate >= 0.90
+     f) All safety invariants = 1.0
+     g) Interaction cases: top3_rate >= 0.85
+     h) No regression in any per-family gate
+     i) Confirmed by 2 consecutive green runs
 
-Record eval output. Expect many multi-cause failures in early rounds.
-
-── STEP 3: VERIFY ──
-
-  make eval-gaps EVAL_ID=eval-c{round}
-
-── STEP 4: CHECK EXIT ──
-
-If ALL of these are true:
-  a) Original 28 single-cause: 28/28 green
-  b) Multi-cause family: top3_rate >= 0.85
-  c) root_cause_set_recall_avg >= 0.85 (across ALL cases)
-  d) weighted_explanation_coverage_avg >= 0.85
-  e) top3_contains_all_major_causes_rate >= 0.90
-  f) All safety invariants (sql_safe, memory_pollution, etc.) = 1.0
-  g) Interaction cases: top3_rate >= 0.85
-  h) No regression in any per-family gate
-
-Then run ONE MORE TIME for confirmation. If confirmed → EXIT.
-
-── STEP 5: DIAGNOSE & FIX ──
-
-New diagnosis categories beyond Phase B:
-
-  FIX-D = Discovery policy extension (add multi-chain drilldown for
-    metrics that need it)
-  FIX-M = ContributionSet merge logic (cross-chain aggregation bug)
-  FIX-A = Adtributor configuration (threshold tuning for interaction
-    detection)
-  FIX-B = Baseline window extension (for lagged causality)
-
-Diagnosis rules for new failure modes:
-  - root_cause_set_recall < 1.0 → one chain missed. Check plan
-    compiler: does it compile parallel chains? → FIX-D
-  - weighted_explanation_coverage < 0.85 → weight mismatch. Check
-    ContributionSetBuilder merge → FIX-M
-  - interaction case fails → adtributor t_ep/t_eep too loose or
-    interaction scan not present → FIX-A or escalate to Phase D
-  - lagged case fails → baseline window doesn't see signal day →
-    FIX-B (extend baseline range or add lag_window to detect_anomaly)
-
-── STEP 6: INCREMENT ──
-
-  round = round + 1
-  Go to STEP 1.
-
-── ESCALATION TRIGGER ──
-
-If after 6 PTV rounds, interaction or lagged cases are still below
-gate AND all deterministic fixes have been attempted:
-  → Escalate to Phase D: Python Analyst Sandbox
-  → Record escalation in docs/reference/decisions.md with:
-    - Which cases failed
-    - Which deterministic paths were tried
-    - Why sandbox computation is structurally needed
+4. Escalation after 6 rounds with STRUCTURAL diagnosis:
+     → Write eval_out/ptv/cycle-{id}/escalation.json
+     → Record ADL in docs/reference/decisions.md
+     → Do not implement Phase D sandbox in this session
 
 ────────────────────────────────────────────────────────
 ITERATION 5: PYTHON ANALYST SANDBOX (CONDITIONAL)

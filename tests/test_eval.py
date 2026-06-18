@@ -43,7 +43,8 @@ PRIVATE_GROUND_TRUTH_FIELDS = {
 }
 OPTIONAL_PRIVATE_GROUND_TRUTH_FIELDS = {"root_causes"}
 ANSWER_BEARING_FIELDS = PRIVATE_GROUND_TRUTH_FIELDS - {"case_id"}
-REGRESSION_CASE_COUNT = 44
+REGRESSION_CASE_COUNT = 46
+PHASE_C_CASE_COUNT = 18
 
 
 def test_eval_loads_cases_and_ground_truth(tmp_path: Path) -> None:
@@ -221,9 +222,9 @@ def test_phase_c_complex_cases_cover_required_families_with_weighted_root_causes
     private_by_id = {row["case_id"]: row for row in private_rows}
     new_case_ids = [row["case_id"] for row in public_rows if "phase_c" in row["tags"]]
 
-    assert len(new_case_ids) == 16
+    assert len(new_case_ids) == PHASE_C_CASE_COUNT
     families = {tag for row in public_rows if row["case_id"] in new_case_ids for tag in row["tags"]}
-    assert {"multi_cause", "interaction", "lagged", "weak_signal"} <= families
+    assert {"multi_cause", "interaction", "lagged", "weak_signal", "residual"} <= families
 
     multi_cause_rows = [private_by_id[case_id] for case_id in new_case_ids if case_id.startswith("MC")]
     assert len(multi_cause_rows) >= 4

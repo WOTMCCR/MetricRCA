@@ -13,17 +13,21 @@ from metric_rca.data.anomaly_injection import (
     INTERACTION_DATE,
     LAGGED_DATE,
     LAGGED_OBSERVE_DATE,
+    MULTI_CAUSE_CVR_DATE,
     MULTI_CAUSE_DATE,
+    RESIDUAL_DATE,
     SPIKE_DATE,
     TARGET_DATE,
     campaign_multiplier,
     complaint_count,
     interaction_multiplier,
     lagged_campaign_multiplier,
+    multi_cause_cvr_suppressor,
     multi_cause_stockout_hours,
     multi_cause_traffic_multiplier,
     order_amount_multiplier,
     refund_multiplier,
+    residual_traffic_multiplier,
     stockout_hours,
     support_ticket_count,
     traffic_multiplier,
@@ -33,9 +37,20 @@ from metric_rca.data.seed_data import main as seed_main
 
 
 def test_complex_injection_dates_do_not_overlap_existing_eval_dates() -> None:
-    assert {MULTI_CAUSE_DATE, INTERACTION_DATE, LAGGED_DATE, LAGGED_OBSERVE_DATE}.isdisjoint(
-        {TARGET_DATE, BORDERLINE_DATE, SPIKE_DATE}
-    )
+    complex_dates = {
+        MULTI_CAUSE_DATE, MULTI_CAUSE_CVR_DATE, RESIDUAL_DATE,
+        INTERACTION_DATE, LAGGED_DATE, LAGGED_OBSERVE_DATE,
+    }
+    simple_dates = {TARGET_DATE, BORDERLINE_DATE, SPIKE_DATE}
+    assert complex_dates.isdisjoint(simple_dates)
+
+
+def test_complex_dates_are_all_distinct() -> None:
+    dates = [
+        MULTI_CAUSE_DATE, MULTI_CAUSE_CVR_DATE, RESIDUAL_DATE,
+        INTERACTION_DATE, LAGGED_DATE,
+    ]
+    assert len(dates) == len(set(dates))
 
 
 def test_complex_injection_module_has_no_random_or_db_dependencies() -> None:
@@ -63,24 +78,30 @@ def test_complex_injection_functions_are_deterministic_and_exact() -> None:
         channel="organic",
         category="electronics",
     ) == (1.0, 1.0)
+    assert multi_cause_traffic_multiplier(
+        business_date=LAGGED_OBSERVE_DATE,
+        channel="paid_ads",
+        category="home",
+    ) == (0.55, 1.0)
     assert multi_cause_stockout_hours(business_date=MULTI_CAUSE_DATE, category="electronics") == 12.0
     assert multi_cause_stockout_hours(business_date=MULTI_CAUSE_DATE, category="fashion") is None
+    assert multi_cause_stockout_hours(business_date=LAGGED_OBSERVE_DATE, category="electronics") == 12.0
 
     assert interaction_multiplier(
         business_date=INTERACTION_DATE,
         channel="paid_ads",
         category="electronics",
-    ) == (0.02, 1.0)
+    ) == (0.02, 0.02)
     assert interaction_multiplier(
         business_date=INTERACTION_DATE,
         channel="paid_ads",
         category="fashion",
-    ) == (0.75, 1.0)
+    ) == (0.50, 1.0)
     assert interaction_multiplier(
         business_date=INTERACTION_DATE,
         channel="organic",
         category="electronics",
-    ) == (1.0, 0.97)
+    ) == (1.0, 0.80)
 
     assert lagged_campaign_multiplier(business_date=LAGGED_DATE, channel="social") == (0.15, 0.10, 1.0, 1.0)
     assert lagged_campaign_multiplier(
@@ -94,6 +115,47 @@ def test_complex_injection_functions_are_deterministic_and_exact() -> None:
     assert weak_signal_multiplier(business_date=MULTI_CAUSE_DATE, channel="affiliate") == (
         weak_signal_multiplier(business_date=MULTI_CAUSE_DATE, channel="affiliate")
     )
+
+
+def test_multi_cause_cvr_suppressor_values() -> None:
+    assert multi_cause_cvr_suppressor(business_date=MULTI_CAUSE_CVR_DATE, channel="social") == 0.35
+    assert multi_cause_cvr_suppressor(business_date=MULTI_CAUSE_CVR_DATE, channel="organic") == 0.70
+    assert multi_cause_cvr_suppressor(business_date=MULTI_CAUSE_CVR_DATE, channel="paid_ads") == 1.0
+    assert multi_cause_cvr_suppressor(business_date=MULTI_CAUSE_DATE, channel="social") == 1.0
+
+
+def test_residual_traffic_multiplier_values() -> None:
+    assert residual_traffic_multiplier(business_date=RESIDUAL_DATE, channel="paid_ads") == (0.25, 1.0)
+    assert residual_traffic_multiplier(business_date=RESIDUAL_DATE, channel="organic") == (1.0, 1.0)
+    assert residual_traffic_multiplier(business_date=TARGET_DATE, channel="paid_ads") == (1.0, 1.0)
+
+
+def test_residual_order_amount_multiplier() -> None:
+    assert order_amount_multiplier(business_date=RESIDUAL_DATE, category="fashion", product_id=4) == 0.50
+    assert order_amount_multiplier(business_date=RESIDUAL_DATE, category="electronics", product_id=1) == 1.0
+
+
+def test_interaction_marginals_trigger_overall_anomaly() -> None:
+    """Verify marginal product (0.50 × 0.80 = 0.40) >> cross-cell (0.02 × 0.02 = 0.0004)."""
+    cross_uv, cross_pay = interaction_multiplier(
+        business_date=INTERACTION_DATE, channel="paid_ads", category="electronics",
+    )
+    marginal_uv, _ = interaction_multiplier(
+        business_date=INTERACTION_DATE, channel="paid_ads", category="fashion",
+    )
+    _, marginal_pay = interaction_multiplier(
+        business_date=INTERACTION_DATE, channel="organic", category="electronics",
+    )
+    marginal_product = marginal_uv * marginal_pay
+    cross_product = cross_uv * cross_pay
+    assert cross_product < marginal_product * 0.01
+
+
+def test_campaign_signals_for_new_dates() -> None:
+    assert campaign_multiplier(business_date=INTERACTION_DATE, channel="paid_ads") == (0.40, 0.45)
+    assert campaign_multiplier(business_date=RESIDUAL_DATE, channel="paid_ads") == (0.20, 0.25)
+    assert campaign_multiplier(business_date=INTERACTION_DATE, channel="organic") == (1.0, 1.0)
+    assert campaign_multiplier(business_date=RESIDUAL_DATE, channel="organic") == (1.0, 1.0)
 
 
 def test_lagged_campaign_observe_date_is_same_day_signal_proxy_not_lag_scan() -> None:
@@ -159,7 +221,11 @@ def test_seed_applies_complex_injections_only_on_new_dates() -> None:
 
             interaction_cell = _traffic_channel_category_totals(conn, INTERACTION_DATE, "paid_ads", "electronics")
             paid_ads_fashion = _traffic_channel_category_totals(conn, INTERACTION_DATE, "paid_ads", "fashion")
-            assert interaction_cell["uv"] < paid_ads_fashion["uv"] * 0.50
+            assert interaction_cell["uv"] < paid_ads_fashion["uv"] * 0.10
+
+            interaction_paid_ads = _traffic_channel_totals(conn, INTERACTION_DATE, "paid_ads")
+            interaction_baseline = _traffic_channel_totals(conn, INTERACTION_DATE - timedelta(days=7), "paid_ads")
+            assert interaction_paid_ads["uv"] / interaction_baseline["uv"] < 0.60
 
             lagged_campaign = _campaign_channel_totals(conn, LAGGED_DATE, "social")
             lagged_campaign_baseline = _campaign_channel_totals(conn, LAGGED_DATE - timedelta(days=7), "social")
@@ -173,6 +239,14 @@ def test_seed_applies_complex_injections_only_on_new_dates() -> None:
             affiliate_baseline = _traffic_channel_totals(conn, MULTI_CAUSE_DATE - timedelta(days=7), "affiliate")
             assert affiliate["uv"] / affiliate_baseline["uv"] < 0.90
             assert _pay_rate(affiliate) / _pay_rate(affiliate_baseline) < 0.95
+
+            social_cvr = _traffic_channel_totals(conn, MULTI_CAUSE_CVR_DATE, "social")
+            social_cvr_baseline = _traffic_channel_totals(conn, MULTI_CAUSE_CVR_DATE - timedelta(days=7), "social")
+            assert _pay_rate(social_cvr) / _pay_rate(social_cvr_baseline) < 0.45
+
+            residual_paid_ads = _traffic_channel_totals(conn, RESIDUAL_DATE, "paid_ads")
+            residual_baseline = _traffic_channel_totals(conn, RESIDUAL_DATE - timedelta(days=7), "paid_ads")
+            assert residual_paid_ads["uv"] / residual_baseline["uv"] < 0.35
     finally:
         engine.dispose()
 
