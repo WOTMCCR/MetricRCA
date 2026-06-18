@@ -53,6 +53,12 @@ def rank_from_persisted_e4(
         adtributor_audit=adtributor_audit,
         adtributor_pair_ranks=adtributor_pair_ranks,
     )
+    signal_verified_non_interaction_candidate = _signal_verified_non_interaction_candidate_for_interaction(
+        repository=repository,
+        run_id=run_id,
+        persisted_selected_candidate=persisted_selected_candidate,
+        ranked_candidates=ranked_candidates,
+    )
     signal_verified_candidate = _signal_verified_ranked_candidate(
         repository=repository,
         run_id=run_id,
@@ -61,6 +67,9 @@ def rank_from_persisted_e4(
     )
     if embedded_verified_candidate is not None:
         selected_candidate = embedded_verified_candidate
+        candidates = _selected_first_with_diverse_top3(selected_candidate, ranked_candidates)
+    elif signal_verified_non_interaction_candidate is not None:
+        selected_candidate = signal_verified_non_interaction_candidate
         candidates = _selected_first_with_diverse_top3(selected_candidate, ranked_candidates)
     elif signal_verified_candidate is not None:
         selected_candidate = signal_verified_candidate
@@ -275,6 +284,43 @@ def _signal_verified_ranked_candidate(
         if _same_candidate_element(candidate, persisted_selected_candidate):
             return candidate
     return _candidate_with_rank_evidence(persisted_selected_candidate, f"{run_id}:E_rank")
+
+
+def _signal_verified_non_interaction_candidate_for_interaction(
+    *,
+    repository: Any,
+    run_id: str,
+    persisted_selected_candidate: RootCauseCandidate | None,
+    ranked_candidates: list[RootCauseCandidate],
+) -> RootCauseCandidate | None:
+    if persisted_selected_candidate is None:
+        return None
+    if persisted_selected_candidate.root_cause_type != RootCauseType.INTERACTION_CHANNEL_CATEGORY.value:
+        return None
+    required_bad_direction = _target_bad_direction(repository=repository, run_id=run_id)
+    if not _has_matching_signal_evidence(
+        repository=repository,
+        run_id=run_id,
+        candidate=persisted_selected_candidate,
+        required_bad_direction=required_bad_direction,
+    ):
+        return None
+    selected_primary_pair = _primary_pair(persisted_selected_candidate)
+    if selected_primary_pair is None:
+        return None
+    for candidate in ranked_candidates:
+        if candidate.root_cause_type == RootCauseType.INTERACTION_CHANNEL_CATEGORY.value:
+            continue
+        if _primary_pair(candidate) != selected_primary_pair:
+            continue
+        if _has_matching_signal_evidence(
+            repository=repository,
+            run_id=run_id,
+            candidate=candidate,
+            required_bad_direction=required_bad_direction,
+        ):
+            return candidate
+    return None
 
 
 def _embedded_verified_ranked_candidate(
