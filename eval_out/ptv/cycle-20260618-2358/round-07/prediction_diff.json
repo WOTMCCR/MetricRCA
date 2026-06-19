@@ -1,0 +1,1012 @@
+{
+  "base_round": "round-06",
+  "changed_by_aspect": {
+    "evidence": 46,
+    "execution": 46,
+    "intent": 46,
+    "memory": 46,
+    "multi_cause_outcome": 46,
+    "outcome": 46
+  },
+  "changed_by_case": {
+    "C06_gmv_multi_channel_drop": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C07_gmv_category_channel_cross": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C08_gmv_aov_drop": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C09_gmv_uv_organic_drop": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C10_gmv_price_change": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C11_gmv_promo_end_falloff": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C12_gmv_single_sku_stockout": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C13_net_gmv_refund_spike": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C14_net_gmv_gmv_driven": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C15_refund_rate_logistics": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C16_stockout_rate_warehouse": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C17_complaint_rate_quality": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C18_cvr_channel_landing": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C19_gmv_seasonal_false_positive": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C20_cvr_no_anomaly_noise": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C21_cvr_discovery": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C22_gmv_borderline": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C23_uv_organic_drop": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C24_gmv_positive_spike": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C25_refund_discovery": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C26_ambiguous_intent": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C27_composite_cause": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "C28_multi_day_drift": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "IX01_gmv_channel_category_interaction": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "IX02_gmv_interaction_discovery": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "IX03_uv_interaction_cell": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "IX04_gmv_interaction_no_single_driver": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "LG01_gmv_lagged_social": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "LG02_uv_lagged_social_discovery": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "MC01_gmv_multi_cause_overall": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "MC02_uv_multi_channel_drop": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "MC03_cvr_multi_signal_drop": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "MC04_gmv_weak_set": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "MC05_gmv_lag_stockout_mix": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "MC06_net_gmv_multi_driver": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "MC07_uv_weak_multi_driver": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "MC08_gmv_channel_category_mix": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "RS01_gmv_residual_dual_mechanism": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "RS02_gmv_residual_discovery": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "WK01_gmv_weak_affiliate_boundary": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "WK02_gmv_no_anomaly_weak": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "cvr_mobile_drop": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "gmv_no_anomaly": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "gmv_paid_ads_drop": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "gmv_stockout_electronics": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ],
+    "refund_rate_product_quality": [
+      "evidence",
+      "execution",
+      "intent",
+      "memory",
+      "multi_cause_outcome",
+      "outcome"
+    ]
+  },
+  "changed_count": 276,
+  "changed_examples": [
+    {
+      "after_prediction": {
+        "alias_contract": "all dynamic GMV lanes persist their per-lane E_select aliases after FIX-T",
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E_select_channel",
+          "E3_ch",
+          "E4_channel",
+          "E_select_ch_conversion",
+          "E3_ch_conversion",
+          "E4_channel_conversion",
+          "E_select_category",
+          "E3_cat",
+          "E4_category",
+          "E_select_product",
+          "E3_prod",
+          "E4_product",
+          "E_select_ch_interaction",
+          "E3_ch_interaction",
+          "E4_channel_interaction",
+          "E_select_cat_interaction",
+          "E3_cat_interaction",
+          "E4_category_interaction",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "evidence_coverage_full": true,
+        "expected_gap": null,
+        "guard_status": "passed",
+        "round7_budget_allows_full_chain": true,
+        "round7_compiled_alias_count": 24
+      },
+      "aspect": "evidence",
+      "before_prediction": {
+        "alias_contract": "all dynamic GMV lanes persist their per-lane E_select aliases after FIX-T",
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E_select_channel",
+          "E3_ch",
+          "E4_channel",
+          "E_select_ch_conversion",
+          "E3_ch_conversion",
+          "E4_channel_conversion",
+          "E_select_category",
+          "E3_cat",
+          "E4_category",
+          "E_select_product",
+          "E3_prod",
+          "E4_product",
+          "E_select_ch_interaction",
+          "E3_ch_interaction",
+          "E4_channel_interaction",
+          "E_select_cat_interaction",
+          "E3_cat_interaction",
+          "E4_category_interaction",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "evidence_coverage_full": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "case_id": "C06_gmv_multi_channel_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed": true
+    },
+    {
+      "after_prediction": {
+        "budget_abort_expected": false,
+        "compiled_action_count": 24,
+        "compiled_budget": {
+          "max_drilldown_depth": 3,
+          "max_query": 70,
+          "max_steps": 24
+        },
+        "compiled_scope_mode": "unscoped",
+        "critical_decisions": [
+          "plan_scope_mode=unscoped",
+          "action_count=24",
+          "Round 4 FIX-D broad GMV lanes include campaign, conversion, inventory, product, and interaction evidence",
+          "Round 5 FIX-T persists per-lane E_select aliases for same-dimension signal lanes",
+          "Round 6 FIX-D sizes broad GMV max_query to 70 via deterministic action-cost estimation"
+        ],
+        "status": "succeeded",
+        "step_count": 24,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "aspect": "execution",
+      "before_prediction": {
+        "critical_decisions": [
+          "plan_scope_mode=unscoped",
+          "action_count=24",
+          "Round 4 FIX-D broad GMV lanes include campaign, conversion, inventory, product, and interaction evidence",
+          "Round 5 FIX-T lets select_signal_element persist E_select_ch_conversion/E_select_ch_interaction/E_select_cat_interaction aliases"
+        ],
+        "status": "succeeded",
+        "step_count": 24,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "case_id": "C06_gmv_multi_channel_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed": true
+    },
+    {
+      "after_prediction": {
+        "analysis_strategy": "channel_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "round7_code_basis": {
+          "compiled_action_count": 24,
+          "scope_mode": "unscoped"
+        },
+        "target_date": "2026-06-05"
+      },
+      "aspect": "intent",
+      "before_prediction": {
+        "analysis_strategy": "channel_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-06-05"
+      },
+      "case_id": "C06_gmv_multi_channel_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed": true
+    },
+    {
+      "after_prediction": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure",
+        "pollution_risk": false,
+        "round7_memory_budget_note": "budget fix changes execution capacity only; memory remains planning-priority-only"
+      },
+      "aspect": "memory",
+      "before_prediction": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure",
+        "pollution_risk": false
+      },
+      "case_id": "C06_gmv_multi_channel_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed": true
+    },
+    {
+      "after_prediction": {
+        "expected_recall_band": "high_after_alias_fix",
+        "multi_cause_candidate_count": 3,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_cause_type": "campaign_traffic_drop"
+          },
+          {
+            "dimension": "channel",
+            "element": "affiliate",
+            "root_cause_type": "campaign_traffic_drop"
+          },
+          {
+            "dimension": "channel",
+            "element": "social",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "round7_budget_assumption": "full_broad_gmv_chain_can_execute",
+        "top3_ok": true
+      },
+      "aspect": "multi_cause_outcome",
+      "before_prediction": {
+        "expected_recall_band": "high_after_alias_fix",
+        "multi_cause_candidate_count": 3,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_cause_type": "campaign_traffic_drop"
+          },
+          {
+            "dimension": "channel",
+            "element": "affiliate",
+            "root_cause_type": "campaign_traffic_drop"
+          },
+          {
+            "dimension": "channel",
+            "element": "social",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "case_id": "C06_gmv_multi_channel_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed": true
+    },
+    {
+      "after_prediction": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "paid_ads",
+        "root_cause_type": "campaign_traffic_drop",
+        "round7_budget_assumption": "no_legacy_max_query_50_abort",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "aspect": "outcome",
+      "before_prediction": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "paid_ads",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "case_id": "C06_gmv_multi_channel_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed": true
+    },
+    {
+      "after_prediction": {
+        "alias_contract": "all dynamic GMV lanes persist their per-lane E_select aliases after FIX-T",
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E_select_channel",
+          "E3_ch",
+          "E4_channel",
+          "E_select_ch_conversion",
+          "E3_ch_conversion",
+          "E4_channel_conversion",
+          "E_select_category",
+          "E3_cat",
+          "E4_category",
+          "E_select_product",
+          "E3_prod",
+          "E4_product",
+          "E_select_ch_interaction",
+          "E3_ch_interaction",
+          "E4_channel_interaction",
+          "E_select_cat_interaction",
+          "E3_cat_interaction",
+          "E4_category_interaction",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "evidence_coverage_full": true,
+        "expected_gap": null,
+        "guard_status": "passed",
+        "round7_budget_allows_full_chain": true,
+        "round7_compiled_alias_count": 24
+      },
+      "aspect": "evidence",
+      "before_prediction": {
+        "alias_contract": "all dynamic GMV lanes persist their per-lane E_select aliases after FIX-T",
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E_select_channel",
+          "E3_ch",
+          "E4_channel",
+          "E_select_ch_conversion",
+          "E3_ch_conversion",
+          "E4_channel_conversion",
+          "E_select_category",
+          "E3_cat",
+          "E4_category",
+          "E_select_product",
+          "E3_prod",
+          "E4_product",
+          "E_select_ch_interaction",
+          "E3_ch_interaction",
+          "E4_channel_interaction",
+          "E_select_cat_interaction",
+          "E3_cat_interaction",
+          "E4_category_interaction",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "evidence_coverage_full": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "case_id": "C07_gmv_category_channel_cross",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed": true
+    },
+    {
+      "after_prediction": {
+        "budget_abort_expected": false,
+        "compiled_action_count": 24,
+        "compiled_budget": {
+          "max_drilldown_depth": 3,
+          "max_query": 70,
+          "max_steps": 24
+        },
+        "compiled_scope_mode": "unscoped",
+        "critical_decisions": [
+          "plan_scope_mode=unscoped",
+          "action_count=24",
+          "Round 4 FIX-D broad GMV lanes include campaign, conversion, inventory, product, and interaction evidence",
+          "Round 5 FIX-T persists per-lane E_select aliases for same-dimension signal lanes",
+          "Round 6 FIX-D sizes broad GMV max_query to 70 via deterministic action-cost estimation"
+        ],
+        "status": "succeeded",
+        "step_count": 24,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "aspect": "execution",
+      "before_prediction": {
+        "critical_decisions": [
+          "plan_scope_mode=unscoped",
+          "action_count=24",
+          "Round 4 FIX-D broad GMV lanes include campaign, conversion, inventory, product, and interaction evidence",
+          "Round 5 FIX-T lets select_signal_element persist E_select_ch_conversion/E_select_ch_interaction/E_select_cat_interaction aliases"
+        ],
+        "status": "succeeded",
+        "step_count": 24,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "case_id": "C07_gmv_category_channel_cross",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed": true
+    },
+    {
+      "after_prediction": {
+        "analysis_strategy": "channel_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "round7_code_basis": {
+          "compiled_action_count": 24,
+          "scope_mode": "unscoped"
+        },
+        "target_date": "2026-06-05"
+      },
+      "aspect": "intent",
+      "before_prediction": {
+        "analysis_strategy": "channel_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-06-05"
+      },
+      "case_id": "C07_gmv_category_channel_cross",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed": true
+    },
+    {
+      "after_prediction": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure",
+        "pollution_risk": false,
+        "round7_memory_budget_note": "budget fix changes execution capacity only; memory remains planning-priority-only"
+      },
+      "aspect": "memory",
+      "before_prediction": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure",
+        "pollution_risk": false
+      },
+      "case_id": "C07_gmv_category_channel_cross",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed": true
+    },
+    {
+      "after_prediction": {
+        "expected_recall_band": "high_after_alias_fix",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_cause_type": "campaign_traffic_drop"
+          },
+          {
+            "dimension": "category",
+            "element": "electronics",
+            "root_cause_type": "stockout"
+          }
+        ],
+        "round7_budget_assumption": "full_broad_gmv_chain_can_execute",
+        "top3_ok": true
+      },
+      "aspect": "multi_cause_outcome",
+      "before_prediction": {
+        "expected_recall_band": "high_after_alias_fix",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_cause_type": "campaign_traffic_drop"
+          },
+          {
+            "dimension": "category",
+            "element": "electronics",
+            "root_cause_type": "stockout"
+          }
+        ],
+        "top3_ok": true
+      },
+      "case_id": "C07_gmv_category_channel_cross",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed": true
+    },
+    {
+      "after_prediction": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "paid_ads",
+        "root_cause_type": "campaign_traffic_drop",
+        "round7_budget_assumption": "no_legacy_max_query_50_abort",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "aspect": "outcome",
+      "before_prediction": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "paid_ads",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "case_id": "C07_gmv_category_channel_cross",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed": true
+    }
+  ],
+  "current_round": "round-07",
+  "generated_from_commit": "e5f63e532dc95bb51db07cf4c9c3ff431809b955",
+  "prediction_field_changed_count": 276,
+  "predictions_sha256": "21001534b17885360bf40458ebab9fac264c3e7b4419f98bf60a28a5b8a810d7",
+  "round7_specific_updates": [
+    "C06_gmv_multi_channel_drop execution now explicitly predicts compiled_budget.max_query=70 and budget_abort_expected=false.",
+    "Broad GMV 24-action cases include Round 6 deterministic query-budget assumption in execution/evidence/outcome predictions.",
+    "No-anomaly cases preserve E1-only execution and mark broad compiled downstream aliases as not executed."
+  ],
+  "unchanged_count": 0
+}

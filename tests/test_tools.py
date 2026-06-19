@@ -279,6 +279,13 @@ class DuplicateRejectingEvidenceRepository(SpyRepository):
         super().create_evidence(row)
 
 
+class LengthConstrainedEvidenceRepository(SpyRepository):
+    def create_evidence(self, row: dict[str, Any]) -> None:
+        if len(str(row["evidence_id"])) > 64:
+            raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED")
+        super().create_evidence(row)
+
+
 class NetGmvRefundDriverRepository(SpyRepository):
     def execute_plan(self, plan: SQLPlan, *, run_id: str):
         self.executed.append(plan)
@@ -967,11 +974,48 @@ def test_fetch_related_signal_uses_lane_evidence_alias_to_avoid_same_dimension_c
     )
 
     assert campaign.observation.ok is True
-    assert campaign.evidence_alias == "E3_ch_campaign_paid_ads"
+    assert campaign.evidence_alias == "E3_ch_campaign"
     assert conversion.observation.ok is True
-    assert conversion.evidence_alias == "E3_ch_conversion_paid_ads"
-    assert "run-1:E3_ch_campaign_paid_ads" in repo.persisted_evidence
-    assert "run-1:E3_ch_conversion_paid_ads" in repo.persisted_evidence
+    assert conversion.evidence_alias == "E3_ch_conversion"
+    assert "run-1:E3_ch_campaign" in repo.persisted_evidence
+    assert "run-1:E3_ch_conversion" in repo.persisted_evidence
+
+
+def test_fetch_related_signal_honors_explicit_lane_alias_with_long_run_id() -> None:
+    run_id = "eval-result-mem-C06_gmv_multi-40a4e2e5"
+    repo = LengthConstrainedEvidenceRepository()
+    repo.runs[run_id] = {
+        "run_id": run_id,
+        "status": "running",
+        "metric_id": "gmv",
+        "target_date": date(2026, 6, 5),
+    }
+    repo.persisted_evidence[f"{run_id}:E1"] = {"evidence_id": f"{run_id}:E1", "run_id": run_id, "guard_status": "passed"}
+    repo.persisted_evidence[f"{run_id}:E2_channel"] = {
+        "evidence_id": f"{run_id}:E2_channel",
+        "run_id": run_id,
+        "guard_status": "passed",
+    }
+
+    result = fetch_related_signal(
+        FetchRelatedSignalArgs(
+            run_id=run_id,
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            signal_type="interaction",
+            dimension="channel",
+            element="paid_ads",
+            evidence_ids=[f"{run_id}:E1", f"{run_id}:E2_channel"],
+            evidence_alias="E3_ch_interaction",
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is True
+    assert result.evidence_alias == "E3_ch_interaction"
+    assert result.evidences[0].evidence_id == f"{run_id}:E3_ch_interaction"
+    assert len(result.evidences[0].evidence_id) <= 64
 
 
 def test_fetch_related_signal_reports_sql_count_when_persistence_fails_after_queries() -> None:

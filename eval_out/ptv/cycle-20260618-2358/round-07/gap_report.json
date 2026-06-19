@@ -1,0 +1,77 @@
+{
+  "eval_id": "eval-result",
+  "round": 7,
+  "summary": {
+    "total": 276,
+    "by_divergence": {
+      "design_flaw": 1
+    },
+    "by_aspect": {
+      "execution": {
+        "design_flaw": 1
+      }
+    },
+    "accuracy": null,
+    "design_flaw_count": 1,
+    "complexity_gap_count": 0,
+    "note": "Full aspect comparison skipped because eval-result.json and full per-case artifacts are absent after eval abort. This report records only the case-specific execution gap evidenced by eval-stream.log, trace_step, sql_audit, current compiled-plan behavior, and source diff against HEAD."
+  },
+  "gaps": [
+    {
+      "case_id": "C06_gmv_multi_channel_drop",
+      "aspect": "execution",
+      "divergence": "design_flaw",
+      "predicted": {
+        "round7_predictions_present": true,
+        "all_six_aspects_predicted": true,
+        "prediction_hash": "sha256:21001534b17885360bf40458ebab9fac264c3e7b4419f98bf60a28a5b8a810d7",
+        "expected_budget_abort": false,
+        "expected_compiled_budget": {
+          "actions": 24,
+          "max_steps": 24,
+          "max_query": 70,
+          "max_drilldown_depth": 3
+        }
+      },
+      "actual": {
+        "eval_status": "eval_aborted",
+        "exit_status": "2",
+        "top_level_error_code": "SYSTEM_TABLE_WRITE_FAILED",
+        "top_level_message": "SYSTEM_TABLE_WRITE_FAILED: eval-result-mem-C06_gmv_multi-40a4e2e5",
+        "trace_failure_run_id": "eval-result-mem-C06_gmv_multi-40a4e2e5",
+        "agent_run_status": "failed",
+        "agent_run_error_code": "SYSTEM_TABLE_WRITE_FAILED",
+        "failed_trace_seq": 19,
+        "failed_action": "fetch_related_signal",
+        "failed_signal_type": "interaction",
+        "failed_dimension": "channel",
+        "failed_lane_alias": "E3_ch_interaction",
+        "selected_element_from_prior_selection": "paid_ads",
+        "budget_at_failure": {
+          "step_count": 18,
+          "query_count": 52,
+          "drilldown_depth": 3,
+          "compiled_max_query": 70
+        },
+        "sql_audit": {
+          "rows_for_run": 52,
+          "guard_not_passed": 0,
+          "failed_action_sql_delta": 2,
+          "last_two_queries_guard_status": "passed"
+        },
+        "evidence_alias_lengths": {
+          "expected_unsuffixed": {
+            "alias": "E3_ch_interaction",
+            "evidence_id_length": 56
+          },
+          "head_behavior_suffixed": {
+            "alias": "E3_ch_interaction_paid_ads",
+            "evidence_id_length": 65,
+            "schema_limit": 64
+          }
+        }
+      },
+      "detail": "Round 6 FIX-D budget sizing worked far enough to pass the previous 50-query boundary; Round 7 reached the later interaction/channel fetch at query_count=52 under max_query=70. The abort is a tool evidence-alias contract bug: HEAD fetch_related_signal appends the selected element token to an explicit lane alias, so E3_ch_interaction becomes E3_ch_interaction_paid_ads. With the eval run id, that evidence_id is 65 characters and violates evidence.evidence_id varchar(64), producing SYSTEM_TABLE_WRITE_FAILED after two guarded SQL queries. A rollback-only insert test showed the intended unsuffixed E3_ch_interaction evidence would fit and persist, so this is not a budget failure, not a SQL guard failure, and not ranking."
+    }
+  ]
+}
