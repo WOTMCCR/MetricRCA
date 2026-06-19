@@ -1,0 +1,168 @@
+{
+  "schema_version": "ptv-controller-optimization-summary-v1",
+  "cycle_id": "20260618-2358",
+  "round": 12,
+  "controller": "codex",
+  "decision": "fix",
+  "selected_fix_category": "FIX-M",
+  "target_layer": "pipeline",
+  "target_files": [
+    "metric_rca/runtime/contribution_set_builder.py",
+    "tests/test_contribution_set_builder.py"
+  ],
+  "target_cases": [
+    "MC01_gmv_multi_cause_overall",
+    "MC04_gmv_weak_set",
+    "MC08_gmv_channel_category_mix"
+  ],
+  "inputs": {
+    "gap_report": "eval_out/ptv/cycle-20260618-2358/round-12/gap_report.json",
+    "diagnosis": "eval_out/ptv/cycle-20260618-2358/round-12/diagnosis.jsonl",
+    "trajectory": "eval_out/ptv/cycle-20260618-2358/round-12/ptv_trajectory.jsonl",
+    "eval_result": "eval_out/ptv/cycle-20260618-2358/round-12/eval-result.json",
+    "previous_fix_commit": "33bec81e927586d8e8c454a7b9a806e091755e7a"
+  },
+  "metrics_after": {
+    "thresholds_met": false,
+    "top1_rate": 0.891304,
+    "top3_rate": 0.891304,
+    "dominant_top1_rate": 0.891304,
+    "root_cause_set_recall_avg": 0.963768,
+    "root_cause_set_precision_avg": 0.735145,
+    "weighted_explanation_coverage_avg": 0.968478,
+    "top3_contains_all_major_causes_rate": 0.891304,
+    "multi_cause_top3_rate": 0.555556,
+    "per_family_gate": false
+  },
+  "round_comparison": {
+    "top1_rate": {
+      "round_11": 0.869565,
+      "round_12": 0.891304,
+      "delta": 0.021739,
+      "regressed": false
+    },
+    "top3_rate": {
+      "round_11": 0.891304,
+      "round_12": 0.891304,
+      "delta": 0.0,
+      "regressed": false
+    },
+    "multi_cause_top3_rate": {
+      "round_11": 0.444444,
+      "round_12": 0.555556,
+      "delta": 0.111112,
+      "regressed": false
+    },
+    "root_cause_set_recall_avg": {
+      "round_11": 0.974638,
+      "round_12": 0.963768,
+      "delta": -0.01087,
+      "regressed": true
+    },
+    "root_cause_set_precision_avg": {
+      "round_11": 0.75471,
+      "round_12": 0.735145,
+      "delta": -0.019565,
+      "regressed": true
+    },
+    "weighted_explanation_coverage_avg": {
+      "round_11": 0.983043,
+      "round_12": 0.968478,
+      "delta": -0.014565,
+      "regressed": true
+    }
+  },
+  "evidence_basis": [
+    "MC01, MC04, and MC08 have root_cause_set_recall=1.0 and weighted_explanation_coverage=1.0, but top3_contains_all_major_causes=0.",
+    "Round 12 trajectory shows expected campaign affiliate and category stockout candidates are present in E4/E_rank, but top3 lacks campaign affiliate coverage because the selected campaign paid_ads representative does not carry the material affiliate channel runner.",
+    "Scorer matches root causes against candidate.dimension_elements when root_cause_type matches, so merge-layer representative composition can express same-root multi-channel causes without changing ranking.py."
+  ],
+  "fix_plan": [
+    "Add a failing contribution_set_builder regression test for material same-root campaign channel runners being embedded into representative candidates.",
+    "Update ContributionSetBuilder.merge so composed campaign channel representatives carry material channel campaign runner pairs in dimension_elements.",
+    "Keep the change scoped to merge/composition; do not modify metric_rca/runtime/ranking.py in this round.",
+    "Run targeted contribution_set_builder tests, then full make test, then commit code and write fix_commit.txt."
+  ],
+  "deferred_failure_clusters": [
+    {
+      "fix_category": "FIX-D",
+      "cases": [
+        "C21_cvr_discovery",
+        "MC02_uv_multi_channel_drop",
+        "MC07_uv_weak_multi_driver",
+        "LG02_uv_lagged_social_discovery"
+      ],
+      "reason": "Discovery remains active, but the immediate multi_cause gate blocker with discovered candidates is FIX-M. Repeating broad FIX-D after Round 11 would ignore MC07 same-case stall and the merge-composition family blocker."
+    },
+    {
+      "fix_category": "FIX-A",
+      "cases": [
+        "MC06_net_gmv_multi_driver",
+        "IX02_gmv_interaction_discovery",
+        "IX03_uv_interaction_cell"
+      ],
+      "reason": "Ranking.py changes remain deferred by RULE-C3 while FIX-D/FIX-M blockers remain."
+    }
+  ],
+  "rule_c1_triggered": false,
+  "rule_c1_blocked_categories": [],
+  "rule_c1_reason": "Round 11 applied FIX-D. Round 12 top1_rate and multi_cause_top3_rate improved while top3_rate stayed flat, so the Analyst did not block FIX-D by RULE-C1.",
+  "rule_c2_triggered": false,
+  "rule_c2_promoted": null,
+  "rule_c2_reason": "FIX-M was deferred once in Round 11; selecting FIX-M now prevents indefinite deferral before it reaches the mandatory two-round threshold.",
+  "rule_c3_triggered": true,
+  "rule_c3_reason": "FIX-A is blocked while discovery and merge blockers remain. This decision selects FIX-M instead of ranking.py because the key MC01/MC04/MC08 failures are candidate composition defects with correct causes already discovered.",
+  "rule_c4_triggered": true,
+  "rule_c4_revert_assessment": {
+    "comparison_baseline": "round-11",
+    "regressed_metrics": [
+      "root_cause_set_recall_avg",
+      "root_cause_set_precision_avg",
+      "weighted_explanation_coverage_avg"
+    ],
+    "revert_decision": "keep",
+    "justification": "Round 12 regressed three aggregate metrics but improved top1 and multi_cause_top3 while preserving MC03 and C23 discovery gains from Round 11. Reverting would lose those gains; the compliant response is to keep Round 11 and switch to FIX-M."
+  },
+  "rule_c5_triggered": false,
+  "rule_c5_reason": "The current applied-category streak is FIX-D x1. Selecting FIX-M switches categories and stays below the two-round cap.",
+  "anti_stall_decision": {
+    "selected_category_streak_after_fix": {
+      "FIX-M": 1
+    },
+    "invalid_rationales_rejected": [
+      "stabilize ranking.py before fixing merge",
+      "repeat broad FIX-D despite MC07 same-case discovery stall",
+      "treat Round 12 as green because top1 improved"
+    ]
+  },
+  "implementation_status": "implemented",
+  "verification": {
+    "targeted_tests": [
+      {
+        "command": "PATH=.venv/bin:$PATH python -m pytest tests/test_contribution_set_builder.py::test_contribution_set_builder_keeps_representatives_and_prunes_duplicate_interactions -q",
+        "result": "1 passed"
+      },
+      {
+        "command": "PATH=.venv/bin:$PATH python -m pytest tests/test_contribution_set_builder.py -q",
+        "result": "5 passed"
+      },
+      {
+        "command": "PATH=.venv/bin:$PATH python -m pytest tests/test_runtime_plan.py -q",
+        "result": "22 passed"
+      },
+      {
+        "command": "PATH=.venv/bin:$PATH python -m pytest tests/test_tools.py -q",
+        "result": "66 passed"
+      },
+      {
+        "command": "PATH=.venv/bin:$PATH python -m pytest tests/test_eval.py::test_eval_scoring_matches_truth_against_candidate_dimension_elements tests/test_eval.py::test_eval_multi_cause_scoring_uses_root_causes_json_not_case_id_rules tests/test_eval.py::test_eval_multi_cause_scoring_penalizes_missing_major_cause_without_case_id_lookup -q",
+        "result": "3 passed"
+      }
+    ],
+    "full_test": {
+      "command": "PATH=.venv/bin:$PATH make test",
+      "result": "604 passed, 8 skipped, 29 warnings"
+    }
+  },
+  "fix_commit": "fc5373dfc931b6e4e6bfb989523463a8ba3ab379"
+}

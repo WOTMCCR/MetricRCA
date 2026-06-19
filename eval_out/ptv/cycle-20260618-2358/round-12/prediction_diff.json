@@ -1,0 +1,552 @@
+{
+  "anti_cheat_notes": {
+    "detect_1": "Predictions include expected failures/regressions and are not copied from ground truth; C21/MC02/MC07/MC01/MC04/MC08 remain predicted gaps.",
+    "detect_2": "Round 12 prediction fields include current code head and Round 11 FIX-D behavior deltas; changed_count must be > 0.",
+    "detect_5": "Reasoning strings include case_id, metric/family, selected candidate, concrete code paths, and case-specific risk/stall notes."
+  },
+  "aspect_count": 6,
+  "base_round": "round-11",
+  "behavioral_focus_cases": [
+    "C21_cvr_discovery",
+    "C23_uv_organic_drop",
+    "IX03_uv_interaction_cell",
+    "MC02_uv_multi_channel_drop",
+    "MC03_cvr_multi_signal_drop"
+  ],
+  "behavioral_prediction_changes": {
+    "C21_cvr_discovery": {
+      "impact_path": "pay_cvr_channel_only_regression",
+      "predicted_scores": {
+        "dominant_top1_ok": false,
+        "root_cause_set_precision": 0.0,
+        "root_cause_set_recall": 0.0,
+        "top1_ok": false,
+        "top3_contains_all_major_causes": false,
+        "top3_ok": false,
+        "weighted_explanation_coverage": 0.0
+      },
+      "predicted_selected": {
+        "contribution_pct": 0.287437,
+        "dimension": "channel",
+        "dimension_elements": [],
+        "element": "paid_ads",
+        "eng_confidence": 0.248925,
+        "root_cause_type": "conversion_drop",
+        "signal_severity": 0.852647
+      },
+      "summary": "PAY_CVR broad discovery now compiles only channel, removing the former device lane that carried mobile into top3."
+    },
+    "C23_uv_organic_drop": {
+      "impact_path": "uv_interaction_campaign_lane_fix_target",
+      "predicted_scores": {
+        "dominant_top1_ok": true,
+        "root_cause_set_precision": 0.333333,
+        "root_cause_set_recall": 1.0,
+        "top1_ok": true,
+        "top3_contains_all_major_causes": true,
+        "top3_ok": true,
+        "weighted_explanation_coverage": 1.0
+      },
+      "predicted_selected": {
+        "contribution_pct": 0.747845,
+        "dimension": "channel",
+        "dimension_elements": [
+          [
+            "channel",
+            "organic"
+          ],
+          [
+            "channel",
+            "paid_ads"
+          ]
+        ],
+        "element": "organic",
+        "eng_confidence": 1.0,
+        "root_cause_type": "campaign_traffic_drop",
+        "signal_severity": 0.883034
+      },
+      "summary": "UV interaction discovery now adds a channel campaign lane next to interaction lanes, giving ranking a verified campaign organic alternative."
+    },
+    "IX03_uv_interaction_cell": {
+      "impact_path": "uv_interaction_campaign_lane_regression_guard",
+      "predicted_scores": {
+        "dominant_top1_ok": true,
+        "root_cause_set_precision": 0.5,
+        "root_cause_set_recall": 1.0,
+        "top1_ok": true,
+        "top3_contains_all_major_causes": true,
+        "top3_ok": true,
+        "weighted_explanation_coverage": 1.0
+      },
+      "predicted_selected": {
+        "contribution_pct": 1.0,
+        "dimension": "channel",
+        "dimension_elements": [
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "category",
+            "electronics"
+          ]
+        ],
+        "element": "paid_ads",
+        "eng_confidence": 1.0,
+        "root_cause_type": "interaction_channel_category",
+        "signal_severity": 0.669448
+      },
+      "summary": "UV interaction cases now execute the added campaign lane, but this interaction-only cell should still rank the interaction paid_ads candidate."
+    },
+    "MC02_uv_multi_channel_drop": {
+      "impact_path": "uv_interaction_campaign_lane_fix_target",
+      "predicted_scores": {
+        "dominant_top1_ok": false,
+        "root_cause_set_precision": 1.0,
+        "root_cause_set_recall": 0.666667,
+        "top1_ok": false,
+        "top3_contains_all_major_causes": true,
+        "top3_ok": true,
+        "weighted_explanation_coverage": 0.85
+      },
+      "predicted_selected": {
+        "contribution_pct": 1.0,
+        "dimension": "channel",
+        "dimension_elements": [
+          [
+            "channel",
+            "social"
+          ],
+          [
+            "channel",
+            "paid_ads"
+          ]
+        ],
+        "element": "social",
+        "eng_confidence": 1.0,
+        "root_cause_type": "campaign_traffic_drop",
+        "signal_severity": 0.628291
+      },
+      "summary": "UV interaction discovery now retains a campaign channel lane, but the dominant paid_ads vs social ordering and weak affiliate recall remain risky."
+    },
+    "MC03_cvr_multi_signal_drop": {
+      "impact_path": "pay_cvr_channel_only_fix_target",
+      "predicted_scores": {
+        "dominant_top1_ok": true,
+        "root_cause_set_precision": 0.666667,
+        "root_cause_set_recall": 1.0,
+        "top1_ok": true,
+        "top3_contains_all_major_causes": true,
+        "top3_ok": true,
+        "weighted_explanation_coverage": 1.0
+      },
+      "predicted_selected": {
+        "contribution_pct": 0.675442,
+        "dimension": "channel",
+        "dimension_elements": [],
+        "element": "social",
+        "eng_confidence": 1.0,
+        "root_cause_type": "conversion_drop",
+        "signal_severity": 0.707034
+      },
+      "summary": "PAY_CVR broad discovery now keeps channel-only E4, so social and organic remain together instead of being pruned by merge."
+    }
+  },
+  "case_count": 46,
+  "changed_by_aspect": {
+    "evidence": 46,
+    "execution": 46,
+    "intent": 46,
+    "memory": 46,
+    "multi_cause_outcome": 46,
+    "outcome": 46
+  },
+  "changed_by_case": {
+    "C06_gmv_multi_channel_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C07_gmv_category_channel_cross": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C08_gmv_aov_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C09_gmv_uv_organic_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C10_gmv_price_change": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C11_gmv_promo_end_falloff": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C12_gmv_single_sku_stockout": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C13_net_gmv_refund_spike": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C14_net_gmv_gmv_driven": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C15_refund_rate_logistics": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C16_stockout_rate_warehouse": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C17_complaint_rate_quality": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C18_cvr_channel_landing": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C19_gmv_seasonal_false_positive": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C20_cvr_no_anomaly_noise": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C21_cvr_discovery": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C22_gmv_borderline": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C23_uv_organic_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C24_gmv_positive_spike": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C25_refund_discovery": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C26_ambiguous_intent": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C27_composite_cause": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C28_multi_day_drift": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "IX01_gmv_channel_category_interaction": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "IX02_gmv_interaction_discovery": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "IX03_uv_interaction_cell": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "IX04_gmv_interaction_no_single_driver": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "LG01_gmv_lagged_social": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "LG02_uv_lagged_social_discovery": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC01_gmv_multi_cause_overall": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC02_uv_multi_channel_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC03_cvr_multi_signal_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC04_gmv_weak_set": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC05_gmv_lag_stockout_mix": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC06_net_gmv_multi_driver": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC07_uv_weak_multi_driver": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC08_gmv_channel_category_mix": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "RS01_gmv_residual_dual_mechanism": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "RS02_gmv_residual_discovery": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "WK01_gmv_weak_affiliate_boundary": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "WK02_gmv_no_anomaly_weak": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "cvr_mobile_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "gmv_no_anomaly": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "gmv_paid_ads_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "gmv_stockout_electronics": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "refund_rate_product_quality": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ]
+  },
+  "changed_count": 276,
+  "confidence_changed_count": 275,
+  "created_at": "2026-06-19T17:29:48.574173+00:00",
+  "current_head": "294122b7ad73ad5dfe8700f4cd2a0abb7d209052",
+  "current_round": "round-12",
+  "cycle_id": "cycle-20260618-2358",
+  "line_count": 276,
+  "prediction_field_changed_by_aspect": {
+    "evidence": 46,
+    "execution": 46,
+    "intent": 46,
+    "memory": 46,
+    "multi_cause_outcome": 46,
+    "outcome": 46
+  },
+  "prediction_field_changed_count": 276,
+  "reasoning_changed_count": 276,
+  "source_fix_commit": "33bec81e927586d8e8c454a7b9a806e091755e7a"
+}

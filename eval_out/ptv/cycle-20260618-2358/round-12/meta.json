@@ -1,0 +1,11 @@
+{
+  "base_commit": "294122b7ad73ad5dfe8700f4cd2a0abb7d209052",
+  "branch": "codex/c-complex-causal",
+  "cycle_id": "cycle-20260618-2358",
+  "previous_fix_commit": "33bec81e927586d8e8c454a7b9a806e091755e7a",
+  "project_binding": "metricrca",
+  "round": 12,
+  "started_at": "2026-06-19T17:24:25.789687+00:00",
+  "status": "in_progress",
+  "total_cases": 46
+}
