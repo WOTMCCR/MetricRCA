@@ -281,12 +281,18 @@ def test_net_gmv_explicit_channel_policy_declares_multi_driver_lanes() -> None:
     assert policy.scope_mode == "explicit_multi_driver"
     assert policy.required_drilldowns == ("channel", "category")
     assert [
-        (lane.dimension, lane.signal_type, lane.element_binding, lane.evidence_alias)
+        (
+            lane.dimension,
+            lane.signal_type,
+            lane.element_binding,
+            lane.evidence_alias,
+            lane.signal_filter_mode,
+        )
         for lane in policy.lanes
         ] == [
-            ("channel", "campaign", "explicit_scope", "E4_channel"),
-            ("category", "inventory", "dynamic", "E4_category"),
-            ("channel", "conversion", "explicit_scope", "E4_channel_conversion"),
+            ("channel", "campaign", "explicit_scope", "E4_channel", "inherit"),
+            ("category", "inventory", "dynamic", "E4_category", "none"),
+            ("channel", "conversion", "explicit_scope", "E4_channel_conversion", "inherit"),
         ]
 
 

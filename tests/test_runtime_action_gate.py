@@ -161,6 +161,33 @@ def test_action_gate_allows_explicit_multi_driver_cross_dimension_lane_with_scop
     assert decision.allowed is True
 
 
+def test_action_gate_allows_explicit_multi_driver_signal_selection_without_scope_filter() -> None:
+    ctx = RunContext(
+        run_id="run-1",
+        metric_id="net_gmv",
+        target_date=date(2026, 5, 29),
+        explicit_scope={"channel": "paid_ads"},
+        scope_mode="explicit_multi_driver",
+    )
+    action = RcaAction(
+        action_id="A6",
+        kind="select_signal_element",
+        args={
+            "metric_id": "net_gmv",
+            "target_date": date(2026, 5, 29),
+            "signal_type": "inventory",
+            "dimension": "category",
+            "filters": {},
+        },
+        requires=["E1", "E2_category"],
+    )
+    graph = EvidenceGraph(run_id="run-1", evidence_ids=["run-1:E1", "run-1:E2_category"])
+
+    decision = ActionGate().validate(ctx, action, graph)
+
+    assert decision.allowed is True
+
+
 def test_action_gate_rejects_explicit_multi_driver_filter_contradiction() -> None:
     ctx = RunContext(
         run_id="run-1",

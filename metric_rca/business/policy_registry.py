@@ -18,6 +18,7 @@ ElementSelection = Literal["top_candidate", "signal_anomaly", "signal_level"]
 FactorGraphType = Literal["uv_pay_cvr_aov", "net_gmv_chain", "dimension_delta"]
 DiscoveryScopeMode = Literal["unscoped", "explicit_single", "explicit_multi_driver"]
 LaneElementBinding = Literal["dynamic", "explicit_scope", "policy"]
+LaneSignalFilterMode = Literal["inherit", "none"]
 AllowedDimensionsValidator = Callable[[str, tuple[str, ...]], None]
 MetricDefinitionProvider = Callable[[str], Any]
 
@@ -52,6 +53,7 @@ class DiscoveryLane:
     element: str | None = None
     element_selection: ElementSelection = "top_candidate"
     evidence_alias: str | None = None
+    signal_filter_mode: LaneSignalFilterMode = "inherit"
 
 
 @dataclass(frozen=True)
@@ -438,6 +440,7 @@ DEFAULT_DISCOVERY_POLICY_RULES: tuple[DiscoveryPolicyRule, ...] = (
                 signal_type="inventory",
                 element_binding="dynamic",
                 evidence_alias="E4_category",
+                signal_filter_mode="none",
             ),
             DiscoveryLane(
                 dimension=DimensionId.CHANNEL.value,

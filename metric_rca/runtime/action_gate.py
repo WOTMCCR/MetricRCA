@@ -118,7 +118,11 @@ def _explicit_multi_driver_scope_error(
             f"contradicts explicit question scope {dimension}={element}"
         )
     action_dimension = action.args.get("dimension")
-    if action_dimension != dimension and filters.get(dimension) != element:
+    if (
+        action_dimension != dimension
+        and action.kind in {"drilldown_dimension", "calculate_contribution"}
+        and filters.get(dimension) != element
+    ):
         return f"explicit multi-driver lane requires filters.{dimension}={element}"
     if action.kind == "select_signal_element" and action_dimension == dimension:
         return f"explicit multi-driver lane for {dimension} must bind element={element} directly"

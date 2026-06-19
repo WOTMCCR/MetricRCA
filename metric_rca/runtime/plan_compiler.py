@@ -414,7 +414,8 @@ def _parallel_broad_contribution_chains(
     dynamic_selection_dimensions: set[str] = set()
     for lane in lanes:
         dimension = lane.dimension
-        chain_filters = dict(scoped_filters.get(dimension, {}) if scoped_filters else {})
+        contribution_filters = dict(scoped_filters.get(dimension, {}) if scoped_filters else {})
+        signal_filters = _signal_filters_for_lane(lane, contribution_filters)
         scoped_element = scoped_elements.get(dimension) if scoped_elements else None
         first_signal_element = _lane_element(lane, scoped_element=scoped_element, explicit_scope=explicit_scope)
         selection_alias = f"E_select_{dimension}"
@@ -440,7 +441,7 @@ def _parallel_broad_contribution_chains(
                         "target_date": parsed_intent.target_date,
                         "signal_type": lane.signal_type,
                         "dimension": dimension,
-                        "filters": chain_filters,
+                        "filters": signal_filters,
                         "element_selection": lane.element_selection,
                     },
                     requires=["E1", f"E2_{dimension}"],
@@ -462,7 +463,7 @@ def _parallel_broad_contribution_chains(
                     "signal_type": lane.signal_type,
                     "dimension": dimension,
                     "element": first_signal_element,
-                    "filters": chain_filters,
+                    "filters": signal_filters,
                     "element_selection": lane.element_selection,
                 },
                 requires=fetch_requires,
@@ -483,7 +484,7 @@ def _parallel_broad_contribution_chains(
                     "target_date": parsed_intent.target_date,
                     "dimension": dimension,
                     "element": first_signal_element,
-                    "filters": chain_filters,
+                    "filters": contribution_filters,
                     "element_selection": lane.element_selection,
                     "evidence_alias": e4_alias,
                 },
@@ -575,6 +576,12 @@ def _discovery_lanes(
             )
         )
     return lanes
+
+
+def _signal_filters_for_lane(lane: DiscoveryLane, contribution_filters: dict[str, str]) -> dict[str, str]:
+    if lane.signal_filter_mode == "none":
+        return {}
+    return dict(contribution_filters)
 
 
 def _lane_element(

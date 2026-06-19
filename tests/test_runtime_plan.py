@@ -289,18 +289,20 @@ def test_plan_compiler_expands_net_gmv_paid_ads_slice_to_multi_driver_discovery(
     assert [(action.args["dimension"], action.args["signal_type"]) for action in selections] == [
         ("category", "inventory"),
     ]
+    assert [action.args["filters"] for action in selections] == [{}]
     assert [(action.args["dimension"], action.args["signal_type"], action.args["element"]) for action in signal_actions] == [
         ("channel", "campaign", "paid_ads"),
         ("category", "inventory", None),
         ("channel", "conversion", "paid_ads"),
     ]
     assert [action.dynamic for action in signal_actions] == [False, True, False]
-    assert [action.args["filters"] for action in signal_actions] == [{}, {"channel": "paid_ads"}, {}]
+    assert [action.args["filters"] for action in signal_actions] == [{}, {}, {}]
     assert [(action.args["dimension"], action.args["element"], action.args["evidence_alias"]) for action in contribution_actions] == [
         ("channel", "paid_ads", "E4_channel"),
         ("category", None, "E4_category"),
         ("channel", "paid_ads", "E4_channel_conversion"),
     ]
+    assert [action.args["filters"] for action in contribution_actions] == [{}, {"channel": "paid_ads"}, {}]
     assert merge_action.args["source_evidence_aliases"] == ["E4_channel", "E4_category", "E4_channel_conversion"]
     assert plan.scope_mode == "explicit_multi_driver"
     assert "metric_rca/runtime/ranking.py" not in str(plan.model_dump(mode="json"))
