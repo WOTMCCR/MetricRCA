@@ -1,0 +1,990 @@
+{
+  "aspect_count": 6,
+  "base_round": "round-07",
+  "calibration_summary": {
+    "round7_failure": "C06 memory prelude aborted because explicit E3_ch_interaction was element-suffixed and exceeded evidence_id varchar(64)",
+    "round8_expected_change": "explicit E3 aliases are unsuffixed complete lane aliases, so C06-style alias overflow is not expected",
+    "unchanged_risks": [
+      "ranking/weak-signal calibration",
+      "dynamic element selection ordering",
+      "full-chain issues masked by prior eval abort"
+    ]
+  },
+  "case_count": 46,
+  "case_groups": {
+    "broad_gmv_explicit_e3_lanes": [
+      "C06_gmv_multi_channel_drop",
+      "C07_gmv_category_channel_cross",
+      "C09_gmv_uv_organic_drop",
+      "C24_gmv_positive_spike",
+      "C26_ambiguous_intent",
+      "C27_composite_cause",
+      "C28_multi_day_drift",
+      "IX02_gmv_interaction_discovery",
+      "MC01_gmv_multi_cause_overall",
+      "MC04_gmv_weak_set",
+      "MC05_gmv_lag_stockout_mix",
+      "MC08_gmv_channel_category_mix",
+      "RS01_gmv_residual_dual_mechanism",
+      "RS02_gmv_residual_discovery"
+    ],
+    "explicit_e3_lane_non_broad": [],
+    "net_gmv_explicit_multi_driver": [
+      "C13_net_gmv_refund_spike",
+      "C14_net_gmv_gmv_driven",
+      "MC06_net_gmv_multi_driver"
+    ],
+    "no_anomaly_detect_only": [
+      "C19_gmv_seasonal_false_positive",
+      "C20_cvr_no_anomaly_noise",
+      "C22_gmv_borderline",
+      "WK02_gmv_no_anomaly_weak",
+      "gmv_no_anomaly"
+    ]
+  },
+  "changed_by_aspect": {
+    "evidence": 46,
+    "execution": 46,
+    "intent": 46,
+    "memory": 46,
+    "multi_cause_outcome": 46,
+    "outcome": 46
+  },
+  "changed_by_case": {
+    "C06_gmv_multi_channel_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C07_gmv_category_channel_cross": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C08_gmv_aov_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C09_gmv_uv_organic_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C10_gmv_price_change": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C11_gmv_promo_end_falloff": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C12_gmv_single_sku_stockout": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C13_net_gmv_refund_spike": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C14_net_gmv_gmv_driven": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C15_refund_rate_logistics": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C16_stockout_rate_warehouse": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C17_complaint_rate_quality": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C18_cvr_channel_landing": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C19_gmv_seasonal_false_positive": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C20_cvr_no_anomaly_noise": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C21_cvr_discovery": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C22_gmv_borderline": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C23_uv_organic_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C24_gmv_positive_spike": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C25_refund_discovery": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C26_ambiguous_intent": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C27_composite_cause": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C28_multi_day_drift": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "IX01_gmv_channel_category_interaction": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "IX02_gmv_interaction_discovery": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "IX03_uv_interaction_cell": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "IX04_gmv_interaction_no_single_driver": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "LG01_gmv_lagged_social": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "LG02_uv_lagged_social_discovery": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC01_gmv_multi_cause_overall": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC02_uv_multi_channel_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC03_cvr_multi_signal_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC04_gmv_weak_set": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC05_gmv_lag_stockout_mix": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC06_net_gmv_multi_driver": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC07_uv_weak_multi_driver": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC08_gmv_channel_category_mix": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "RS01_gmv_residual_dual_mechanism": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "RS02_gmv_residual_discovery": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "WK01_gmv_weak_affiliate_boundary": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "WK02_gmv_no_anomaly_weak": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "cvr_mobile_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "gmv_no_anomaly": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "gmv_paid_ads_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "gmv_stockout_electronics": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "refund_rate_product_quality": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ]
+  },
+  "changed_count": 276,
+  "changed_examples": [
+    {
+      "after_prediction": {
+        "analysis_strategy": "standard",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "filters": {
+          "channel": "paid_ads"
+        },
+        "metric_id": "gmv",
+        "question_family": "channel_gmv_anomaly",
+        "round8_code_basis": {
+          "compiled_action_count": 5,
+          "scope_mode": "explicit_single"
+        },
+        "round8_fix_t_relevance": "not_on_explicit_e3_alias_overflow_path",
+        "round8_prediction_basis": {
+          "case_group": "unaffected_by_e3_alias_fix",
+          "fix_t_effect": "fetch_related_signal explicit evidence_alias is complete and unsuffixed",
+          "head": "2ebd4f8",
+          "round7_fix_commit": "978e707d35a89832df5211c3beee082b718c9029"
+        },
+        "target_date": "2026-06-05"
+      },
+      "aspect": "intent",
+      "before_prediction": {
+        "analysis_strategy": "standard",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "filters": {
+          "channel": "paid_ads"
+        },
+        "metric_id": "gmv",
+        "question_family": "channel_gmv_anomaly",
+        "round7_code_basis": {
+          "compiled_action_count": 5,
+          "scope_mode": "explicit_single"
+        },
+        "target_date": "2026-06-05"
+      },
+      "case_id": "gmv_paid_ads_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ]
+    },
+    {
+      "after_prediction": {
+        "budget_abort_expected": false,
+        "compiled_action_count": 5,
+        "compiled_budget": {
+          "max_drilldown_depth": 3,
+          "max_query": 20,
+          "max_steps": 8
+        },
+        "compiled_scope_mode": "explicit_single",
+        "critical_decisions": [
+          "plan_scope_mode=explicit_single",
+          "action_count=5",
+          "explicit single-slice path does not depend on dynamic selection aliases",
+          "Round 4 FIX-D/Round 5 FIX-T changes should not alter this explicit tool sequence"
+        ],
+        "round8_fix_t_relevance": "not_on_explicit_e3_alias_overflow_path",
+        "round8_prediction_basis": {
+          "case_group": "unaffected_by_e3_alias_fix",
+          "fix_t_effect": "fetch_related_signal explicit evidence_alias is complete and unsuffixed",
+          "head": "2ebd4f8",
+          "round7_fix_commit": "978e707d35a89832df5211c3beee082b718c9029"
+        },
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "aspect": "execution",
+      "before_prediction": {
+        "budget_abort_expected": false,
+        "compiled_action_count": 5,
+        "compiled_budget": {
+          "max_drilldown_depth": 3,
+          "max_query": 20,
+          "max_steps": 8
+        },
+        "compiled_scope_mode": "explicit_single",
+        "critical_decisions": [
+          "plan_scope_mode=explicit_single",
+          "action_count=5",
+          "explicit single-slice path does not depend on dynamic selection aliases",
+          "Round 4 FIX-D/Round 5 FIX-T changes should not alter this explicit tool sequence"
+        ],
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "case_id": "gmv_paid_ads_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ]
+    },
+    {
+      "after_prediction": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "evidence_coverage_full": true,
+        "expected_gap": null,
+        "guard_status": "passed",
+        "round8_budget_allows_full_chain": true,
+        "round8_compiled_alias_count": 5,
+        "round8_fix_t_relevance": "not_on_explicit_e3_alias_overflow_path",
+        "round8_prediction_basis": {
+          "case_group": "unaffected_by_e3_alias_fix",
+          "fix_t_effect": "fetch_related_signal explicit evidence_alias is complete and unsuffixed",
+          "head": "2ebd4f8",
+          "round7_fix_commit": "978e707d35a89832df5211c3beee082b718c9029"
+        }
+      },
+      "aspect": "evidence",
+      "before_prediction": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "evidence_coverage_full": true,
+        "expected_gap": null,
+        "guard_status": "passed",
+        "round7_budget_allows_full_chain": true,
+        "round7_compiled_alias_count": 5
+      },
+      "case_id": "gmv_paid_ads_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ]
+    },
+    {
+      "after_prediction": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure",
+        "pollution_risk": false,
+        "round8_fix_t_relevance": "not_on_explicit_e3_alias_overflow_path",
+        "round8_memory_budget_note": "budget fix changes execution capacity only; memory remains planning-priority-only",
+        "round8_prediction_basis": {
+          "case_group": "unaffected_by_e3_alias_fix",
+          "fix_t_effect": "fetch_related_signal explicit evidence_alias is complete and unsuffixed",
+          "head": "2ebd4f8",
+          "round7_fix_commit": "978e707d35a89832df5211c3beee082b718c9029"
+        }
+      },
+      "aspect": "memory",
+      "before_prediction": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure",
+        "pollution_risk": false,
+        "round7_memory_budget_note": "budget fix changes execution capacity only; memory remains planning-priority-only"
+      },
+      "case_id": "gmv_paid_ads_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ]
+    },
+    {
+      "after_prediction": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "paid_ads",
+        "root_cause_type": "campaign_traffic_drop",
+        "round8_budget_assumption": "unchanged_by_round6_budget_fix",
+        "round8_fix_t_relevance": "not_on_explicit_e3_alias_overflow_path",
+        "round8_prediction_basis": {
+          "case_group": "unaffected_by_e3_alias_fix",
+          "fix_t_effect": "fetch_related_signal explicit evidence_alias is complete and unsuffixed",
+          "head": "2ebd4f8",
+          "round7_fix_commit": "978e707d35a89832df5211c3beee082b718c9029"
+        },
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "aspect": "outcome",
+      "before_prediction": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "paid_ads",
+        "root_cause_type": "campaign_traffic_drop",
+        "round7_budget_assumption": "unchanged_by_round6_budget_fix",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "case_id": "gmv_paid_ads_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ]
+    },
+    {
+      "after_prediction": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "round8_budget_assumption": "not_budget_limited_by_c06_fix",
+        "round8_fix_t_relevance": "not_on_explicit_e3_alias_overflow_path",
+        "round8_prediction_basis": {
+          "case_group": "unaffected_by_e3_alias_fix",
+          "fix_t_effect": "fetch_related_signal explicit evidence_alias is complete and unsuffixed",
+          "head": "2ebd4f8",
+          "round7_fix_commit": "978e707d35a89832df5211c3beee082b718c9029"
+        },
+        "top3_ok": true
+      },
+      "aspect": "multi_cause_outcome",
+      "before_prediction": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "round7_budget_assumption": "not_budget_limited_by_c06_fix",
+        "top3_ok": true
+      },
+      "case_id": "gmv_paid_ads_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ]
+    },
+    {
+      "after_prediction": {
+        "analysis_strategy": "standard",
+        "dimension": "category",
+        "element": "electronics",
+        "filters": {
+          "category": "electronics"
+        },
+        "metric_id": "gmv",
+        "question_family": "category_gmv_anomaly",
+        "round8_code_basis": {
+          "compiled_action_count": 5,
+          "scope_mode": "explicit_single"
+        },
+        "round8_fix_t_relevance": "not_on_explicit_e3_alias_overflow_path",
+        "round8_prediction_basis": {
+          "case_group": "unaffected_by_e3_alias_fix",
+          "fix_t_effect": "fetch_related_signal explicit evidence_alias is complete and unsuffixed",
+          "head": "2ebd4f8",
+          "round7_fix_commit": "978e707d35a89832df5211c3beee082b718c9029"
+        },
+        "target_date": "2026-06-05"
+      },
+      "aspect": "intent",
+      "before_prediction": {
+        "analysis_strategy": "standard",
+        "dimension": "category",
+        "element": "electronics",
+        "filters": {
+          "category": "electronics"
+        },
+        "metric_id": "gmv",
+        "question_family": "category_gmv_anomaly",
+        "round7_code_basis": {
+          "compiled_action_count": 5,
+          "scope_mode": "explicit_single"
+        },
+        "target_date": "2026-06-05"
+      },
+      "case_id": "gmv_stockout_electronics",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ]
+    },
+    {
+      "after_prediction": {
+        "budget_abort_expected": false,
+        "compiled_action_count": 5,
+        "compiled_budget": {
+          "max_drilldown_depth": 3,
+          "max_query": 20,
+          "max_steps": 8
+        },
+        "compiled_scope_mode": "explicit_single",
+        "critical_decisions": [
+          "plan_scope_mode=explicit_single",
+          "action_count=5",
+          "explicit single-slice path does not depend on dynamic selection aliases",
+          "Round 4 FIX-D/Round 5 FIX-T changes should not alter this explicit tool sequence"
+        ],
+        "round8_fix_t_relevance": "not_on_explicit_e3_alias_overflow_path",
+        "round8_prediction_basis": {
+          "case_group": "unaffected_by_e3_alias_fix",
+          "fix_t_effect": "fetch_related_signal explicit evidence_alias is complete and unsuffixed",
+          "head": "2ebd4f8",
+          "round7_fix_commit": "978e707d35a89832df5211c3beee082b718c9029"
+        },
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "aspect": "execution",
+      "before_prediction": {
+        "budget_abort_expected": false,
+        "compiled_action_count": 5,
+        "compiled_budget": {
+          "max_drilldown_depth": 3,
+          "max_query": 20,
+          "max_steps": 8
+        },
+        "compiled_scope_mode": "explicit_single",
+        "critical_decisions": [
+          "plan_scope_mode=explicit_single",
+          "action_count=5",
+          "explicit single-slice path does not depend on dynamic selection aliases",
+          "Round 4 FIX-D/Round 5 FIX-T changes should not alter this explicit tool sequence"
+        ],
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "case_id": "gmv_stockout_electronics",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ]
+    },
+    {
+      "after_prediction": {
+        "chain": [
+          "E1",
+          "E2_category",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "evidence_coverage_full": true,
+        "expected_gap": null,
+        "guard_status": "passed",
+        "round8_budget_allows_full_chain": true,
+        "round8_compiled_alias_count": 5,
+        "round8_fix_t_relevance": "not_on_explicit_e3_alias_overflow_path",
+        "round8_prediction_basis": {
+          "case_group": "unaffected_by_e3_alias_fix",
+          "fix_t_effect": "fetch_related_signal explicit evidence_alias is complete and unsuffixed",
+          "head": "2ebd4f8",
+          "round7_fix_commit": "978e707d35a89832df5211c3beee082b718c9029"
+        }
+      },
+      "aspect": "evidence",
+      "before_prediction": {
+        "chain": [
+          "E1",
+          "E2_category",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "evidence_coverage_full": true,
+        "expected_gap": null,
+        "guard_status": "passed",
+        "round7_budget_allows_full_chain": true,
+        "round7_compiled_alias_count": 5
+      },
+      "case_id": "gmv_stockout_electronics",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ]
+    },
+    {
+      "after_prediction": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure",
+        "pollution_risk": false,
+        "round8_fix_t_relevance": "not_on_explicit_e3_alias_overflow_path",
+        "round8_memory_budget_note": "budget fix changes execution capacity only; memory remains planning-priority-only",
+        "round8_prediction_basis": {
+          "case_group": "unaffected_by_e3_alias_fix",
+          "fix_t_effect": "fetch_related_signal explicit evidence_alias is complete and unsuffixed",
+          "head": "2ebd4f8",
+          "round7_fix_commit": "978e707d35a89832df5211c3beee082b718c9029"
+        }
+      },
+      "aspect": "memory",
+      "before_prediction": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure",
+        "pollution_risk": false,
+        "round7_memory_budget_note": "budget fix changes execution capacity only; memory remains planning-priority-only"
+      },
+      "case_id": "gmv_stockout_electronics",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ]
+    },
+    {
+      "after_prediction": {
+        "anomaly_ok": true,
+        "dimension": "category",
+        "element": "electronics",
+        "root_cause_type": "stockout",
+        "round8_budget_assumption": "unchanged_by_round6_budget_fix",
+        "round8_fix_t_relevance": "not_on_explicit_e3_alias_overflow_path",
+        "round8_prediction_basis": {
+          "case_group": "unaffected_by_e3_alias_fix",
+          "fix_t_effect": "fetch_related_signal explicit evidence_alias is complete and unsuffixed",
+          "head": "2ebd4f8",
+          "round7_fix_commit": "978e707d35a89832df5211c3beee082b718c9029"
+        },
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "aspect": "outcome",
+      "before_prediction": {
+        "anomaly_ok": true,
+        "dimension": "category",
+        "element": "electronics",
+        "root_cause_type": "stockout",
+        "round7_budget_assumption": "unchanged_by_round6_budget_fix",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "case_id": "gmv_stockout_electronics",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ]
+    },
+    {
+      "after_prediction": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "category",
+            "element": "electronics",
+            "root_cause_type": "stockout"
+          }
+        ],
+        "round8_budget_assumption": "not_budget_limited_by_c06_fix",
+        "round8_fix_t_relevance": "not_on_explicit_e3_alias_overflow_path",
+        "round8_prediction_basis": {
+          "case_group": "unaffected_by_e3_alias_fix",
+          "fix_t_effect": "fetch_related_signal explicit evidence_alias is complete and unsuffixed",
+          "head": "2ebd4f8",
+          "round7_fix_commit": "978e707d35a89832df5211c3beee082b718c9029"
+        },
+        "top3_ok": true
+      },
+      "aspect": "multi_cause_outcome",
+      "before_prediction": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "category",
+            "element": "electronics",
+            "root_cause_type": "stockout"
+          }
+        ],
+        "round7_budget_assumption": "not_budget_limited_by_c06_fix",
+        "top3_ok": true
+      },
+      "case_id": "gmv_stockout_electronics",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ]
+    }
+  ],
+  "current_head": "2ebd4f8",
+  "explicitly_not_read": [
+    "eval_out/ptv/cycle-20260618-2358/round-08/eval-result.json",
+    "eval_out/ptv/cycle-20260618-2358/round-08/eval-result/"
+  ],
+  "generated_at": "2026-06-19T15:31:03.367793+00:00",
+  "inputs_read": [
+    "metric_rca/agent/tools/fetch_related_signal.py",
+    "metric_rca/runtime/plan_compiler.py",
+    "metric_rca/business/policy_registry.py",
+    "eval_out/ptv/cycle-20260618-2358/round-07/gap_report.json",
+    "eval_out/ptv/cycle-20260618-2358/round-07/diagnosis.jsonl",
+    "eval_out/ptv/cycle-20260618-2358/round-07/ptv_trajectory.jsonl",
+    "eval_out/ptv/cycle-20260618-2358/round-07/predictions.jsonl"
+  ],
+  "line_count": 276,
+  "prediction_field_changed_count": 276,
+  "prediction_hash": "sha256:4985addf9189b6159ae04ea5242dc86d45b4b0221ccb5fc3871b65243ee44df4",
+  "round7_fix_commit_basis": "978e707d35a89832df5211c3beee082b718c9029",
+  "target_round": "round-08"
+}

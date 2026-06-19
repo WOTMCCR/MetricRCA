@@ -358,6 +358,134 @@ def test_tool_executor_runs_select_action_without_element_resolution_and_preserv
     assert captured["element_selection"] == "signal_anomaly"
 
 
+def test_tool_executor_strips_gate_only_scope_policy_before_tool_schema_validation() -> None:
+    captured: dict[str, dict[str, Any]] = {}
+
+    def select_handler(args: SelectSignalElementArgs, dependencies: object) -> ToolExecutionResult:
+        captured["select_signal_element"] = args.model_dump(mode="json")
+        return ToolExecutionResult(
+            observation=Observation(action_name="select_signal_element", ok=True, evidence_ids=["run-1:E_select_ch_conversion"]),
+            evidence_ids=["run-1:E_select_ch_conversion"],
+        )
+
+    def fetch_handler(args: _FetchArgs, dependencies: object) -> ToolExecutionResult:
+        captured["fetch_related_signal"] = args.model_dump(mode="json")
+        return ToolExecutionResult(
+            observation=Observation(action_name="fetch_related_signal", ok=True, evidence_ids=["run-1:E3_ch_conversion"]),
+            evidence_ids=["run-1:E3_ch_conversion"],
+        )
+
+    def calculate_handler(args: _CalculateArgs, dependencies: object) -> ToolExecutionResult:
+        captured["calculate_contribution"] = args.model_dump(mode="json")
+        return ToolExecutionResult(
+            observation=Observation(action_name="calculate_contribution", ok=True, evidence_ids=["run-1:E4_channel_conversion"]),
+            evidence_ids=["run-1:E4_channel_conversion"],
+        )
+
+    executor = ToolExecutor(
+        dependencies=object(),
+        handlers={
+            "select_signal_element": MetricRCAToolHandler(args_model=SelectSignalElementArgs, call=select_handler),
+            "fetch_related_signal": MetricRCAToolHandler(args_model=_FetchArgs, call=fetch_handler),
+            "calculate_contribution": MetricRCAToolHandler(args_model=_CalculateArgs, call=calculate_handler),
+        },
+    )
+    ctx = RunContext(run_id="run-1", metric_id="net_gmv", target_date=date(2026, 6, 5))
+    graph = EvidenceGraph(
+        run_id="run-1",
+        evidence_ids=["run-1:E1", "run-1:E2_channel", "run-1:E3_ch_conversion"],
+    )
+    common_args = {
+        "metric_id": "net_gmv",
+        "target_date": date(2026, 6, 5),
+        "dimension": "channel",
+        "explicit_scope_policy": "global_explanatory",
+    }
+
+    results = [
+        executor.execute(
+            ctx,
+            RcaAction(
+                action_id="A9",
+                kind="select_signal_element",
+                args={
+                    **common_args,
+                    "signal_type": "conversion",
+                    "element_selection": "signal_anomaly",
+                    "evidence_alias": "E_select_ch_conversion",
+                },
+                requires=["E1", "E2_channel"],
+            ),
+            graph,
+        ),
+        executor.execute(
+            ctx,
+            RcaAction(
+                action_id="A10",
+                kind="fetch_related_signal",
+                args={
+                    **common_args,
+                    "signal_type": "conversion",
+                    "element": "affiliate",
+                },
+                requires=["E1", "E2_channel"],
+            ),
+            graph,
+        ),
+        executor.execute(
+            ctx,
+            RcaAction(
+                action_id="A11",
+                kind="calculate_contribution",
+                args={
+                    **common_args,
+                    "element": "affiliate",
+                },
+                requires=["E1", "E2_channel", "E3_ch_conversion"],
+            ),
+            graph,
+        ),
+    ]
+
+    assert [result.observation.ok for result in results] == [True, True, True]
+    assert set(captured) == {"select_signal_element", "fetch_related_signal", "calculate_contribution"}
+    for args in captured.values():
+        assert "explicit_scope_policy" not in args
+
+
+def test_action_gate_rejects_unknown_explicit_scope_policy_before_tool_boundary() -> None:
+    from metric_rca.runtime.action_gate import ActionGate
+
+    ctx = RunContext(
+        run_id="run-1",
+        metric_id="net_gmv",
+        target_date=date(2026, 6, 5),
+        explicit_scope={"channel": "paid_ads"},
+        scope_mode="explicit_multi_driver",
+    )
+    action = RcaAction(
+        action_id="A9",
+        kind="select_signal_element",
+        args={
+            "metric_id": "net_gmv",
+            "target_date": date(2026, 6, 5),
+            "signal_type": "conversion",
+            "dimension": "channel",
+            "element_selection": "signal_anomaly",
+            "evidence_alias": "E_select_ch_conversion",
+            "explicit_scope_policy": "loose",
+        },
+        requires=["E1", "E2_channel"],
+    )
+    graph = EvidenceGraph(run_id="run-1", evidence_ids=["run-1:E1", "run-1:E2_channel"])
+
+    decision = ActionGate().validate(ctx, action, graph)
+
+    assert decision.allowed is False
+    assert decision.error_code == "ACTION_SCHEMA_INVALID"
+    assert "element=paid_ads" in (decision.message or "")
+
+
 def test_tool_executor_resolves_dynamic_element_from_selection_evidence() -> None:
     captured: dict[str, Any] = {}
 

@@ -1,0 +1,195 @@
+{
+  "eval_id": "eval-result",
+  "round": 8,
+  "summary": {
+    "total": 276,
+    "by_divergence": {
+      "design_flaw": 1
+    },
+    "by_aspect": {
+      "execution": {
+        "design_flaw": 1
+      }
+    },
+    "accuracy": null,
+    "design_flaw_count": 1,
+    "complexity_gap_count": 0,
+    "note": "Full aspect comparison skipped because eval-result.json and full per-case artifacts are absent after eval abort. This report records only the case-specific execution gap evidenced by eval-stream.log, agent_run, trace_step, sql_audit, schema validation, and partial memory artifacts.",
+    "prediction_coverage": {
+      "lines": 276,
+      "cases": 46,
+      "aspects": {
+        "intent": 46,
+        "execution": 46,
+        "evidence": 46,
+        "memory": 46,
+        "outcome": 46,
+        "multi_cause_outcome": 46
+      },
+      "all_six_aspects_predicted": true
+    },
+    "partial_memory_case_total": 13
+  },
+  "gaps": [
+    {
+      "case_id": "C14_net_gmv_gmv_driven",
+      "aspect": "execution",
+      "divergence": "design_flaw",
+      "predicted": {
+        "round8_predictions_present": true,
+        "prediction_hash": "sha256:4985addf9189b6159ae04ea5242dc86d45b4b0221ccb5fc3871b65243ee44df4",
+        "status": "succeeded",
+        "compiled_scope_mode": "explicit_multi_driver",
+        "compiled_action_count": 13,
+        "compiled_budget": {
+          "max_drilldown_depth": 3,
+          "max_query": 36,
+          "max_steps": 13
+        },
+        "budget_abort_expected": false,
+        "critical_decisions": [
+          "plan_scope_mode=explicit_multi_driver",
+          "action_count=13",
+          "Round 4 FIX-D net_gmv explicit_multi_driver plan includes global conversion lane",
+          "Round 5 FIX-T lets the conversion lane persist E_select_ch_conversion before E3_ch_conversion",
+          "Round 7 FIX-T preserves E3_ch_campaign/E3_ch_conversion as fixed lane aliases in explicit multi-driver net_gmv"
+        ]
+      },
+      "actual": {
+        "eval_status": "eval_aborted",
+        "exit_status": "2",
+        "top_level_error_code": "ACTION_SCHEMA_INVALID",
+        "top_level_message": "ACTION_SCHEMA_INVALID: eval-result-mem-C14_net_gmv_gmv_driven",
+        "full_eval_result_json_present": false,
+        "partial_memory_cases_completed_before_failure": 13,
+        "agent_run": {
+          "run_id": "eval-result-mem-C14_net_gmv_gmv_driven",
+          "status": "failed",
+          "metric_id": "net_gmv",
+          "error_code": "ACTION_SCHEMA_INVALID",
+          "question": "Why did net GMV fall in paid ads yesterday?",
+          "target_date": "2026-06-05"
+        },
+        "failed_trace_step": {
+          "seq": 10,
+          "node": "runtime_plan_executor",
+          "action": "select_signal_element",
+          "action_id": "A9",
+          "error_code": "ACTION_SCHEMA_INVALID",
+          "args": {
+            "metric_id": "net_gmv",
+            "target_date": "2026-06-05",
+            "signal_type": "conversion",
+            "dimension": "channel",
+            "filters": {},
+            "element_selection": "signal_anomaly",
+            "evidence_alias": "E_select_ch_conversion",
+            "explicit_scope_policy": "global_explanatory"
+          },
+          "requires": [
+            "E1",
+            "E2_channel"
+          ],
+          "produces": [
+            "E_select_ch_conversion"
+          ],
+          "budget_at_failure": {
+            "step_count": 9,
+            "query_count": 24,
+            "drilldown_depth": 2
+          },
+          "sql_audit_delta": 0,
+          "declared_sql_count": 0
+        },
+        "schema_validation_reproduction": {
+          "schema": "SelectSignalElementArgs(StrictModel extra=forbid)",
+          "invalid_field": "explicit_scope_policy",
+          "validation_error": "Extra inputs are not permitted"
+        },
+        "sql_audit": {
+          "rows_for_run_before_failure": 24,
+          "guard_not_passed": 0,
+          "failed_action_sql_delta": 0
+        },
+        "persisted_evidence_before_failure": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E3_ch_campaign",
+          "E4_channel",
+          "E_select_category",
+          "E3_cat",
+          "E4_category"
+        ]
+      },
+      "detail": "Round 8 advanced past the Round 7 C06 alias overflow and completed 13 memory-prelude cases before C14. C14 failed at runtime trace seq=10 before SQL execution for select_signal_element. The compiled explicit_multi_driver net_gmv plan adds explicit_scope_policy=global_explanatory to allow a conversion lane on the explicitly scoped channel dimension; ActionGate needs that metadata, but ToolExecutor forwards the same key into SelectSignalElementArgs, whose StrictModel forbids extra fields. The result is ACTION_SCHEMA_INVALID with sql_audit_delta=0. This is a pipeline/tool-boundary contract bug, not discovery, ranking, SQL guard, evidence persistence, or budget."
+    }
+  ],
+  "partial_memory_cases": [
+    {
+      "case_id": "C06_gmv_multi_channel_drop",
+      "status": "succeeded",
+      "final_run_id": "eval-result-mem-C06_gmv_multi-40a4e2e5"
+    },
+    {
+      "case_id": "C07_gmv_category_channel_cross",
+      "status": "succeeded",
+      "final_run_id": "eval-result-mem-C07_gmv_categ-1836fb7f"
+    },
+    {
+      "case_id": "C08_gmv_aov_drop",
+      "status": "succeeded",
+      "final_run_id": "eval-result-mem-C08_gmv_aov_drop"
+    },
+    {
+      "case_id": "C09_gmv_uv_organic_drop",
+      "status": "succeeded",
+      "final_run_id": "eval-result-mem-C09_gmv_uv_or-3c96511a"
+    },
+    {
+      "case_id": "C10_gmv_price_change",
+      "status": "succeeded",
+      "final_run_id": "eval-result-mem-C10_gmv_price_change"
+    },
+    {
+      "case_id": "C11_gmv_promo_end_falloff",
+      "status": "succeeded",
+      "final_run_id": "eval-result-mem-C11_gmv_promo-9def41e7"
+    },
+    {
+      "case_id": "C12_gmv_single_sku_stockout",
+      "status": "succeeded",
+      "final_run_id": "eval-result-mem-C12_gmv_singl-6f511641"
+    },
+    {
+      "case_id": "C13_net_gmv_refund_spike",
+      "status": "succeeded",
+      "final_run_id": "eval-result-mem-C13_net_gmv_r-68a8ebfd"
+    },
+    {
+      "case_id": "cvr_mobile_drop",
+      "status": "succeeded",
+      "final_run_id": "eval-result-mem-cvr_mobile_drop"
+    },
+    {
+      "case_id": "gmv_no_anomaly",
+      "status": "no_anomaly",
+      "final_run_id": "eval-result-mem-gmv_no_anomaly"
+    },
+    {
+      "case_id": "gmv_paid_ads_drop",
+      "status": "succeeded",
+      "final_run_id": "eval-result-mem-gmv_paid_ads_drop"
+    },
+    {
+      "case_id": "gmv_stockout_electronics",
+      "status": "succeeded",
+      "final_run_id": "eval-result-mem-gmv_stockout_-49bcd524"
+    },
+    {
+      "case_id": "refund_rate_product_quality",
+      "status": "succeeded",
+      "final_run_id": "eval-result-mem-refund_rate_p-367800ea"
+    }
+  ]
+}

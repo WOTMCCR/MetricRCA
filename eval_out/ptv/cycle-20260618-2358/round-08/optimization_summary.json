@@ -1,0 +1,128 @@
+{
+  "ptv_round": 8,
+  "cycle_id": "20260618-2358",
+  "created_at": "2026-06-19T15:39:41.114489+00:00",
+  "layer": "Layer 1 optimization summary",
+  "inputs": {
+    "gap_report": "eval_out/ptv/cycle-20260618-2358/round-08/gap_report.json",
+    "diagnosis": "eval_out/ptv/cycle-20260618-2358/round-08/diagnosis.jsonl",
+    "trajectory": "eval_out/ptv/cycle-20260618-2358/round-08/ptv_trajectory.jsonl",
+    "eval_result": "eval_out/ptv/cycle-20260618-2358/round-08/eval-result.json"
+  },
+  "metrics_before": {
+    "status": "eval_aborted",
+    "exit_status": "2",
+    "full_case_total": 0,
+    "partial_memory_case_total": 13,
+    "error_code": "ACTION_SCHEMA_INVALID",
+    "active_blocker": "explicit_scope_policy leaked from ActionGate metadata into SelectSignalElementArgs StrictModel",
+    "failed_run_id": "eval-result-mem-C14_net_gmv_gmv_driven",
+    "failed_trace_seq": 10,
+    "failed_action": "select_signal_element",
+    "budget_at_failure": {
+      "step_count": 9,
+      "query_count": 24,
+      "drilldown_depth": 2
+    },
+    "sql_audit": {
+      "rows_for_run_before_failure": 24,
+      "guard_not_passed": 0,
+      "failed_action_sql_delta": 0
+    }
+  },
+  "rule_c1_blocked_categories": [],
+  "rule_c1_reason": "Round 7 FIX-T explicit E3 alias fix did not create a measured aggregate regression; it advanced Round 8 through C06-C13 before a distinct C14 tool-boundary schema failure. No category is blocked by C1.",
+  "rule_c2_deferred_categories": {},
+  "rule_c2_forced_category": null,
+  "rule_c2_reason": "Full eval still aborts before scoring; the only current actionable diagnosis is the pipeline/tool-boundary schema blocker.",
+  "rule_c3_discovery_priority_applied": false,
+  "rule_c3_reason": "No active FIX-D diagnosis is present. Plan compiler generated the C14 conversion lane correctly; failure occurred when runtime tool schema validation received gate-only metadata.",
+  "rule_c4_revert_assessment": {
+    "triggered": false,
+    "aggregate_regressions": [],
+    "decision": "keep",
+    "justification": "No full aggregate metrics are available. Partial artifacts show C06-C13 succeeded, validating prior budget and alias fixes rather than requiring revert."
+  },
+  "rule_c5_category_streak": {
+    "FIX-T": 1
+  },
+  "rule_c5_allowed": true,
+  "stall_analysis_used": true,
+  "stall_analysis_from_analyst": {
+    "category_history": [
+      "FIX-D",
+      "FIX-T",
+      "FIX-D",
+      "FIX-D",
+      "FIX-T",
+      "FIX-D",
+      "FIX-T"
+    ],
+    "current_streak": {
+      "FIX-T": 1
+    },
+    "projected_streak_if_recommended_applied": {
+      "FIX-T": 2
+    },
+    "deferred_streak": {},
+    "blocked_by_rule_c1": [],
+    "rule_c1_triggered": false,
+    "rule_c2_triggered": false,
+    "rule_c5_triggered": false,
+    "same_case_same_category_stall": false,
+    "recommended_next_category": "FIX-T",
+    "recommendation_reason": "The active failure is a strict tool-schema boundary error after ActionGate succeeds. The previous FIX-T fixed the E3 alias overflow and Round 8 progressed through C06-C13; this is a distinct tool-boundary bug. FIX-D/FIX-A would not affect a pydantic schema rejection before tool execution.",
+    "invalid_rationale": [
+      "stabilize ranking first before fixing ACTION_SCHEMA_INVALID",
+      "treat C14 failure as budget because C06 previously had a budget issue",
+      "add more discovery lanes in plan_compiler while the existing lane is rejected at tool schema validation",
+      "add explicit_scope_policy only to SelectSignalElementArgs and ignore the same key on fetch_related_signal/calculate_contribution",
+      "skip diagnosis because eval-result.json is absent"
+    ]
+  },
+  "anti_stall_decision": "Select FIX-T again because this is a distinct tool-boundary contract issue and category streak is below RULE-C5 cap. Do not move to ranking.py or plan_compiler.",
+  "round_limit_escalation_assessment": {
+    "round_number": 8,
+    "max_rounds": 6,
+    "remaining_failure_count": 1,
+    "structural_diagnosis": false,
+    "all_remaining_failures_structural": false,
+    "escalate": false,
+    "decision": "CONTINUE",
+    "reason": "The round limit escalation applies when remaining failures are STRUCTURAL. Round 8 has a bounded non-structural tool-boundary contract bug with concrete target files and a direct trace reproduction."
+  },
+  "controller_decision": {
+    "decision": "fix",
+    "selected_fix_category": "FIX-T",
+    "target_layer": "pipeline/tool_boundary",
+    "fix_subtype": "gate_only_metadata_leak",
+    "target_files": [
+      "metric_rca/runtime/sdk_tools.py",
+      "tests/test_runtime_tool_executor.py"
+    ],
+    "do_not_modify": [
+      "metric_rca/runtime/ranking.py",
+      "metric_rca/runtime/plan_compiler.py",
+      "metric_rca/agent/tools/schemas.py"
+    ],
+    "justification": "ActionGate consumes explicit_scope_policy before ToolExecutor validates tool args. The runtime boundary should strip gate-only metadata rather than expanding deterministic tool schemas."
+  },
+  "selected_fix_category": "FIX-T",
+  "target_layer": "pipeline/tool_boundary",
+  "target_files": [
+    "metric_rca/runtime/sdk_tools.py",
+    "tests/test_runtime_tool_executor.py"
+  ],
+  "do_not_modify": [
+    "metric_rca/runtime/ranking.py",
+    "metric_rca/runtime/plan_compiler.py",
+    "metric_rca/agent/tools/schemas.py"
+  ],
+  "case_targets": [
+    "C14_net_gmv_gmv_driven execution abort",
+    "explicit_multi_driver conversion lane"
+  ],
+  "expected_change": "ToolExecutor strips explicit_scope_policy after ActionGate validation and before StrictModel tool schema validation for select/fetch/calculate actions.",
+  "fix_commit": null,
+  "fix_status": "pending_commit"
+}

@@ -32,6 +32,7 @@ EVIDENCE_INPUT_ACTIONS = frozenset(
     {"drilldown_dimension", "select_signal_element", "fetch_related_signal", "calculate_contribution"}
 )
 INTERNAL_ACTION_ARG_NAMES = frozenset({"element_selection"})
+GATE_ONLY_ACTION_ARG_NAMES = frozenset({"explicit_scope_policy"})
 
 
 class RankRootCausesArgs(StrictModel):
@@ -177,6 +178,8 @@ def _resolve_action_args(
     if action.kind != "select_signal_element":
         for name in INTERNAL_ACTION_ARG_NAMES:
             args.pop(name, None)
+    for name in GATE_ONLY_ACTION_ARG_NAMES:
+        args.pop(name, None)
     return args, None
 
 
