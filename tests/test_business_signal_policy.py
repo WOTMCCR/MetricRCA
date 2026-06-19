@@ -251,7 +251,24 @@ def test_interaction_discovery_policy_enables_cross_dimension_analysis(metric_id
     assert policy.element_selection == "signal_anomaly"
 
 
-def test_pay_cvr_discovery_policy_uses_channel_and_device_conversion_lanes() -> None:
+def test_uv_interaction_discovery_policy_keeps_campaign_lane_for_non_interaction_evidence() -> None:
+    parsed = ParsedIntent(
+        metric_id="uv",
+        target_date="2026-06-01",
+        question_family="interaction_uv_anomaly",
+        analysis_strategy="standard",
+    )
+
+    policy = discovery_policy_from_intent(parsed)
+
+    assert [(lane.dimension, lane.signal_type, lane.evidence_alias) for lane in policy.lanes] == [
+        ("channel", "interaction", "E4_channel"),
+        ("channel", "campaign", "E4_channel_campaign"),
+        ("category", "interaction", "E4_category"),
+    ]
+
+
+def test_pay_cvr_discovery_policy_uses_channel_conversion_lane_without_device_merge() -> None:
     parsed = ParsedIntent(
         metric_id="pay_cvr",
         target_date="2026-05-28",
@@ -261,7 +278,7 @@ def test_pay_cvr_discovery_policy_uses_channel_and_device_conversion_lanes() -> 
 
     policy = discovery_policy_from_intent(parsed)
 
-    assert policy.required_drilldowns == ("channel", "device")
+    assert policy.required_drilldowns == ("channel",)
     assert policy.first_signal_dimension == "channel"
     assert policy.first_signal_type == "conversion"
 

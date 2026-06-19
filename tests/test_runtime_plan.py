@@ -101,7 +101,7 @@ def test_plan_compiler_builds_refund_discovery_even_with_nonstandard_strategy() 
     assert signal_action.dynamic is True
 
 
-def test_plan_compiler_builds_pay_cvr_channel_first_multi_signal_discovery() -> None:
+def test_plan_compiler_builds_pay_cvr_channel_discovery_without_device_merge() -> None:
     parsed = ParsedIntent(
         metric_id="pay_cvr",
         target_date=date(2026, 5, 28),
@@ -114,13 +114,13 @@ def test_plan_compiler_builds_pay_cvr_channel_first_multi_signal_discovery() -> 
     drilldowns = [action.args.get("dimension") for action in plan.actions if action.kind == "drilldown_dimension"]
     signal_actions = [action for action in plan.actions if action.kind == "fetch_related_signal"]
     contribution_actions = [action for action in plan.actions if action.kind == "calculate_contribution"]
-    merge_action = next(action for action in plan.actions if action.kind == "merge_contribution_sets")
 
-    assert drilldowns == ["channel", "device"]
-    assert [action.args["dimension"] for action in signal_actions] == ["channel", "device"]
+    assert drilldowns == ["channel"]
+    assert [action.args["dimension"] for action in signal_actions] == ["channel"]
     assert all(action.args["signal_type"] == "conversion" for action in signal_actions)
-    assert [action.args["dimension"] for action in contribution_actions] == ["channel", "device"]
-    assert merge_action.args["source_evidence_aliases"] == ["E4_channel", "E4_device"]
+    assert [action.args["dimension"] for action in contribution_actions] == ["channel"]
+    assert "merge_contribution_sets" not in [action.kind for action in plan.actions]
+    assert contribution_actions[0].produces == ["E4"]
 
 
 def test_plan_compiler_builds_broad_gmv_product_first_with_all_required_drilldowns() -> None:
@@ -276,7 +276,6 @@ def test_plan_compiler_builds_broad_gmv_anomaly_discovery_policy(
     ("metric_id", "question_family"),
     [
         ("gmv", "interaction_gmv_anomaly"),
-        ("uv", "interaction_uv_anomaly"),
     ],
 )
 def test_plan_compiler_builds_cross_dimension_interaction_chains(metric_id: str, question_family: str) -> None:
@@ -300,6 +299,43 @@ def test_plan_compiler_builds_cross_dimension_interaction_chains(metric_id: str,
     assert [action.args["dimension"] for action in signal_actions] == ["channel", "category"]
     assert all(action.args["signal_type"] == "interaction" for action in signal_actions)
     assert merge_action.args["source_evidence_aliases"] == ["E4_channel", "E4_category"]
+
+
+def test_plan_compiler_keeps_campaign_lane_for_uv_interaction_discovery() -> None:
+    parsed = ParsedIntent(
+        metric_id="uv",
+        target_date=date(2026, 6, 1),
+        question_family="interaction_uv_anomaly",
+        analysis_strategy="standard",
+    )
+
+    plan = _compiler(family="rate_family").compile(run_id="run-1", parsed_intent=parsed)
+
+    selections = [action for action in plan.actions if action.kind == "select_signal_element"]
+    signal_actions = [action for action in plan.actions if action.kind == "fetch_related_signal"]
+    contribution_actions = [action for action in plan.actions if action.kind == "calculate_contribution"]
+    merge_action = next(action for action in plan.actions if action.kind == "merge_contribution_sets")
+
+    assert [(action.args["dimension"], action.args["signal_type"], action.produces[0]) for action in selections] == [
+        ("channel", "interaction", "E_select_channel"),
+        ("channel", "campaign", "E_select_ch_campaign"),
+        ("category", "interaction", "E_select_category"),
+    ]
+    assert [(action.args["dimension"], action.args["signal_type"], action.produces[0]) for action in signal_actions] == [
+        ("channel", "interaction", "E3_ch"),
+        ("channel", "campaign", "E3_ch_campaign"),
+        ("category", "interaction", "E3_cat"),
+    ]
+    assert [(action.args["dimension"], action.args["evidence_alias"]) for action in contribution_actions] == [
+        ("channel", "E4_channel"),
+        ("channel", "E4_channel_campaign"),
+        ("category", "E4_category"),
+    ]
+    assert merge_action.args["source_evidence_aliases"] == [
+        "E4_channel",
+        "E4_channel_campaign",
+        "E4_category",
+    ]
 
 
 def test_plan_compiler_builds_scoped_channel_category_interaction_chains() -> None:

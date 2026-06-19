@@ -465,6 +465,28 @@ GMV_SIGNAL_FIRST_DISCOVERY_LANES: tuple[DiscoveryLane, ...] = (
     *GMV_STANDARD_DISCOVERY_LANES[1:],
 )
 
+UV_INTERACTION_DISCOVERY_LANES: tuple[DiscoveryLane, ...] = (
+    DiscoveryLane(
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="interaction",
+        element_selection="signal_anomaly",
+        evidence_alias="E4_channel",
+    ),
+    DiscoveryLane(
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="campaign",
+        evidence_alias="E4_channel_campaign",
+        selection_alias="E_select_ch_campaign",
+        signal_evidence_alias="E3_ch_campaign",
+        signal_filter_mode="none",
+    ),
+    DiscoveryLane(
+        dimension=DimensionId.CATEGORY.value,
+        signal_type="interaction",
+        evidence_alias="E4_category",
+    ),
+)
+
 DEFAULT_DISCOVERY_POLICY_RULES: tuple[DiscoveryPolicyRule, ...] = (
     DiscoveryPolicyRule(
         metric_id=MetricId.UV.value,
@@ -479,7 +501,7 @@ DEFAULT_DISCOVERY_POLICY_RULES: tuple[DiscoveryPolicyRule, ...] = (
         metric_id=MetricId.PAY_CVR.value,
         question_family=None,
         analysis_strategy=None,
-        required_drilldowns=(DimensionId.CHANNEL.value, DimensionId.DEVICE.value),
+        required_drilldowns=(DimensionId.CHANNEL.value,),
         first_signal_dimension=DimensionId.CHANNEL.value,
         first_signal_type="conversion",
         enforce_first_signal_top_candidate=True,
@@ -657,6 +679,7 @@ DEFAULT_DISCOVERY_POLICY_RULES: tuple[DiscoveryPolicyRule, ...] = (
         first_signal_dimension=DimensionId.CHANNEL.value,
         first_signal_type="interaction",
         element_selection="signal_anomaly",
+        lanes=UV_INTERACTION_DISCOVERY_LANES,
     ),
 )
 
