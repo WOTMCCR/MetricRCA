@@ -1023,6 +1023,51 @@ def test_llm_intent_planner_accepts_signal_first_strategy() -> None:
     assert parsed.filters == {}
 
 
+def test_llm_intent_planner_retries_metric_not_found_for_explicit_supported_metric_surface() -> None:
+    runtime = _FakeAgentRuntime(
+        [
+            {
+                "error_code": "METRIC_NOT_FOUND",
+                "metric_id": None,
+                "target_date": None,
+                "question_family": None,
+                "analysis_strategy": "standard",
+                "dimension": None,
+                "element": None,
+                "filters": [],
+            },
+            {
+                "error_code": None,
+                "metric_id": "gmv",
+                "target_date": "2026-06-01",
+                "question_family": "gmv_drop",
+                "analysis_strategy": "standard",
+                "dimension": "channel",
+                "element": "social",
+                "filters": [{"dimension": "channel", "value": "social"}],
+            },
+        ]
+    )
+
+    planner = LLMIntentPlanner(provider="openai", model="gpt-5-nano", api_key="test-key", agent_runtime=runtime)
+    parsed = planner.parse(
+        "Why did social GMV fall on June 1 after the weekend campaign change?",
+        business_today=date(2026, 6, 2),
+        run_target_date=date(2026, 6, 1),
+        supported_metrics=["gmv", "uv"],
+        supported_dimensions=["channel"],
+        supported_dimension_values={"channel": ["paid_ads", "social"]},
+        supported_families=["gmv_drop", "uv_drop"],
+    )
+
+    assert len(runtime.calls) == 2
+    assert "METRIC_NOT_FOUND" in str(runtime.calls[-1]["user_input"])
+    assert parsed.metric_id == "gmv"
+    assert parsed.target_date == date(2026, 6, 1)
+    assert parsed.dimension == "channel"
+    assert parsed.element == "social"
+
+
 def test_llm_intent_planner_does_not_retry_typed_semantic_error() -> None:
     runtime = _FakeAgentRuntime(
         [

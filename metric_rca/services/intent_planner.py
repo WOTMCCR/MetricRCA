@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+import re
 from typing import Literal, Protocol
 
 from pydantic import Field, ValidationError
@@ -303,6 +304,17 @@ class LLMIntentPlanner:
                 if attempt < LLM_INTENT_PARSE_MAX_ATTEMPTS:
                     continue
                 raise last_parse_error
+            if parsed_payload.error_code == "METRIC_NOT_FOUND" and _mentions_supported_metric_surface(
+                question,
+                supported_metrics=supported_metrics,
+            ):
+                last_parse_error = MetricServiceError(
+                    "METRIC_NOT_FOUND",
+                    "intent parsing failed: METRIC_NOT_FOUND",
+                )
+                if attempt < LLM_INTENT_PARSE_MAX_ATTEMPTS:
+                    continue
+                raise last_parse_error
             if parsed_payload.error_code is not None:
                 raise MetricServiceError(parsed_payload.error_code, f"intent parsing failed: {parsed_payload.error_code}")
             try:
@@ -346,13 +358,39 @@ def _human_prompt(question: str, *, attempt: int) -> str:
         return question
     return (
         f"{question}\n\n"
-        "Previous parser attempt returned DATE_RANGE_INVALID, PARSE_FAILED, or an invalid schema for this same question. "
+        "Previous parser attempt returned DATE_RANGE_INVALID, METRIC_NOT_FOUND, PARSE_FAILED, "
+        "or an invalid schema for this same question. "
         "Re-evaluate against the supported metrics, dimensions, values, and examples. "
+        "If the question text contains a supported metric surface from the system prompt, "
+        "return that supported metric_id rather than a metric-not-found error. "
         "When RUN TARGET DATE is present and this is a relative-date or generic anomaly question, "
         "return a single-date intent using RUN TARGET DATE. "
         "Do not do this for true multi-day ranges or explicit current/future dates. "
         "If it is supported, return a valid structured intent; if it is truly unsupported, return the typed error."
     )
+
+
+def _mentions_supported_metric_surface(question: str, *, supported_metrics: list[str]) -> bool:
+    normalized_question = " ".join(question.casefold().split())
+    for metric_id in supported_metrics:
+        for surface in _metric_surfaces(metric_id):
+            pattern = _surface_pattern(surface)
+            if re.search(pattern, normalized_question):
+                return True
+    return False
+
+
+def _metric_surfaces(metric_id: str) -> tuple[str, ...]:
+    normalized_id = " ".join(str(metric_id).casefold().split())
+    spaced_id = " ".join(normalized_id.replace("_", " ").split())
+    if spaced_id == normalized_id:
+        return (normalized_id,)
+    return (normalized_id, spaced_id)
+
+
+def _surface_pattern(surface: str) -> str:
+    pieces = [re.escape(piece) for piece in surface.split()]
+    return r"(?<![a-z0-9_])" + r"\s+".join(pieces) + r"(?![a-z0-9_])"
 
 
 def build_system_prompt(
