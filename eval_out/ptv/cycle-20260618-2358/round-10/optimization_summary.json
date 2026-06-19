@@ -1,0 +1,86 @@
+{
+  "cycle_id": "cycle-20260618-2358",
+  "round": 10,
+  "controller_timestamp": "2026-06-19T16:45:00Z",
+  "controller_inputs": {
+    "gap_report": "eval_out/ptv/cycle-20260618-2358/round-10/gap_report.json",
+    "diagnosis": "eval_out/ptv/cycle-20260618-2358/round-10/diagnosis.jsonl",
+    "trajectory": "eval_out/ptv/cycle-20260618-2358/round-10/ptv_trajectory.jsonl"
+  },
+  "base_commit": "889a19e1abeb977897152553c06d21f3760dca9e",
+  "selected_fix_category": "FIX-M",
+  "selected_target_layer": "runtime/contribution_set_builder + merge_contribution_sets",
+  "selected_target_files": [
+    "metric_rca/runtime/contribution_set_builder.py",
+    "metric_rca/agent/tools/merge_contribution_sets.py",
+    "tests/test_contribution_set_builder.py",
+    "tests/test_merge_contribution_sets_tool.py"
+  ],
+  "do_not_modify": [
+    "metric_rca/runtime/ranking.py",
+    "metric_rca/evals/scorer.py",
+    "metric_rca/evals/regression_public_cases.jsonl",
+    "metric_rca/evals/regression_private_ground_truth.jsonl",
+    "metric_rca/seeds/seed_data.py"
+  ],
+  "primary_failure_cluster": {
+    "cluster_id": "multi_cause_top3_merge_composition",
+    "cases": [
+      "MC01_gmv_multi_cause_overall",
+      "MC04_gmv_weak_set",
+      "MC08_gmv_channel_category_mix",
+      "RS01_gmv_residual_dual_mechanism",
+      "RS02_gmv_residual_discovery"
+    ],
+    "metric_blockers": [
+      "top3_rate=0.847826 < 0.90",
+      "top3_contains_all_major_causes_rate=0.847826 < 0.90",
+      "root_cause_set_precision_avg=0.653269 < 0.85",
+      "per_family_gate.multi_cause.top3_rate=0.444444 < 0.85"
+    ],
+    "evidence": "Round 10 diagnosis shows these cases have discovered expected causes with full recall/weighted coverage, but canonical E4 keeps broad source tails and duplicate interaction candidates in the ranked top slots."
+  },
+  "rule_c1_blocked_categories": [],
+  "rule_c1_reason": "Round 9 aborted before complete aggregate metrics, so no fix category is blocked by a measured Round 9 regression.",
+  "rule_c2_deferred_categories": {
+    "FIX-D": 1,
+    "FIX-A": 0,
+    "FIX-M": 0,
+    "FIX-T": 0,
+    "FIX-I": 0
+  },
+  "rule_c2_decision": "FIX-D is recorded as deferred for MC02, MC07, and C23, but this is the first deferred round and does not override the larger FIX-M threshold blocker.",
+  "rule_c3_discovery_priority_applied": false,
+  "rule_c3_reason": "The selected category is not FIX-A/ranking. FIX-D remains active but lower priority for this round because the primary failing cases already have recall=1.0 and weighted coverage=1.0.",
+  "rule_c4_revert_assessment": {
+    "triggered": true,
+    "comparison_baseline": "round-04",
+    "regressed_metrics": [
+      "top3_rate",
+      "root_cause_set_precision_avg",
+      "top3_contains_all_major_causes_rate",
+      "memory_hit_improvement"
+    ],
+    "decision": "keep",
+    "justification": "The regression spans several later rounds, while Round 10 also improved top1, recall, and weighted coverage and unblocked the full 46-case run. Reverting would discard non-structural fixes; the narrower response is to prune canonical E4 merge composition before considering rollback."
+  },
+  "rule_c5_category_streak": {
+    "FIX-I": 1,
+    "projected_FIX-M": 1
+  },
+  "rule_c5_allowed": true,
+  "anti_stall_decision": "Switch to FIX-M and avoid ranking.py. The repeated 'stabilize ranking first' rationale is invalid here because Analyst identified a merge-layer candidate-set problem, not a scoring or ranking defect.",
+  "round_limit_structural_assessment": {
+    "over_default_limit": true,
+    "structural": false,
+    "decision": "continue",
+    "reason": "Remaining failures are diagnosable as non-structural FIX-M/FIX-D issues; escalation after six rounds only applies to STRUCTURAL diagnosis."
+  },
+  "planned_fix": {
+    "category": "FIX-M",
+    "description": "Make canonical E4 merge composition representative: keep the preferred selected candidate, source-selected representatives, material campaign channel runners, selected conversion/device representatives, and strong cross-dimension interaction representatives; prune non-representative long tails and single-dimension interaction duplicates.",
+    "expected_impact": "Raise multi_cause top3/top3_contains rates and root_cause_set_precision without changing ranking.py or scorer behavior. Round 10 trace what-if predicts C21, RS01, and RS02 top3 improvement while preserving IX02 top3."
+  },
+  "fix_status": "planned",
+  "fix_commit": null
+}

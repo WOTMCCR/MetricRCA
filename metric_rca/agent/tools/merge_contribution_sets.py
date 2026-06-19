@@ -8,7 +8,7 @@ from typing import Any
 from metric_rca.agent.tools.runtime import ToolRuntimeError, evidence_row, persist_evidence, runtime_error, tool_error
 from metric_rca.agent.tools.schemas import MergeContributionSetsArgs, ToolResult
 from metric_rca.domain.models import ContributionSet, Evidence, Observation, QuerySpec, RootCauseCandidate
-from metric_rca.runtime.contribution_set_builder import ContributionSetBuilder
+from metric_rca.runtime.contribution_set_builder import COMPOSITION_STRATEGY, ContributionSetBuilder
 
 
 def merge_contribution_sets(args: MergeContributionSetsArgs, *, repository: Any) -> ToolResult:
@@ -65,6 +65,7 @@ def merge_contribution_sets(args: MergeContributionSetsArgs, *, repository: Any)
         "selected_candidate": contribution_set.selected_candidate.model_dump(mode="json"),
         "candidates": [candidate.model_dump(mode="json") for candidate in contribution_set.candidates],
         "merge_strategy": "cross_chain_contribution_set_builder",
+        "candidate_composition_strategy": COMPOSITION_STRATEGY,
     }
     decomposition = selected_source_summary.get("decomposition")
     if isinstance(decomposition, dict):

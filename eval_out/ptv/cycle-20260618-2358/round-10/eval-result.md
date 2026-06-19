@@ -1,0 +1,88 @@
+# MetricRCA Eval eval-result
+
+## Summary
+- case_total: 46
+- intent_accuracy: 1.0
+- top1_rate: 0.869565
+- top3_rate: 0.847826
+- dominant_top1_rate: 0.869565
+- root_cause_set_recall_avg: 0.985507
+- root_cause_set_precision_avg: 0.653269
+- weighted_explanation_coverage_avg: 0.990217
+- top3_contains_all_major_causes_rate: 0.847826
+- anomaly_accuracy: 1.0
+- evidence_coverage_avg: 1.0
+- sql_safe_rate: 1.0
+- report_traceable_rate: 1.0
+- reflection_repair_ok: True
+- memory_pollution_ok: True
+- dangerous_sql_blocked: True
+- no_anomaly_correct: True
+- avg_tokens_per_case: 0.0
+- avg_latency_ms_per_case: 0.0
+- p95_latency_ms: 0.0
+- p95_sql_count: 68.0
+- multi_agent_path_distribution: {'single_agent': 46}
+- memory_enabled_top1_rate: 0.891304
+- memory_disabled_top1_rate: 0.869565
+- memory_hit_improvement: 0.021739
+- eval_suite: regression
+- per_family: {'adtributor': {'case_total': 2, 'top3_rate': 1.0, 'anomaly_rate': 1.0, 'evidence_coverage_rate': 1.0, 'memory_pollution_ok': True, 'p95_latency_ms': 0.0, 'p95_sql_count': 68.0}, 'ambiguous': {'case_total': 1, 'top3_rate': 1.0, 'anomaly_rate': 1.0, 'evidence_coverage_rate': 1.0, 'memory_pollution_ok': True, 'p95_latency_ms': 0.0, 'p95_sql_count': 68.0}, 'campaign': {'case_total': 1, 'top3_rate': 1.0, 'anomaly_rate': 1.0, 'evidence_coverage_rate': 1.0, 'memory_pollution_ok': True, 'p95_latency_ms': 0.0, 'p95_sql_count': 12.0}, 'composite': {'case_total': 1, 'top3_rate': 1.0, 'anomaly_rate': 1.0, 'evidence_coverage_rate': 1.0, 'memory_pollution_ok': True, 'p95_latency_ms': 0.0, 'p95_sql_count': 68.0}, 'conversion': {'case_total': 1, 'top3_rate': 1.0, 'anomaly_rate': 1.0, 'evidence_coverage_rate': 1.0, 'memory_pollution_ok': True, 'p95_latency_ms': 0.0, 'p95_sql_count': 8.0}, 'inventory': {'case_total': 1, 'top3_rate': 1.0, 'anomaly_rate': 1.0, 'evidence_coverage_rate': 1.0, 'memory_pollution_ok': True, 'p95_latency_ms': 0.0, 'p95_sql_count': 12.0}, 'multi_cause': {'case_total': 9, 'top3_rate': 0.444444, 'anomaly_rate': 1.0, 'evidence_coverage_rate': 1.0, 'memory_pollution_ok': True, 'p95_latency_ms': 0.0, 'p95_sql_count': 68.0}, 'multi_day': {'case_total': 1, 'top3_rate': 1.0, 'anomaly_rate': 1.0, 'evidence_coverage_rate': 1.0, 'memory_pollution_ok': True, 'p95_latency_ms': 0.0, 'p95_sql_count': 68.0}, 'net_gmv': {'case_total': 2, 'top3_rate': 1.0, 'anomaly_rate': 1.0, 'evidence_coverage_rate': 1.0, 'memory_pollution_ok': True, 'p95_latency_ms': 0.0, 'p95_sql_count': 34.0}, 'no_anomaly': {'case_total': 5, 'top3_rate': 1.0, 'anomaly_rate': 1.0, 'evidence_coverage_rate': 1.0, 'memory_pollution_ok': True, 'p95_latency_ms': 0.0, 'p95_sql_count': 2.0}, 'phase_c': {'case_total': 8, 'top3_rate': 0.875, 'anomaly_rate': 1.0, 'evidence_coverage_rate': 1.0, 'memory_pollution_ok': True, 'p95_latency_ms': 0.0, 'p95_sql_count': 68.0}, 'positive_anomaly': {'case_total': 1, 'top3_rate': 1.0, 'anomaly_rate': 1.0, 'evidence_coverage_rate': 1.0, 'memory_pollution_ok': True, 'p95_latency_ms': 0.0, 'p95_sql_count': 68.0}, 'quality': {'case_total': 1, 'top3_rate': 1.0, 'anomaly_rate': 1.0, 'evidence_coverage_rate': 1.0, 'memory_pollution_ok': True, 'p95_latency_ms': 0.0, 'p95_sql_count': 8.0}, 'regression': {'case_total': 12, 'top3_rate': 0.916667, 'anomaly_rate': 1.0, 'evidence_coverage_rate': 1.0, 'memory_pollution_ok': True, 'p95_latency_ms': 0.0, 'p95_sql_count': 38.0}}
+- per_family_gate: False
+- memory_treatment_gate: False
+- llm_provider: openai
+- llm_model: gpt-5-nano
+- configured_case_total: 46
+- completed_case_total: 46
+- completed_memory_case_total: 46
+- complete: True
+- thresholds_met: False
+- grpo_dataset: {'trajectories_path': 'eval_out/ptv/cycle-20260618-2358/round-10/eval-result/grpo_dataset/trajectories.jsonl', 'manifest_path': 'eval_out/ptv/cycle-20260618-2358/round-10/eval-result/grpo_dataset/manifest.json'}
+
+## Cases
+- gmv_paid_ads_drop: top1=1 anomaly=1 coverage=1.0
+- gmv_stockout_electronics: top1=1 anomaly=1 coverage=1.0
+- cvr_mobile_drop: top1=1 anomaly=1 coverage=1.0
+- refund_rate_product_quality: top1=1 anomaly=1 coverage=1.0
+- gmv_no_anomaly: top1=1 anomaly=1 coverage=1.0
+- C06_gmv_multi_channel_drop: top1=1 anomaly=1 coverage=1.0
+- C07_gmv_category_channel_cross: top1=1 anomaly=1 coverage=1.0
+- C08_gmv_aov_drop: top1=1 anomaly=1 coverage=1.0
+- C09_gmv_uv_organic_drop: top1=1 anomaly=1 coverage=1.0
+- C10_gmv_price_change: top1=1 anomaly=1 coverage=1.0
+- C11_gmv_promo_end_falloff: top1=1 anomaly=1 coverage=1.0
+- C12_gmv_single_sku_stockout: top1=1 anomaly=1 coverage=1.0
+- C13_net_gmv_refund_spike: top1=1 anomaly=1 coverage=1.0
+- C14_net_gmv_gmv_driven: top1=1 anomaly=1 coverage=1.0
+- C15_refund_rate_logistics: top1=1 anomaly=1 coverage=1.0
+- C16_stockout_rate_warehouse: top1=1 anomaly=1 coverage=1.0
+- C17_complaint_rate_quality: top1=1 anomaly=1 coverage=1.0
+- C18_cvr_channel_landing: top1=1 anomaly=1 coverage=1.0
+- C19_gmv_seasonal_false_positive: top1=1 anomaly=1 coverage=1.0
+- C20_cvr_no_anomaly_noise: top1=1 anomaly=1 coverage=1.0
+- C21_cvr_discovery: top1=0 anomaly=1 coverage=1.0
+- C22_gmv_borderline: top1=1 anomaly=1 coverage=1.0
+- C23_uv_organic_drop: top1=0 anomaly=1 coverage=1.0
+- C24_gmv_positive_spike: top1=1 anomaly=1 coverage=1.0
+- C25_refund_discovery: top1=1 anomaly=1 coverage=1.0
+- C26_ambiguous_intent: top1=1 anomaly=1 coverage=1.0
+- C27_composite_cause: top1=1 anomaly=1 coverage=1.0
+- C28_multi_day_drift: top1=1 anomaly=1 coverage=1.0
+- MC01_gmv_multi_cause_overall: top1=1 anomaly=1 coverage=1.0
+- MC02_uv_multi_channel_drop: top1=1 anomaly=1 coverage=1.0
+- MC03_cvr_multi_signal_drop: top1=1 anomaly=1 coverage=1.0
+- MC04_gmv_weak_set: top1=0 anomaly=1 coverage=1.0
+- MC05_gmv_lag_stockout_mix: top1=1 anomaly=1 coverage=1.0
+- MC06_net_gmv_multi_driver: top1=0 anomaly=1 coverage=1.0
+- MC07_uv_weak_multi_driver: top1=0 anomaly=1 coverage=1.0
+- MC08_gmv_channel_category_mix: top1=1 anomaly=1 coverage=1.0
+- IX01_gmv_channel_category_interaction: top1=1 anomaly=1 coverage=1.0
+- IX02_gmv_interaction_discovery: top1=0 anomaly=1 coverage=1.0
+- IX03_uv_interaction_cell: top1=1 anomaly=1 coverage=1.0
+- IX04_gmv_interaction_no_single_driver: top1=1 anomaly=1 coverage=1.0
+- LG01_gmv_lagged_social: top1=1 anomaly=1 coverage=1.0
+- LG02_uv_lagged_social_discovery: top1=1 anomaly=1 coverage=1.0
+- WK01_gmv_weak_affiliate_boundary: top1=1 anomaly=1 coverage=1.0
+- WK02_gmv_no_anomaly_weak: top1=1 anomaly=1 coverage=1.0
+- RS01_gmv_residual_dual_mechanism: top1=1 anomaly=1 coverage=1.0
+- RS02_gmv_residual_discovery: top1=1 anomaly=1 coverage=1.0

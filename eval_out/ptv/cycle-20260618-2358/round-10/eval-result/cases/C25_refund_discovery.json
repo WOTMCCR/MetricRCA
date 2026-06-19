@@ -1,0 +1,81 @@
+{
+  "case_id": "C25_refund_discovery",
+  "intent_ok": 1,
+  "anomaly_ok": 1,
+  "top1_ok": 1,
+  "top3_ok": 1,
+  "dominant_top1_ok": 1,
+  "root_cause_set_recall": 1.0,
+  "root_cause_set_precision": 0.2,
+  "weighted_explanation_coverage": 1.0,
+  "top3_contains_all_major_causes": 1,
+  "evidence_coverage": 1.0,
+  "sql_safe": 1,
+  "reflection_repair_ok": 1,
+  "report_traceable_ok": 1,
+  "memory_pollution_ok": 1,
+  "no_anomaly_task_ok": 1,
+  "adtributor_used": 0,
+  "multi_agent_path": "single_agent",
+  "detail": {
+    "status": "succeeded",
+    "metric_id": "refund_rate",
+    "expected_metric": "refund_rate",
+    "selected_candidate": {
+      "element": "1",
+      "verdict": "likely",
+      "dimension": "product",
+      "surprise_js": null,
+      "evidence_ids": [
+        "eval-result-C25_refund_discovery:E1",
+        "eval-result-C25_refund_discovery:E2_product",
+        "eval-result-C25_refund_discovery:E_select_product",
+        "eval-result-C25_refund_discovery:E3_prod_1",
+        "eval-result-C25_refund_discovery:E4",
+        "eval-result-C25_refund_discovery:E_rank"
+      ],
+      "eng_confidence": 0.3359582627851865,
+      "root_cause_type": "complaint_or_quality_issue",
+      "signal_severity": 1.0,
+      "contribution_pct": 0.29119218151222476,
+      "evidence_support": 1.0,
+      "explanatory_power": null,
+      "reflection_factor": 1.0,
+      "dimension_elements": []
+    },
+    "expected_root_causes": [
+      {
+        "root_cause_type": "complaint_or_quality_issue",
+        "dimension": "product",
+        "element": "1",
+        "weight": 1.0
+      }
+    ],
+    "token_count": 0,
+    "latency_ms": 0,
+    "sql_count": 10,
+    "trace_step_count": 6,
+    "memory_read_seen": false,
+    "tool_sequence": [
+      "detect_anomaly",
+      "drilldown_dimension",
+      "select_signal_element",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "rank_root_causes"
+    ],
+    "memory_record_count": 1,
+    "memory_layers": [
+      "semantic"
+    ],
+    "eval_attempts": 1,
+    "final_run_id": "eval-result-C25_refund_discovery",
+    "memory_enabled": false,
+    "tags": [
+      "e1",
+      "discovery",
+      "rate_family"
+    ],
+    "scenario_family": "regression"
+  }
+}

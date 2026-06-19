@@ -46,6 +46,49 @@ def test_merge_contribution_sets_persists_canonical_e4_without_sql() -> None:
     assert persisted["sql_text"] == "SELECT 1"
 
 
+def test_merge_contribution_sets_persists_representative_candidate_projection() -> None:
+    paid_ads = _candidate("campaign_traffic_drop", "channel", "paid_ads", 0.72)
+    affiliate = _candidate("campaign_traffic_drop", "channel", "affiliate", 0.28)
+    weak_tail = _candidate("campaign_traffic_drop", "channel", "social", 0.001)
+    interaction_paid_ads = _candidate("interaction_channel_category", "channel", "paid_ads", 0.72)
+    repo = _Repo(
+        {
+            "run-1:E4_channel": _e4_row(
+                "run-1:E4_channel",
+                paid_ads,
+                candidates=[paid_ads, affiliate, weak_tail],
+            ),
+            "run-1:E4_channel_interaction": _e4_row(
+                "run-1:E4_channel_interaction",
+                interaction_paid_ads,
+                candidates=[interaction_paid_ads],
+            ),
+        }
+    )
+
+    result = merge_contribution_sets(
+        MergeContributionSetsArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 1),
+            source_evidence_aliases=["E4_channel", "E4_channel_interaction"],
+        ),
+        repository=repo,
+    )
+
+    assert result.observation.ok is True
+    persisted = repo.persisted["run-1:E4"]
+    contribution_set = persisted["result_summary"]["contribution_set"]
+    assert [
+        (candidate["root_cause_type"], candidate["dimension"], candidate["element"])
+        for candidate in contribution_set["candidates"]
+    ] == [
+        ("campaign_traffic_drop", "channel", "paid_ads"),
+        ("campaign_traffic_drop", "channel", "affiliate"),
+    ]
+    assert persisted["result_summary"]["candidate_composition_strategy"] == "representative_source_merge_v1"
+
+
 class _Repo:
     def __init__(self, persisted: dict[str, dict[str, Any]]) -> None:
         self.persisted = persisted
@@ -64,11 +107,13 @@ def _e4_row(
     evidence_id: str,
     selected: RootCauseCandidate,
     *,
+    candidates: list[RootCauseCandidate] | None = None,
     decomposition: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    contribution_candidates = [selected] if candidates is None else candidates
     contribution_set = ContributionSet(
         selected_candidate=selected,
-        candidates=[selected],
+        candidates=contribution_candidates,
         evidence_ids=[evidence_id],
         factor_graph={"dimension": selected.dimension},
         selection_evidence_id=None,
@@ -77,7 +122,7 @@ def _e4_row(
         "metric_id": "gmv",
         "contribution_set": contribution_set.model_dump(mode="json"),
         "selected_candidate": selected.model_dump(mode="json"),
-        "candidates": [selected.model_dump(mode="json")],
+        "candidates": [candidate.model_dump(mode="json") for candidate in contribution_candidates],
     }
     if decomposition is not None:
         result_summary["decomposition"] = decomposition
