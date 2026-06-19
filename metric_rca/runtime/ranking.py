@@ -12,6 +12,17 @@ from metric_rca.services.adtributor_service import AdtributorElement, attribute_
 from metric_rca.services.attribution_service import rank_root_causes as _rank_candidates
 
 
+_SINGLE_DRIVER_PROJECTION_CONTRIBUTION_FLOOR = 0.90
+_SINGLE_DRIVER_PROJECTION_CONFIDENCE_FLOOR = 0.90
+_RANKED_SINGLE_DRIVER_SIGNAL_FLOOR = 0.90
+_RANKED_SINGLE_DRIVER_ROOT_TYPES = frozenset(
+    {
+        RootCauseType.CAMPAIGN_TRAFFIC_DROP.value,
+        RootCauseType.AOV_DROP.value,
+    }
+)
+
+
 def rank_from_persisted_e4(
     *,
     repository: Any,
@@ -94,6 +105,11 @@ def rank_from_persisted_e4(
     else:
         candidates = _diversify_ranked_top3(ranked_candidates)
         selected_candidate = candidates[0]
+    selected_candidate, candidates = _collapse_high_confidence_ranked_single_driver_set(
+        selected_candidate=selected_candidate,
+        candidates=candidates,
+        adtributor_pair_ranks=adtributor_pair_ranks,
+    )
     sql_text = e4.get("sql_text")
     if not sql_text:
         return _error("rank_root_causes", "EVIDENCE_MISSING", "persisted E4 sql_text is required before ranking")
@@ -629,17 +645,20 @@ def _enhance_with_adtributor(
 
     enhanced: list[RootCauseCandidate] = []
     for candidate in candidates:
-        pairs = list(candidate.dimension_elements)
+        project_only_primary_pair = _should_project_only_primary_pair(candidate=candidate, candidates=candidates)
+        pairs = [] if project_only_primary_pair else list(candidate.dimension_elements)
         if candidate.dimension is not None and candidate.element is not None:
             pair = (candidate.dimension, str(candidate.element))
             if pair not in pairs:
                 pairs.insert(0, pair)
-            for selected_pair in selected_pairs_by_dimension.get(candidate.dimension, []):
-                if selected_pair not in pairs:
-                    pairs.append(selected_pair)
-        for pair in top_pair_by_dimension.values():
-            if pair not in pairs:
-                pairs.append(pair)
+            if not project_only_primary_pair:
+                for selected_pair in selected_pairs_by_dimension.get(candidate.dimension, []):
+                    if selected_pair not in pairs:
+                        pairs.append(selected_pair)
+        if not project_only_primary_pair:
+            for pair in top_pair_by_dimension.values():
+                if pair not in pairs:
+                    pairs.append(pair)
         pair_scores = [score_by_pair[pair] for pair in pairs if pair in score_by_pair]
         if not pair_scores:
             enhanced.append(candidate)
@@ -666,6 +685,80 @@ def _enhance_with_adtributor(
             )
         )
     return enhanced, {"adtributor_status": "applied"}, pair_ranks
+
+
+def _should_project_only_primary_pair(*, candidate: RootCauseCandidate, candidates: list[RootCauseCandidate]) -> bool:
+    primary_pair = _primary_pair(candidate)
+    return (
+        len(candidates) == 1
+        and primary_pair is not None
+        and _has_only_primary_or_no_pairs(candidate, primary_pair=primary_pair)
+        and candidate.root_cause_type != RootCauseType.INTERACTION_CHANNEL_CATEGORY.value
+        and float(candidate.contribution_pct) >= _SINGLE_DRIVER_PROJECTION_CONTRIBUTION_FLOOR
+        and float(candidate.eng_confidence) >= _SINGLE_DRIVER_PROJECTION_CONFIDENCE_FLOOR
+    )
+
+
+def _has_only_primary_or_no_pairs(candidate: RootCauseCandidate, *, primary_pair: tuple[str, str]) -> bool:
+    pairs = list(candidate.dimension_elements)
+    return not pairs or pairs == [primary_pair]
+
+
+def _collapse_high_confidence_ranked_single_driver_set(
+    *,
+    selected_candidate: RootCauseCandidate,
+    candidates: list[RootCauseCandidate],
+    adtributor_pair_ranks: dict[tuple[str, str], tuple[float, float]],
+) -> tuple[RootCauseCandidate, list[RootCauseCandidate]]:
+    if not _should_collapse_high_confidence_ranked_single_driver_set(
+        selected_candidate=selected_candidate,
+        candidates=candidates,
+        adtributor_pair_ranks=adtributor_pair_ranks,
+    ):
+        return selected_candidate, candidates
+    primary_pair = _primary_pair(selected_candidate)
+    if primary_pair is None:
+        return selected_candidate, candidates
+    pair_rank = adtributor_pair_ranks.get(primary_pair)
+    if pair_rank is None:
+        return selected_candidate, candidates
+    explanatory_power, surprise_js = pair_rank
+    projected = selected_candidate.model_copy(
+        update={
+            "dimension_elements": [primary_pair],
+            "explanatory_power": explanatory_power,
+            "surprise_js": surprise_js,
+            "contribution_pct": explanatory_power,
+            "eng_confidence": explanatory_power
+            * selected_candidate.signal_severity
+            * selected_candidate.evidence_support
+            * selected_candidate.reflection_factor,
+        }
+    )
+    return projected, [projected]
+
+
+def _should_collapse_high_confidence_ranked_single_driver_set(
+    *,
+    selected_candidate: RootCauseCandidate,
+    candidates: list[RootCauseCandidate],
+    adtributor_pair_ranks: dict[tuple[str, str], tuple[float, float]],
+) -> bool:
+    primary_pair = _primary_pair(selected_candidate)
+    return (
+        len(candidates) > 1
+        and primary_pair is not None
+        and primary_pair in adtributor_pair_ranks
+        and selected_candidate.root_cause_type in _RANKED_SINGLE_DRIVER_ROOT_TYPES
+        and selected_candidate.explanatory_power is not None
+        and float(selected_candidate.contribution_pct) >= _SINGLE_DRIVER_PROJECTION_CONTRIBUTION_FLOOR
+        and float(selected_candidate.eng_confidence) >= _SINGLE_DRIVER_PROJECTION_CONFIDENCE_FLOOR
+        and float(selected_candidate.signal_severity) >= _RANKED_SINGLE_DRIVER_SIGNAL_FLOOR
+        and not any(
+            candidate.root_cause_type == RootCauseType.INTERACTION_CHANNEL_CATEGORY.value
+            for candidate in candidates
+        )
+    )
 
 
 def _adtributor_not_applicable(reason: str) -> dict[str, str]:
