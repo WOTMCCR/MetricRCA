@@ -1,0 +1,48 @@
+{
+  "eval_id": "round-06",
+  "summary": {
+    "total": 276,
+    "by_divergence": {
+      "design_flaw": 1
+    },
+    "by_aspect": {
+      "execution": {
+        "design_flaw": 1
+      }
+    },
+    "accuracy": null,
+    "design_flaw_count": 1,
+    "complexity_gap_count": 0,
+    "note": "Full aspect comparison skipped because eval-result contains no full cases after eval abort."
+  },
+  "gaps": [
+    {
+      "case_id": "C06_gmv_multi_channel_drop",
+      "aspect": "execution",
+      "divergence": "design_flaw",
+      "predicted": {
+        "round6_predictions_present": true,
+        "all_six_aspects_predicted": true
+      },
+      "actual": {
+        "eval_status": "eval_aborted",
+        "error_code": "SYSTEM_TABLE_WRITE_FAILED",
+        "tool_error": "BUDGET_EXCEEDED",
+        "compiled_actions": 24,
+        "pre_fix_budget": {
+          "actions": 24,
+          "max_steps": 24,
+          "max_query": 50,
+          "max_drilldown_depth": 3
+        },
+        "post_fix_budget": {
+          "actions": 24,
+          "max_steps": 24,
+          "max_query": 70,
+          "max_drilldown_depth": 3
+        }
+      },
+      "detail": "Round 5 alias fix let the campaign/conversion same-dimension lanes progress, but the expanded broad GMV plan still used the legacy merge-plan query cap of 50. The executor correctly fails when more data actions remain at the cap. This is a plan compiler budget contract bug, not a ranking issue."
+    }
+  ]
+}

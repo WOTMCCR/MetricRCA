@@ -225,6 +225,22 @@ def test_plan_compiler_builds_broad_gmv_multisignal_discovery_lanes() -> None:
     assert len({action.produces[0] for action in signal_actions}) == len(signal_actions)
 
 
+def test_plan_compiler_sizes_multisignal_gmv_budget_from_action_costs() -> None:
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date=date(2026, 6, 1),
+        question_family="gmv_drop",
+        analysis_strategy="standard",
+    )
+
+    plan = _compiler().compile(run_id="run-1", parsed_intent=parsed)
+
+    assert len(plan.actions) == 24
+    assert plan.budget["max_steps"] == 24
+    assert plan.budget["max_drilldown_depth"] == 3
+    assert plan.budget["max_query"] >= 70
+
+
 @pytest.mark.parametrize(
     ("question_family", "expected_dimension", "expected_signal_type"),
     [

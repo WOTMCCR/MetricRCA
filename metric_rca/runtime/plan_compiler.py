@@ -648,10 +648,25 @@ def _plan_budget(actions: list[RcaAction], budget: dict[str, int] | None) -> dic
     resolved = dict(budget or {"max_steps": 8, "max_query": 20, "max_drilldown_depth": 3})
     if any(action.kind == "merge_contribution_sets" for action in actions):
         resolved["max_steps"] = max(int(resolved.get("max_steps", 0)), len(actions))
-        resolved["max_query"] = max(int(resolved.get("max_query", 0)), 50)
+        resolved["max_query"] = max(int(resolved.get("max_query", 0)), _estimated_query_budget(actions))
         drilldown_count = len([action for action in actions if action.kind == "drilldown_dimension"])
         resolved["max_drilldown_depth"] = max(int(resolved.get("max_drilldown_depth", 0)), drilldown_count)
     return resolved
+
+
+def _estimated_query_budget(actions: list[RcaAction]) -> int:
+    return sum(_estimated_action_query_cost(action) for action in actions) + 2
+
+
+def _estimated_action_query_cost(action: RcaAction) -> int:
+    if action.kind in {"detect_anomaly", "drilldown_dimension", "select_signal_element", "fetch_related_signal"}:
+        return 2
+    if action.kind != "calculate_contribution":
+        return 0
+    metric_id = str(action.args.get("metric_id"))
+    if metric_id in {"gmv", "net_gmv"}:
+        return 6
+    return 2
 
 
 def _explicit_scope(parsed_intent: ParsedIntent) -> dict[str, str]:

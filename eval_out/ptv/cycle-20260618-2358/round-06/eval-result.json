@@ -1,0 +1,410 @@
+{
+  "eval_id": "round-06",
+  "status": "eval_aborted",
+  "error_code": "SYSTEM_TABLE_WRITE_FAILED",
+  "message": "make eval-stream exited before full regression result. Round 6 investigation reproduced the active blocker as a compiled-plan query budget mismatch: the broad GMV multisignal plan has 24 actions and 6 contribution lanes but was capped at max_query=50.",
+  "exit_status": "2",
+  "partial_memory_case_total": 5,
+  "partial_memory_cases": [
+    {
+      "phase": "memory",
+      "case_id": "cvr_mobile_drop",
+      "intent_ok": 1,
+      "anomaly_ok": 1,
+      "top1_ok": 1,
+      "top3_ok": 1,
+      "dominant_top1_ok": 1,
+      "root_cause_set_recall": 1.0,
+      "root_cause_set_precision": 1.0,
+      "weighted_explanation_coverage": 1.0,
+      "top3_contains_all_major_causes": 1,
+      "evidence_coverage": 1.0,
+      "sql_safe": 1,
+      "reflection_repair_ok": 1,
+      "report_traceable_ok": 1,
+      "memory_pollution_ok": 1,
+      "no_anomaly_task_ok": 1,
+      "adtributor_used": 0,
+      "multi_agent_path": "single_agent",
+      "detail": {
+        "status": "succeeded",
+        "metric_id": "pay_cvr",
+        "expected_metric": "pay_cvr",
+        "selected_candidate": {
+          "element": "mobile",
+          "verdict": "confirmed",
+          "dimension": "device",
+          "surprise_js": null,
+          "evidence_ids": [
+            "round-06-mem-cvr_mobile_drop:E1",
+            "round-06-mem-cvr_mobile_drop:E2_device",
+            "round-06-mem-cvr_mobile_drop:E3_dev_mobile",
+            "round-06-mem-cvr_mobile_drop:E4",
+            "round-06-mem-cvr_mobile_drop:E_rank"
+          ],
+          "eng_confidence": 1.0,
+          "root_cause_type": "conversion_drop",
+          "signal_severity": 0.8582554517133957,
+          "contribution_pct": 1.0,
+          "evidence_support": 1.0,
+          "explanatory_power": null,
+          "reflection_factor": 1.0,
+          "dimension_elements": []
+        },
+        "expected_root_causes": [
+          {
+            "root_cause_type": "conversion_drop",
+            "dimension": "device",
+            "element": "mobile",
+            "weight": 1.0
+          }
+        ],
+        "token_count": 0,
+        "latency_ms": 0,
+        "sql_count": 8,
+        "trace_step_count": 6,
+        "memory_read_seen": true,
+        "tool_sequence": [
+          "read_priors",
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ],
+        "memory_record_count": 1,
+        "memory_layers": [
+          "semantic"
+        ],
+        "eval_attempts": 1,
+        "final_run_id": "round-06-mem-cvr_mobile_drop",
+        "memory_enabled": true,
+        "tags": [
+          "mvp",
+          "conversion",
+          "specified_slice"
+        ],
+        "scenario_family": "conversion"
+      }
+    },
+    {
+      "phase": "memory",
+      "case_id": "gmv_no_anomaly",
+      "intent_ok": 1,
+      "anomaly_ok": 1,
+      "top1_ok": 1,
+      "top3_ok": 1,
+      "dominant_top1_ok": 1,
+      "root_cause_set_recall": 1.0,
+      "root_cause_set_precision": 1.0,
+      "weighted_explanation_coverage": 1.0,
+      "top3_contains_all_major_causes": 1,
+      "evidence_coverage": 1.0,
+      "sql_safe": 1,
+      "reflection_repair_ok": 1,
+      "report_traceable_ok": 1,
+      "memory_pollution_ok": 1,
+      "no_anomaly_task_ok": 1,
+      "adtributor_used": 0,
+      "multi_agent_path": "single_agent",
+      "detail": {
+        "status": "no_anomaly",
+        "metric_id": "gmv",
+        "expected_metric": "gmv",
+        "selected_candidate": null,
+        "expected_root_causes": [],
+        "token_count": 0,
+        "latency_ms": 0,
+        "sql_count": 2,
+        "trace_step_count": 2,
+        "memory_read_seen": true,
+        "tool_sequence": [
+          "read_priors",
+          "detect_anomaly"
+        ],
+        "memory_record_count": 1,
+        "memory_layers": [
+          "semantic"
+        ],
+        "eval_attempts": 1,
+        "final_run_id": "round-06-mem-gmv_no_anomaly",
+        "memory_enabled": true,
+        "tags": [
+          "mvp",
+          "no_anomaly"
+        ],
+        "scenario_family": "no_anomaly"
+      }
+    },
+    {
+      "phase": "memory",
+      "case_id": "gmv_paid_ads_drop",
+      "intent_ok": 1,
+      "anomaly_ok": 1,
+      "top1_ok": 1,
+      "top3_ok": 1,
+      "dominant_top1_ok": 1,
+      "root_cause_set_recall": 1.0,
+      "root_cause_set_precision": 1.0,
+      "weighted_explanation_coverage": 1.0,
+      "top3_contains_all_major_causes": 1,
+      "evidence_coverage": 1.0,
+      "sql_safe": 1,
+      "reflection_repair_ok": 1,
+      "report_traceable_ok": 1,
+      "memory_pollution_ok": 1,
+      "no_anomaly_task_ok": 1,
+      "adtributor_used": 1,
+      "multi_agent_path": "single_agent",
+      "detail": {
+        "status": "succeeded",
+        "metric_id": "gmv",
+        "expected_metric": "gmv",
+        "selected_candidate": {
+          "element": "paid_ads",
+          "verdict": "confirmed",
+          "dimension": "channel",
+          "surprise_js": 0.0,
+          "evidence_ids": [
+            "round-06-mem-gmv_paid_ads_drop:E1",
+            "round-06-mem-gmv_paid_ads_drop:E2_channel",
+            "round-06-mem-gmv_paid_ads_drop:E3_ch_paid_ads",
+            "round-06-mem-gmv_paid_ads_drop:E4",
+            "round-06-mem-gmv_paid_ads_drop:E_rank"
+          ],
+          "eng_confidence": 1.0,
+          "root_cause_type": "campaign_traffic_drop",
+          "signal_severity": 0.967695835847918,
+          "contribution_pct": 1.0,
+          "evidence_support": 1.0,
+          "explanatory_power": 1.0,
+          "reflection_factor": 1.0,
+          "dimension_elements": [
+            [
+              "channel",
+              "paid_ads"
+            ]
+          ]
+        },
+        "expected_root_causes": [
+          {
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "weight": 1.0
+          }
+        ],
+        "token_count": 0,
+        "latency_ms": 0,
+        "sql_count": 12,
+        "trace_step_count": 6,
+        "memory_read_seen": true,
+        "tool_sequence": [
+          "read_priors",
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ],
+        "memory_record_count": 1,
+        "memory_layers": [
+          "semantic"
+        ],
+        "eval_attempts": 1,
+        "final_run_id": "round-06-mem-gmv_paid_ads_drop",
+        "memory_enabled": true,
+        "tags": [
+          "mvp",
+          "campaign",
+          "specified_slice"
+        ],
+        "scenario_family": "campaign"
+      }
+    },
+    {
+      "phase": "memory",
+      "case_id": "gmv_stockout_electronics",
+      "intent_ok": 1,
+      "anomaly_ok": 1,
+      "top1_ok": 1,
+      "top3_ok": 1,
+      "dominant_top1_ok": 1,
+      "root_cause_set_recall": 1.0,
+      "root_cause_set_precision": 1.0,
+      "weighted_explanation_coverage": 1.0,
+      "top3_contains_all_major_causes": 1,
+      "evidence_coverage": 1.0,
+      "sql_safe": 1,
+      "reflection_repair_ok": 1,
+      "report_traceable_ok": 1,
+      "memory_pollution_ok": 1,
+      "no_anomaly_task_ok": 1,
+      "adtributor_used": 1,
+      "multi_agent_path": "single_agent",
+      "detail": {
+        "status": "succeeded",
+        "metric_id": "gmv",
+        "expected_metric": "gmv",
+        "selected_candidate": {
+          "element": "electronics",
+          "verdict": "confirmed",
+          "dimension": "category",
+          "surprise_js": 0.0,
+          "evidence_ids": [
+            "round-06-mem-gmv_stockout_electronics:E1",
+            "round-06-mem-gmv_stockout_electronics:E2_category",
+            "round-06-mem-gmv_stockout_electronics:E3_cat_electronics",
+            "round-06-mem-gmv_stockout_electronics:E4",
+            "round-06-mem-gmv_stockout_electronics:E_rank"
+          ],
+          "eng_confidence": 1.0,
+          "root_cause_type": "stockout",
+          "signal_severity": 1.0,
+          "contribution_pct": 1.0,
+          "evidence_support": 1.0,
+          "explanatory_power": 1.0,
+          "reflection_factor": 1.0,
+          "dimension_elements": [
+            [
+              "category",
+              "electronics"
+            ]
+          ]
+        },
+        "expected_root_causes": [
+          {
+            "root_cause_type": "stockout",
+            "dimension": "category",
+            "element": "electronics",
+            "weight": 1.0
+          }
+        ],
+        "token_count": 0,
+        "latency_ms": 0,
+        "sql_count": 12,
+        "trace_step_count": 6,
+        "memory_read_seen": true,
+        "tool_sequence": [
+          "read_priors",
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ],
+        "memory_record_count": 1,
+        "memory_layers": [
+          "semantic"
+        ],
+        "eval_attempts": 1,
+        "final_run_id": "round-06-mem-gmv_stockout_electronics",
+        "memory_enabled": true,
+        "tags": [
+          "mvp",
+          "inventory",
+          "specified_slice"
+        ],
+        "scenario_family": "inventory"
+      }
+    },
+    {
+      "phase": "memory",
+      "case_id": "refund_rate_product_quality",
+      "intent_ok": 1,
+      "anomaly_ok": 1,
+      "top1_ok": 1,
+      "top3_ok": 1,
+      "dominant_top1_ok": 1,
+      "root_cause_set_recall": 1.0,
+      "root_cause_set_precision": 1.0,
+      "weighted_explanation_coverage": 1.0,
+      "top3_contains_all_major_causes": 1,
+      "evidence_coverage": 1.0,
+      "sql_safe": 1,
+      "reflection_repair_ok": 1,
+      "report_traceable_ok": 1,
+      "memory_pollution_ok": 1,
+      "no_anomaly_task_ok": 1,
+      "adtributor_used": 0,
+      "multi_agent_path": "single_agent",
+      "detail": {
+        "status": "succeeded",
+        "metric_id": "refund_rate",
+        "expected_metric": "refund_rate",
+        "selected_candidate": {
+          "element": "1",
+          "verdict": "confirmed",
+          "dimension": "product",
+          "surprise_js": null,
+          "evidence_ids": [
+            "round-06-mem-refund_rate_prod-f4f41e01:E1",
+            "round-06-mem-refund_rate_prod-f4f41e01:E2_product",
+            "round-06-mem-refund_rate_prod-f4f41e01:E3_prod_1",
+            "round-06-mem-refund_rate_prod-f4f41e01:E4",
+            "round-06-mem-refund_rate_prod-f4f41e01:E_rank"
+          ],
+          "eng_confidence": 1.0,
+          "root_cause_type": "complaint_or_quality_issue",
+          "signal_severity": 1.0,
+          "contribution_pct": 1.0,
+          "evidence_support": 1.0,
+          "explanatory_power": null,
+          "reflection_factor": 1.0,
+          "dimension_elements": []
+        },
+        "expected_root_causes": [
+          {
+            "root_cause_type": "complaint_or_quality_issue",
+            "dimension": "product",
+            "element": "1",
+            "weight": 1.0
+          }
+        ],
+        "token_count": 0,
+        "latency_ms": 0,
+        "sql_count": 8,
+        "trace_step_count": 6,
+        "memory_read_seen": true,
+        "tool_sequence": [
+          "read_priors",
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ],
+        "memory_record_count": 1,
+        "memory_layers": [
+          "semantic"
+        ],
+        "eval_attempts": 1,
+        "final_run_id": "round-06-mem-refund_rate_prod-f4f41e01",
+        "memory_enabled": true,
+        "tags": [
+          "mvp",
+          "quality",
+          "specified_slice"
+        ],
+        "scenario_family": "quality"
+      }
+    }
+  ],
+  "full_case_total": 0,
+  "result_file_present": false,
+  "evidence_files": {
+    "eval_stream_log": "eval_out/ptv/cycle-20260618-2358/round-06/eval-stream.log",
+    "eval_stream_exit_status": "eval_out/ptv/cycle-20260618-2358/round-06/eval-stream.exit-status",
+    "memory_cases_dir": "eval_out/ptv/cycle-20260618-2358/round-06/memory_cases"
+  },
+  "investigation": {
+    "pre_fix_compiled_plan": {
+      "actions": 24,
+      "max_steps": 24,
+      "max_query": 50,
+      "max_drilldown_depth": 3
+    },
+    "failure_mechanism": "RcaPlanExecutor fails when query_count reaches max_query while later data actions remain. Six GMV contribution chains need approximately 68 SQL queries plus safety margin, so max_query=50 is insufficient.",
+    "not_structural": true
+  }
+}
