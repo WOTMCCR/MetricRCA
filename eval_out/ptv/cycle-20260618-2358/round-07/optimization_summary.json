@@ -95,7 +95,9 @@
       "metric_rca/runtime/ranking.py",
       "metric_rca/runtime/plan_compiler.py"
     ],
-    "justification": "The plan compiler already supplies stable per-lane E3 aliases. The tool must honor an explicit alias as a complete alias instead of suffixing the dynamic element."
+    "justification": "The plan compiler already supplies stable per-lane E3 aliases. The tool must honor an explicit alias as a complete alias instead of suffixing the dynamic element.",
+    "fix_commit": "978e707d35a89832df5211c3beee082b718c9029",
+    "fix_status": "committed"
   },
   "selected_fix_category": "FIX-T",
   "target_layer": "tool",
@@ -112,6 +114,6 @@
     "broad GMV interaction channel E3 lane"
   ],
   "expected_change": "fetch_related_signal persists E3_ch_interaction instead of E3_ch_interaction_paid_ads when plan_compiler provides an explicit lane alias.",
-  "fix_commit": null,
-  "fix_status": "pending_commit"
+  "fix_commit": "978e707d35a89832df5211c3beee082b718c9029",
+  "fix_status": "committed"
 }
