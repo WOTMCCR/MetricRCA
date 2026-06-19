@@ -78,6 +78,194 @@ def test_reflection_low_attribution_coverage_returns_ATTRIBUTION_COVERAGE_LOW() 
     assert issue.suggested_action.args["metric_id"] == "gmv"
 
 
+def test_reflection_does_not_loop_low_coverage_after_adtributor_rank_evidence() -> None:
+    candidate = _candidate(
+        contribution_pct=0.3283161395107113,
+        evidence_ids=[
+            "run-1:E1",
+            "run-1:E2_channel",
+            "run-1:E_select_channel",
+            "run-1:E3_ch",
+            "run-1:E4_channel",
+            "run-1:E4",
+            "run-1:E_rank",
+        ],
+        dimension_elements=[("channel", "paid_ads")],
+    )
+    contribution_summary = _contribution_summary(candidate)
+    contribution_summary["ranker"] = "adtributor_internal"
+    contribution_summary["adtributor_status"] = "applied"
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2_channel"),
+        _evidence(
+            "run-1:E_select_channel",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "selected_element": "paid_ads",
+                "candidate_scores": [{"element": "paid_ads", "signal_score": 0.9748593844296922}],
+            },
+        ),
+        _evidence(
+            "run-1:E3_ch",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "value": 0.9748593844296922,
+            },
+        ),
+        _evidence("run-1:E4_channel"),
+        _evidence("run-1:E4", summary=contribution_summary),
+        _evidence("run-1:E_rank", summary=contribution_summary),
+    ]
+    state = _state(candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
+
+    assert result.passed is True
+    assert "ATTRIBUTION_COVERAGE_LOW" not in _checks(result)
+
+
+def test_reflection_keeps_low_coverage_when_candidate_does_not_bind_e4() -> None:
+    candidate = _candidate(
+        contribution_pct=0.3283161395107113,
+        verdict="possible",
+        evidence_ids=["run-1:E_rank"],
+    )
+    contribution_summary = _contribution_summary(candidate)
+    contribution_summary["ranker"] = "adtributor_internal"
+    contribution_summary["adtributor_status"] = "applied"
+    evidences = [
+        _evidence("run-1:E4", summary=contribution_summary),
+        _evidence("run-1:E_rank", summary=contribution_summary),
+    ]
+    state = _state(candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
+
+    assert result.passed is False
+    assert "ATTRIBUTION_COVERAGE_LOW" in _checks(result)
+
+
+def test_reflection_keeps_low_coverage_when_e4_is_not_persisted() -> None:
+    candidate = _candidate(contribution_pct=0.3283161395107113)
+    contribution_summary = _contribution_summary(candidate)
+    contribution_summary["ranker"] = "adtributor_internal"
+    contribution_summary["adtributor_status"] = "applied"
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2"),
+        _evidence(
+            "run-1:E3",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "value": 0.90,
+            },
+        ),
+        _evidence("run-1:E4", summary=contribution_summary),
+        _evidence("run-1:E_rank", summary=contribution_summary),
+    ]
+    persisted = _persisted_rows(evidences)
+    persisted.pop("run-1:E4")
+    state = _state(candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=persisted)
+
+    assert result.passed is False
+    assert "ATTRIBUTION_COVERAGE_LOW" in _checks(result)
+    assert "persisted_evidence" in _checks(result)
+
+
+def test_reflection_keeps_low_coverage_when_only_e4_marks_adtributor_rank() -> None:
+    candidate = _candidate(contribution_pct=0.3283161395107113)
+    e4_summary = _contribution_summary(candidate)
+    e4_summary["ranker"] = "adtributor_internal"
+    e4_summary["adtributor_status"] = "applied"
+    e_rank_summary = _contribution_summary(candidate)
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2"),
+        _evidence(
+            "run-1:E3",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "value": 0.90,
+            },
+        ),
+        _evidence("run-1:E4", summary=e4_summary),
+        _evidence("run-1:E_rank", summary=e_rank_summary),
+    ]
+    state = _state(candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
+
+    assert result.passed is False
+    assert "ATTRIBUTION_COVERAGE_LOW" in _checks(result)
+
+
+def test_reflection_keeps_low_coverage_when_candidate_does_not_bind_e_rank() -> None:
+    candidate = _candidate(
+        contribution_pct=0.3283161395107113,
+        verdict="possible",
+        evidence_ids=["run-1:E4"],
+    )
+    contribution_summary = _contribution_summary(candidate)
+    contribution_summary["ranker"] = "adtributor_internal"
+    contribution_summary["adtributor_status"] = "applied"
+    evidences = [
+        _evidence("run-1:E4", summary=contribution_summary),
+        _evidence("run-1:E_rank", summary=contribution_summary),
+    ]
+    state = _state(candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
+
+    assert result.passed is False
+    assert "ATTRIBUTION_COVERAGE_LOW" in _checks(result)
+
+
+def test_reflection_keeps_low_coverage_when_e_rank_persisted_summary_mismatches_state() -> None:
+    candidate = _candidate(contribution_pct=0.3283161395107113)
+    contribution_summary = _contribution_summary(candidate)
+    contribution_summary["ranker"] = "adtributor_internal"
+    contribution_summary["adtributor_status"] = "applied"
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2"),
+        _evidence(
+            "run-1:E3",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "value": 0.90,
+            },
+        ),
+        _evidence("run-1:E4", summary=contribution_summary),
+        _evidence("run-1:E_rank", summary=contribution_summary),
+    ]
+    persisted = _persisted_rows(evidences)
+    persisted["run-1:E_rank"]["result_summary"] = _contribution_summary(_candidate(contribution_pct=0.95))
+    state = _state(candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=persisted)
+
+    assert result.passed is False
+    assert "ATTRIBUTION_COVERAGE_LOW" in _checks(result)
+    assert "persisted_evidence" in _checks(result)
+
+
 def test_reflection_accepts_low_coverage_rate_candidate_with_matching_signal() -> None:
     candidate = _candidate(
         root_cause_type="complaint_or_quality_issue",

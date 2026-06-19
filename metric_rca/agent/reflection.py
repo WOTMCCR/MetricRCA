@@ -114,7 +114,11 @@ def verify_reflection(
         if (
             candidate is candidates[0]
             and candidate.contribution_pct < ATTRIBUTION_COVERAGE_THRESHOLD
-            and _low_coverage_repair_applies(state)
+            and _low_coverage_repair_applies(
+                state=state,
+                candidate=candidate,
+                persisted_evidence_by_id=persisted_evidence_by_id,
+            )
         ):
             issues.append(
                 _issue(
@@ -229,8 +233,93 @@ def _cross_chain_consistency_warnings(
     ]
 
 
-def _low_coverage_repair_applies(state: dict[str, Any]) -> bool:
-    return str(state.get("metric_id") or "") in ADDITIVE_ATTRIBUTION_METRICS
+def _low_coverage_repair_applies(
+    *,
+    state: dict[str, Any],
+    candidate: RootCauseCandidate,
+    persisted_evidence_by_id: dict[str, dict[str, Any] | None] | None,
+) -> bool:
+    if str(state.get("metric_id") or "") not in ADDITIVE_ATTRIBUTION_METRICS:
+        return False
+    return not _adtributor_rank_evidence_already_applied(
+        state=state,
+        candidate=candidate,
+        persisted_evidence_by_id=persisted_evidence_by_id,
+    )
+
+
+def _adtributor_rank_evidence_already_applied(
+    *,
+    state: dict[str, Any],
+    candidate: RootCauseCandidate,
+    persisted_evidence_by_id: dict[str, dict[str, Any] | None] | None,
+) -> bool:
+    if persisted_evidence_by_id is None:
+        return False
+    if not _candidate_has_alias(state=state, candidate=candidate, alias="E4"):
+        return False
+    if not _candidate_has_alias(state=state, candidate=candidate, alias="E_rank"):
+        return False
+    e4 = _evidence_for_exact_alias(state, "E4")
+    e_rank = _evidence_for_exact_alias(state, "E_rank")
+    if e4 is None or e_rank is None:
+        return False
+    if not _persisted_evidence_matches(
+        state=state,
+        evidence=e4,
+        persisted_evidence_by_id=persisted_evidence_by_id,
+    ):
+        return False
+    if not _persisted_evidence_matches(
+        state=state,
+        evidence=e_rank,
+        persisted_evidence_by_id=persisted_evidence_by_id,
+    ):
+        return False
+    persisted_e4 = persisted_evidence_by_id.get(e4.evidence_id)
+    persisted_e_rank = persisted_evidence_by_id.get(e_rank.evidence_id)
+    if persisted_e4 is None or persisted_e_rank is None:
+        return False
+    e4_summary = persisted_e4.get("result_summary") or {}
+    e_rank_summary = persisted_e_rank.get("result_summary") or {}
+    if not isinstance(e4_summary, dict) or not isinstance(e_rank_summary, dict):
+        return False
+    if not _summary_marks_adtributor_rank(e_rank_summary):
+        return False
+    return _summary_selects_candidate(e4_summary, candidate) and _summary_selects_candidate(
+        e_rank_summary,
+        candidate,
+    )
+
+
+def _summary_marks_adtributor_rank(summary: dict[str, Any]) -> bool:
+    if summary.get("ranker") == "adtributor_internal" or summary.get("adtributor_status") == "applied":
+        return True
+    contribution_set = summary.get("contribution_set")
+    if not isinstance(contribution_set, dict):
+        return False
+    factor_graph = contribution_set.get("factor_graph")
+    if not isinstance(factor_graph, dict):
+        return False
+    return (
+        factor_graph.get("ranker") == "adtributor_internal"
+        or factor_graph.get("adtributor_status") == "applied"
+    )
+
+
+def _summary_selects_candidate(summary: dict[str, Any], candidate: RootCauseCandidate) -> bool:
+    selected_candidate = _selected_candidate_from_e4_summary(summary)
+    if selected_candidate is None:
+        return False
+    return _canonical(selected_candidate) == _canonical(candidate)
+
+
+def _evidence_for_exact_alias(state: dict[str, Any], alias: str) -> Evidence | None:
+    target_id = f"{state.get('run_id')}:{alias}"
+    for evidence in [_as_evidence(item) for item in state.get("evidences", [])]:
+        if evidence.evidence_id == target_id:
+            return evidence
+    return None
 
 
 def _persisted_evidence_matches(
