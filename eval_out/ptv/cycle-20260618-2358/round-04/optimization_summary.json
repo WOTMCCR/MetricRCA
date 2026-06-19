@@ -60,5 +60,7 @@
     "MC06_net_gmv_multi_driver"
   ],
   "expected_change": "Compile explicit multi-driver and broad GMV discovery into independent campaign/conversion/interaction lanes with distinct selection and E3 aliases, so missing conversion affiliate and interaction candidates enter E4 before ranking.",
-  "source_contamination_note": "A diagnosis-stage local rg command matched private ground-truth paths after Round 4 predictions and full eval were already complete. Controller decision relies on eval-result, persisted traces, gap_report, and diagnosis artifacts; no prediction artifact was modified from that source."
+  "source_contamination_note": "A diagnosis-stage local rg command matched private ground-truth paths after Round 4 predictions and full eval were already complete. Controller decision relies on eval-result, persisted traces, gap_report, and diagnosis artifacts; no prediction artifact was modified from that source.",
+  "fix_commit": "47ef20dca0042ce7db604a5f573bc11bb6ea3cde",
+  "fix_status": "committed"
 }
