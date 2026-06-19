@@ -60,5 +60,7 @@
     "C06_gmv_multi_channel_drop execution abort",
     "same-dimension campaign/conversion selection lanes"
   ],
-  "expected_change": "select_signal_element honors per-lane evidence_alias and returns correct sql_count after guarded SQL execution paths."
+  "expected_change": "select_signal_element honors per-lane evidence_alias and returns correct sql_count after guarded SQL execution paths.",
+  "fix_commit": "66df041d0e2dc386259604838a7ab5fc8f89f5fd",
+  "fix_status": "committed"
 }
