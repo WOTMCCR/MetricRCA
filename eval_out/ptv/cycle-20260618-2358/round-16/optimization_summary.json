@@ -1,0 +1,334 @@
+{
+  "base_commit": "e7ccc9719d3d5a75e12c71372b428224227bc792",
+  "controller_rules_applied": {
+    "rule_c1_blocked_categories": [],
+    "rule_c1_reason": "No complete Round 16 aggregate metrics exist because eval-result.json is absent, so no valid regression comparison can block FIX-I under RULE-C1. Partial stream metrics are marked non-gate-valid.",
+    "rule_c2_promoted": null,
+    "rule_c2_reason": "Prior summaries carry nonblocking FIX-A deferral, but the current round has an eval-fatal intent barrier. Promoting FIX-A would leave the harness unable to complete and would not address the diagnosed METRIC_NOT_FOUND. Treat deferred FIX-A as still deferred until a complete eval can score ordering gaps again.",
+    "rule_c3_discovery_priority": false,
+    "rule_c3_reason": "The current case-specific fatal diagnosis contains no FIX-D discovery gap. LG01 failed before discovery because the metric intent resolver returned METRIC_NOT_FOUND.",
+    "rule_c4_revert_assessment": {
+      "justification": "RULE-C4 requires aggregate metric regressions. Round 16 is incomplete, eval-result.json is absent, and partial stream metrics are not gate-valid, so there is no valid revert calculation.",
+      "regressed_metrics": [],
+      "revert_decision": "not_applicable",
+      "triggered": false
+    },
+    "rule_c5_streak_counts": {
+      "FIX-M": 2
+    },
+    "rule_c5_triggered": true,
+    "selected_fix_category": "FIX-I",
+    "selection_justification": "FIX-I addresses the current eval-fatal barrier and switches away from the blocked FIX-M streak."
+  },
+  "controller_status": "fix_committed",
+  "cycle_id": "cycle-20260618-2358",
+  "decision_basis": {
+    "analyst_recommended_next_category": "FIX-I",
+    "diagnosis_counts": {
+      "by_aspect": {
+        "execution": 1
+      },
+      "by_divergence": {
+        "design_flaw": 1
+      },
+      "by_fix_category": {
+        "FIX-I": 1
+      }
+    },
+    "diagnosis_entries": 1,
+    "eval_complete": false,
+    "eval_result_exists": false,
+    "fatal_error": {
+      "aspect": "execution",
+      "case_id": "LG01_gmv_lagged_social",
+      "error_code": "METRIC_NOT_FOUND",
+      "eval_stream_exit_status": 2,
+      "message": "METRIC_NOT_FOUND: eval-result-LG01_gmv_lagged_social",
+      "occurred_after": {
+        "baseline_case_rows_completed": 40,
+        "case_rows_streamed": 86,
+        "last_completed_case_id": "IX04_gmv_interaction_no_single_driver",
+        "memory_case_rows_completed": 46
+      }
+    },
+    "gap_status": "failed_partial"
+  },
+  "effective_fixes_history": [
+    {
+      "commit": "f6e0701",
+      "effect": "C21/MC03 discovery coverage improved",
+      "fix": "FIX-D",
+      "round": 13
+    },
+    {
+      "commit": "77255d1",
+      "effect": "conversion merge selected device/mobile for C21",
+      "fix": "FIX-M",
+      "round": 14
+    },
+    {
+      "commit": "f9a3981d7b7d97004d1841badb6386e526e03a9e",
+      "effect": "added high-confidence representative collapse, but Round 16 fatal prevented gate-valid scoring",
+      "fix": "FIX-M",
+      "round": 15
+    }
+  ],
+  "exit_decision": "continue_until_metricrca_gates_pass",
+  "failure_patterns": [
+    {
+      "affected_cases": [
+        "LG01_gmv_lagged_social"
+      ],
+      "confidence": "high - no trace/evidence was created and agent_run has metric_id null before runtime tools",
+      "fix_category": "FIX-I",
+      "pattern": "eval-fatal intent METRIC_NOT_FOUND on explicit supported KPI surface",
+      "root_layer": "intent planner typed retry policy"
+    },
+    {
+      "affected_cases": [
+        "C06_gmv_multi_channel_drop",
+        "C07_gmv_category_channel_cross",
+        "C08_gmv_aov_drop",
+        "C09_gmv_uv_organic_drop",
+        "C14_net_gmv_gmv_driven",
+        "C24_gmv_positive_spike",
+        "C26_ambiguous_intent",
+        "C27_composite_cause",
+        "C28_multi_day_drift"
+      ],
+      "confidence": "medium - partial stream only; RULE-C5 blocks another immediate FIX-M",
+      "fix_category": "FIX-M",
+      "pattern": "broad candidate tail still visible in partial memory stream",
+      "root_layer": "merge output/report projection, not current gate-valid blocker"
+    }
+  ],
+  "fix_commit": "5cf949e3d6efcd9a74daac198756e66dcceee896",
+  "forbidden_files_this_round": [
+    "metric_rca/runtime/ranking.py",
+    "metric_rca/runtime/contribution_set_builder.py",
+    "metric_rca/evals/scorer.py",
+    "metric_rca/data/seed_data.py"
+  ],
+  "implemented_change": {
+    "fallback_like_code_touched": "none",
+    "files_changed": [
+      "metric_rca/services/intent_planner.py",
+      "tests/test_metadata_service.py"
+    ],
+    "fix_category": "FIX-I",
+    "summary": "LLMIntentPlanner now treats METRIC_NOT_FOUND on questions that explicitly contain a supported metric id surface as a bounded typed retry signal. It re-runs the same structured parser and still fails fast with METRIC_NOT_FOUND if retry cannot produce a valid supported intent. Unsupported KPI questions remain single-call typed failures."
+  },
+  "next_optimization_target": {
+    "files": [
+      "metric_rca/services/intent_planner.py",
+      "tests/test_metadata_service.py"
+    ],
+    "layer": "intent",
+    "rationale": "The eval cannot complete while one supported explicit GMV question can fatal before trace creation. The fix must keep the LLM intent boundary and add bounded typed retry, not local default metric substitution."
+  },
+  "optimization_summary": {
+    "expected_effect": "Round 17 eval should complete past LG01 so FIX-M precision effects and remaining ranking/discovery gaps can be scored again.",
+    "hypothesis": "The LG01 fatal is caused by an unretried typed LLM intent misclassification: a supported explicit GMV question returned METRIC_NOT_FOUND before any runtime tool trace was created.",
+    "known_risks": [
+      "If the retry predicate is too broad, unsupported metrics could waste attempts; tests must prove unsupported KPI still raises METRIC_NOT_FOUND after one call.",
+      "If the predicate substitutes a metric locally, it would violate the live intent boundary; implementation must not do that."
+    ],
+    "planned_change": "Retry semantic METRIC_NOT_FOUND only when the question text explicitly contains a supported metric id surface, and still require a valid structured LLM intent. If retry also fails, preserve fail-fast typed METRIC_NOT_FOUND."
+  },
+  "ptv_round": 16,
+  "remaining_gaps": [
+    {
+      "cases": [
+        "LG01_gmv_lagged_social"
+      ],
+      "cluster_id": "eval_fatal_intent_metric_not_found",
+      "evidence": "Round 16 eval-stream exited 2 and did not write eval-result.json after METRIC_NOT_FOUND for eval-result-LG01_gmv_lagged_social.",
+      "fix_category": "FIX-I",
+      "gate_blocking": true,
+      "recommended": true
+    },
+    {
+      "cases": [
+        "C06_gmv_multi_channel_drop",
+        "C07_gmv_category_channel_cross",
+        "C08_gmv_aov_drop",
+        "C09_gmv_uv_organic_drop",
+        "C14_net_gmv_gmv_driven",
+        "C24_gmv_positive_spike",
+        "C26_ambiguous_intent",
+        "C27_composite_cause",
+        "C28_multi_day_drift"
+      ],
+      "cluster_id": "memory_broad_candidate_tail_partial_observation",
+      "evidence": "Partial memory-phase rows still show broad selected_candidate.dimension_elements and low precision after Round 15 FIX-M, but the stream is incomplete and RULE-C5 blocks a third consecutive FIX-M.",
+      "fix_category": "FIX-M",
+      "gate_blocking": "not_assessable_in_fatal_round",
+      "recommended": false
+    }
+  ],
+  "revert_assessment": {
+    "justification": "RULE-C4 requires aggregate metric regressions. Round 16 is incomplete, eval-result.json is absent, and partial stream metrics are not gate-valid, so there is no valid revert calculation.",
+    "regressed_metrics": [],
+    "revert_decision": "not_applicable",
+    "triggered": false
+  },
+  "round": 16,
+  "rule_c1_blocked_categories": [],
+  "rule_c1_reason": "No complete Round 16 aggregate metrics exist because eval-result.json is absent, so no valid regression comparison can block FIX-I under RULE-C1. Partial stream metrics are marked non-gate-valid.",
+  "rule_c2_promoted": null,
+  "rule_c2_reason": "Prior summaries carry nonblocking FIX-A deferral, but the current round has an eval-fatal intent barrier. Promoting FIX-A would leave the harness unable to complete and would not address the diagnosed METRIC_NOT_FOUND. Treat deferred FIX-A as still deferred until a complete eval can score ordering gaps again.",
+  "rule_c3_reason": "The current case-specific fatal diagnosis contains no FIX-D discovery gap. LG01 failed before discovery because the metric intent resolver returned METRIC_NOT_FOUND.",
+  "rule_c4_revert_assessment": {
+    "justification": "RULE-C4 requires aggregate metric regressions. Round 16 is incomplete, eval-result.json is absent, and partial stream metrics are not gate-valid, so there is no valid revert calculation.",
+    "regressed_metrics": [],
+    "revert_decision": "not_applicable",
+    "triggered": false
+  },
+  "rule_c5_reason": "Rounds 14 and 15 both selected FIX-M. Selecting FIX-M again after Round 16 would be a third consecutive FIX-M and is blocked by RULE-C5, even though partial rows still show broad candidate-tail precision issues.",
+  "selected_fix_category": "FIX-I",
+  "stall_analysis_from_analyst": {
+    "category_history": [
+      "FIX-D",
+      "FIX-T",
+      "FIX-D",
+      "FIX-D",
+      "FIX-T",
+      "FIX-D",
+      "FIX-T",
+      "FIX-T",
+      "FIX-I",
+      "FIX-M",
+      "FIX-D",
+      "FIX-M",
+      "FIX-D",
+      "FIX-M",
+      "FIX-M"
+    ],
+    "category_history_by_round": [
+      {
+        "category": "FIX-D",
+        "round": 1
+      },
+      {
+        "category": "FIX-T",
+        "round": 2
+      },
+      {
+        "category": "FIX-D",
+        "round": 3
+      },
+      {
+        "category": "FIX-D",
+        "round": 4
+      },
+      {
+        "category": "FIX-T",
+        "round": 5
+      },
+      {
+        "category": "FIX-D",
+        "round": 6
+      },
+      {
+        "category": "FIX-T",
+        "round": 7
+      },
+      {
+        "category": "FIX-T",
+        "round": 8
+      },
+      {
+        "category": "FIX-I",
+        "round": 9
+      },
+      {
+        "category": "FIX-M",
+        "round": 10
+      },
+      {
+        "category": "FIX-D",
+        "round": 11
+      },
+      {
+        "category": "FIX-M",
+        "round": 12
+      },
+      {
+        "category": "FIX-D",
+        "round": 13
+      },
+      {
+        "category": "FIX-M",
+        "round": 14
+      },
+      {
+        "category": "FIX-M",
+        "round": 15
+      }
+    ],
+    "category_streak": {
+      "FIX-M": 2
+    },
+    "current_prior_streak": {
+      "FIX-M": 2
+    },
+    "current_streak": {
+      "FIX-M": 2
+    },
+    "deferred_streak": {
+      "FIX-A": 4,
+      "FIX-D": 0,
+      "FIX-I": 0,
+      "FIX-INJ": 0,
+      "FIX-M": 0,
+      "FIX-T": 0
+    },
+    "recommendation_reason": "FIX-I is allowed and necessary because the current gate blocker is an eval-fatal intent resolution error on an explicit GMV question. It differs from the prior FIX-M streak, is not blocked by RULE-C1, does not conflict with a current FIX-D diagnosis under RULE-C3, and is the only category that can restore the prediction/eval barrier before precision or ranking gaps can be scored again. FIX-M is explicitly not recommended because RULE-C5 blocks a third consecutive FIX-M and the fatal must be fixed first.",
+    "recommended_next_category": "FIX-I",
+    "rule_c1_blocking_categories": [],
+    "rule_c1_reason": "No complete Round 16 aggregate metrics exist because eval-result.json is absent, so no valid regression comparison can block FIX-I under RULE-C1. Partial stream metrics are marked non-gate-valid.",
+    "rule_c1_triggered": false,
+    "rule_c2_promoted": null,
+    "rule_c2_reason": "Prior summaries carry nonblocking FIX-A deferral, but the current round has an eval-fatal intent barrier. Promoting FIX-A would leave the harness unable to complete and would not address the diagnosed METRIC_NOT_FOUND. Treat deferred FIX-A as still deferred until a complete eval can score ordering gaps again.",
+    "rule_c2_triggered": false,
+    "rule_c3_reason": "The current case-specific fatal diagnosis contains no FIX-D discovery gap. LG01 failed before discovery because the metric intent resolver returned METRIC_NOT_FOUND.",
+    "rule_c3_triggered": false,
+    "rule_c4_revert_assessment": {
+      "justification": "RULE-C4 requires aggregate metric regressions. Round 16 is incomplete, eval-result.json is absent, and partial stream metrics are not gate-valid, so there is no valid revert calculation.",
+      "regressed_metrics": [],
+      "revert_decision": "not_applicable",
+      "triggered": false
+    },
+    "rule_c5_reason": "Rounds 14 and 15 both selected FIX-M. Selecting FIX-M again after Round 16 would be a third consecutive FIX-M and is blocked by RULE-C5, even though partial rows still show broad candidate-tail precision issues.",
+    "rule_c5_triggered": true,
+    "rule_c5_triggered_for": "FIX-M"
+  },
+  "summary_type": "agent_optimization_context",
+  "target_files": [
+    "metric_rca/services/intent_planner.py",
+    "tests/test_metadata_service.py"
+  ],
+  "target_layer": "intent",
+  "verification": [
+    {
+      "command": "PATH=.venv/bin:$PATH python -m pytest tests/test_metadata_service.py::test_llm_intent_planner_retries_metric_not_found_for_explicit_supported_metric_surface tests/test_metadata_service.py::test_llm_intent_planner_does_not_retry_typed_semantic_error tests/test_metadata_service.py::test_intent_planner_system_prompt_has_no_hardcoded_metrics tests/test_metadata_service.py::test_llm_intent_planner_retries_parse_failed_with_same_schema tests/test_metadata_service.py::test_llm_intent_planner_retries_date_range_error_for_run_target_relative_question -q",
+      "result": "5 passed"
+    },
+    {
+      "command": "PATH=.venv/bin:$PATH python -m pytest tests/test_metadata_service.py -q",
+      "result": "32 passed, 4 skipped"
+    },
+    {
+      "command": "PATH=.venv/bin:$PATH make seed",
+      "result": "passed"
+    },
+    {
+      "command": "PATH=.venv/bin:$PATH make test",
+      "result": "610 passed, 8 skipped, 29 warnings"
+    },
+    {
+      "command": "rg -n \"fallback|graceful|degrad|except Exception|pass\\s*$|default provider|mock|stub|demo\" metric_rca/services/intent_planner.py tests/test_metadata_service.py",
+      "result": "no matches"
+    }
+  ]
+}
