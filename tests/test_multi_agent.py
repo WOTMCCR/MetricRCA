@@ -58,6 +58,7 @@ def test_plan_compiler_routes_rate_metrics_to_rate_family() -> None:
     assert plan.family == "rate_family"
     assert [action.args.get("dimension") for action in plan.actions if action.kind == "drilldown_dimension"] == [
         "channel",
+        "device",
     ]
 
 

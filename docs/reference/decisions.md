@@ -1,3 +1,32 @@
+## ADL-0052: PAY_CVR discovery uses explicit lanes and conversion-only merge selection
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-19 |
+| 状态 | accepted |
+| 关联迭代 | Phase C Iteration 4 PTV Round 13 FIX-D |
+| 影响范围 | policy_registry, plan_compiler, contribution_set_builder, anomaly_injection, regression seed |
+
+### 背景与场景
+
+PTV Round 13 showed C21 failed because PAY_CVR discovery only drilled channel, while the expected current-run evidence was device=mobile. MC03 was already green through channel conversion, so adding device discovery without a merge policy would risk regressing channel multi-cause coverage. MC02/MC07 also exposed a seed/data mismatch: their June 1 ground truth included affiliate but weak affiliate injection was only applied on May 29.
+
+### 决策
+
+PAY_CVR broad discovery declares channel and device conversion lanes, then merges their contribution sets. For conversion-only merges, the selected candidate is the strongest verified conversion candidate across lanes instead of the first source; material channel conversion runners are retained only when the selected source is channel conversion. The weak affiliate multiplier also applies on LAGGED_OBSERVE_DATE so MC02/MC07 root-causes have supporting fact-table evidence.
+
+### 理由
+
+C21 requires device discovery before ranking can be meaningful. MC03 requires channel runners such as organic to survive merge, but C21 should not inherit channel noise when mobile is stronger. The affiliate weak-signal truth must be supported by seeded data rather than inferred from memory or ranking heuristics.
+
+### 被否决的方案
+
+Continuing to edit `ranking.py` was rejected because missing candidates cannot be recovered by ordering logic. Date-specific policy rules were rejected as overfitting. Leaving the MC02/MC07 affiliate mismatch in seed data was rejected because it would force the runtime to report a cause without current-run evidence.
+
+### 后续跟进
+
+Run the next PTV round to verify C21 and MC02/MC07 movement. If precision remains below gate, address broad candidate tail with a separate RULE-C-compliant round instead of folding ranking changes into this FIX-D.
+
 ## ADL-0051: Phase C review fixes keep lagged proxy explicit and align MC08 truth to injected data
 
 | 字段 | 值 |

@@ -165,23 +165,96 @@ def test_contribution_set_builder_drops_non_representative_source_tails() -> Non
     ]
 
 
-def test_contribution_set_builder_keeps_only_selected_conversion_source_representatives() -> None:
+def test_contribution_set_builder_uses_strongest_conversion_candidate_as_selected() -> None:
     paid_ads = _candidate("conversion_drop", "channel", "paid_ads", 0.29, ["run-1:E4_channel"])
     social_runner = _candidate("conversion_drop", "channel", "social", 0.28, ["run-1:E4_channel"])
     affiliate_runner = _candidate("conversion_drop", "channel", "affiliate", 0.24, ["run-1:E4_channel"])
-    mobile = _candidate("conversion_drop", "device", "mobile", 0.51, ["run-1:E4_device"])
+    mobile = _candidate(
+        "conversion_drop",
+        "device",
+        "mobile",
+        0.51,
+        ["run-1:E4_device"],
+        signal_severity=0.86,
+        eng_confidence=0.44,
+    )
+    desktop = _candidate(
+        "conversion_drop",
+        "device",
+        "desktop",
+        0.49,
+        ["run-1:E4_device"],
+        signal_severity=0.70,
+        eng_confidence=0.34,
+    )
 
     merged = ContributionSetBuilder().merge(
         run_id="run-1",
         source_sets=[
             ("run-1:E4_channel", _set(paid_ads, [paid_ads, social_runner, affiliate_runner], "run-1:E4_channel")),
+            ("run-1:E4_device", _set(mobile, [mobile, desktop], "run-1:E4_device")),
+        ],
+    )
+
+    assert (merged.selected_candidate.root_cause_type, merged.selected_candidate.dimension, merged.selected_candidate.element) == (
+        "conversion_drop",
+        "device",
+        "mobile",
+    )
+    assert [(c.root_cause_type, c.dimension, c.element) for c in merged.candidates] == [
+        ("conversion_drop", "device", "mobile"),
+    ]
+
+
+def test_contribution_set_builder_keeps_material_channel_conversion_runners_for_channel_selected_case() -> None:
+    social = _candidate(
+        "conversion_drop",
+        "channel",
+        "social",
+        0.68,
+        ["run-1:E4_channel"],
+        signal_severity=0.71,
+        eng_confidence=0.48,
+    )
+    organic = _candidate(
+        "conversion_drop",
+        "channel",
+        "organic",
+        0.31,
+        ["run-1:E4_channel"],
+        signal_severity=0.33,
+        eng_confidence=0.10,
+    )
+    affiliate_tail = _candidate(
+        "conversion_drop",
+        "channel",
+        "affiliate",
+        0.01,
+        ["run-1:E4_channel"],
+        signal_severity=0.01,
+        eng_confidence=0.0,
+    )
+    mobile = _candidate(
+        "conversion_drop",
+        "device",
+        "mobile",
+        0.53,
+        ["run-1:E4_device"],
+        signal_severity=0.24,
+        eng_confidence=0.13,
+    )
+
+    merged = ContributionSetBuilder().merge(
+        run_id="run-1",
+        source_sets=[
+            ("run-1:E4_channel", _set(social, [social, organic, affiliate_tail], "run-1:E4_channel")),
             ("run-1:E4_device", _set(mobile, [mobile], "run-1:E4_device")),
         ],
     )
 
     assert [(c.root_cause_type, c.dimension, c.element) for c in merged.candidates] == [
-        ("conversion_drop", "channel", "paid_ads"),
-        ("conversion_drop", "device", "mobile"),
+        ("conversion_drop", "channel", "social"),
+        ("conversion_drop", "channel", "organic"),
     ]
 
 

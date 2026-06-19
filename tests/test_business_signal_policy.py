@@ -268,7 +268,7 @@ def test_uv_interaction_discovery_policy_keeps_campaign_lane_for_non_interaction
     ]
 
 
-def test_pay_cvr_discovery_policy_uses_channel_conversion_lane_without_device_merge() -> None:
+def test_pay_cvr_discovery_policy_declares_channel_and_device_conversion_lanes() -> None:
     parsed = ParsedIntent(
         metric_id="pay_cvr",
         target_date="2026-05-28",
@@ -278,9 +278,13 @@ def test_pay_cvr_discovery_policy_uses_channel_conversion_lane_without_device_me
 
     policy = discovery_policy_from_intent(parsed)
 
-    assert policy.required_drilldowns == ("channel",)
+    assert policy.required_drilldowns == ("channel", "device")
     assert policy.first_signal_dimension == "channel"
     assert policy.first_signal_type == "conversion"
+    assert [(lane.dimension, lane.signal_type, lane.evidence_alias) for lane in policy.lanes] == [
+        ("channel", "conversion", "E4_channel"),
+        ("device", "conversion", "E4_device"),
+    ]
 
 
 def test_net_gmv_explicit_channel_policy_declares_multi_driver_lanes() -> None:

@@ -11,6 +11,7 @@ from metric_rca.domain.models import ContributionSet, RootCauseCandidate
 
 COMPOSITION_STRATEGY = "representative_source_merge_v1"
 _CHANNEL_RUNNER_FLOOR = 0.20
+_CONVERSION_CHANNEL_RUNNER_FLOOR = 0.20
 _INTERACTION_REPRESENTATIVE_FLOOR = 0.60
 
 
@@ -18,7 +19,11 @@ class ContributionSetBuilder:
     def merge(self, *, run_id: str, source_sets: list[tuple[str, ContributionSet]]) -> ContributionSet:
         if not source_sets:
             raise ValueError("CONTRIBUTION_SET_MISSING")
-        preferred_key = _candidate_key(source_sets[0][1].selected_candidate)
+        conversion_only_sources = _all_sources_are_conversion(source_sets)
+        preferred_key = _preferred_candidate_key(
+            source_sets,
+            conversion_only_sources=conversion_only_sources,
+        )
         candidates_by_key: dict[tuple[str, str | None, str | None], RootCauseCandidate] = {}
         representative_keys: list[tuple[str, str | None, str | None]] = []
         evidence_ids: list[str] = []
@@ -33,7 +38,14 @@ class ContributionSetBuilder:
                 evidence_ids.append(evidence_id)
             chain_evidence_ids.append(evidence_id)
             chains.extend(_chain_entries(evidence_id=evidence_id, contribution_set=contribution_set))
-            _extend_unique_keys(representative_keys, _source_representative_keys(contribution_set))
+            _extend_unique_keys(
+                representative_keys,
+                _source_representative_keys(
+                    contribution_set,
+                    preferred_key=preferred_key,
+                    conversion_only_sources=conversion_only_sources,
+                ),
+            )
             for candidate in contribution_set.candidates:
                 key = _candidate_key(candidate)
                 existing = candidates_by_key.get(key)
@@ -74,21 +86,70 @@ class ContributionSetBuilder:
         )
 
 
-def _source_representative_keys(contribution_set: ContributionSet) -> list[tuple[str, str | None, str | None]]:
+def _all_sources_are_conversion(source_sets: list[tuple[str, ContributionSet]]) -> bool:
+    candidates = [candidate for _, source_set in source_sets for candidate in source_set.candidates]
+    return bool(candidates) and all(
+        candidate.root_cause_type == RootCauseType.CONVERSION_DROP.value
+        for candidate in candidates
+    )
+
+
+def _preferred_candidate_key(
+    source_sets: list[tuple[str, ContributionSet]],
+    *,
+    conversion_only_sources: bool,
+) -> tuple[str, str | None, str | None]:
+    candidates = [candidate for _, source_set in source_sets for candidate in source_set.candidates]
+    if conversion_only_sources:
+        return _candidate_key(max(candidates, key=_candidate_strength_key))
+    return _candidate_key(source_sets[0][1].selected_candidate)
+
+
+def _candidate_strength_key(candidate: RootCauseCandidate) -> tuple[float, float, float]:
+    return (
+        float(candidate.eng_confidence),
+        float(candidate.contribution_pct),
+        float(candidate.signal_severity),
+    )
+
+
+def _source_representative_keys(
+    contribution_set: ContributionSet,
+    *,
+    preferred_key: tuple[str, str | None, str | None],
+    conversion_only_sources: bool,
+) -> list[tuple[str, str | None, str | None]]:
     selected_key = _candidate_key(contribution_set.selected_candidate)
+    if (
+        conversion_only_sources
+        and contribution_set.selected_candidate.root_cause_type == RootCauseType.CONVERSION_DROP.value
+        and selected_key != preferred_key
+    ):
+        return []
     keys = [selected_key]
     for candidate in contribution_set.candidates:
         key = _candidate_key(candidate)
         if key == selected_key:
             continue
-        if _is_material_source_runner(candidate):
+        if _is_material_source_runner(candidate, selected_key=selected_key):
             keys.append(key)
     return keys
 
 
-def _is_material_source_runner(candidate: RootCauseCandidate) -> bool:
+def _is_material_source_runner(
+    candidate: RootCauseCandidate,
+    *,
+    selected_key: tuple[str, str | None, str | None],
+) -> bool:
     if candidate.root_cause_type == RootCauseType.INTERACTION_CHANNEL_CATEGORY.value:
         return False
+    if candidate.root_cause_type == RootCauseType.CONVERSION_DROP.value:
+        return (
+            selected_key[0] == RootCauseType.CONVERSION_DROP.value
+            and selected_key[1] == "channel"
+            and candidate.dimension == "channel"
+            and float(candidate.contribution_pct) >= _CONVERSION_CHANNEL_RUNNER_FLOOR
+        )
     return (
         candidate.root_cause_type == RootCauseType.CAMPAIGN_TRAFFIC_DROP.value
         and candidate.dimension == "channel"
@@ -152,7 +213,7 @@ def _embed_material_campaign_channel_runners(
     material_pairs: list[tuple[str, str]] = []
     for key in representative_keys:
         candidate = candidates_by_key.get(key)
-        if candidate is None or not _is_material_source_runner(candidate):
+        if candidate is None or not _is_material_campaign_channel_runner(candidate):
             continue
         pair = _candidate_pair(candidate)
         if pair is not None and pair not in material_pairs:
@@ -169,6 +230,14 @@ def _embed_material_campaign_channel_runners(
         ):
             continue
         candidates_by_key[key] = _candidate_with_dimension_elements(candidate, material_pairs)
+
+
+def _is_material_campaign_channel_runner(candidate: RootCauseCandidate) -> bool:
+    return (
+        candidate.root_cause_type == RootCauseType.CAMPAIGN_TRAFFIC_DROP.value
+        and candidate.dimension == "channel"
+        and float(candidate.contribution_pct) >= _CHANNEL_RUNNER_FLOOR
+    )
 
 
 def _candidate_with_dimension_elements(

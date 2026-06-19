@@ -181,7 +181,7 @@ def lagged_campaign_multiplier(*, business_date: date, channel: str) -> tuple[fl
 
 
 def weak_signal_multiplier(*, business_date: date, channel: str) -> tuple[float, float]:
-    if business_date == MULTI_CAUSE_DATE and channel == "affiliate":
+    if business_date in {MULTI_CAUSE_DATE, LAGGED_OBSERVE_DATE} and channel == "affiliate":
         return 0.82, 0.85
     return 1.0, 1.0
 

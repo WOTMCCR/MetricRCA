@@ -101,7 +101,7 @@ def test_plan_compiler_builds_refund_discovery_even_with_nonstandard_strategy() 
     assert signal_action.dynamic is True
 
 
-def test_plan_compiler_builds_pay_cvr_channel_discovery_without_device_merge() -> None:
+def test_plan_compiler_builds_pay_cvr_channel_and_device_discovery_lanes() -> None:
     parsed = ParsedIntent(
         metric_id="pay_cvr",
         target_date=date(2026, 5, 28),
@@ -114,13 +114,14 @@ def test_plan_compiler_builds_pay_cvr_channel_discovery_without_device_merge() -
     drilldowns = [action.args.get("dimension") for action in plan.actions if action.kind == "drilldown_dimension"]
     signal_actions = [action for action in plan.actions if action.kind == "fetch_related_signal"]
     contribution_actions = [action for action in plan.actions if action.kind == "calculate_contribution"]
+    merge_action = next(action for action in plan.actions if action.kind == "merge_contribution_sets")
 
-    assert drilldowns == ["channel"]
-    assert [action.args["dimension"] for action in signal_actions] == ["channel"]
+    assert drilldowns == ["channel", "device"]
+    assert [action.args["dimension"] for action in signal_actions] == ["channel", "device"]
     assert all(action.args["signal_type"] == "conversion" for action in signal_actions)
-    assert [action.args["dimension"] for action in contribution_actions] == ["channel"]
-    assert "merge_contribution_sets" not in [action.kind for action in plan.actions]
-    assert contribution_actions[0].produces == ["E4"]
+    assert [action.args["dimension"] for action in contribution_actions] == ["channel", "device"]
+    assert [action.produces for action in contribution_actions] == [["E4_channel"], ["E4_device"]]
+    assert merge_action.args["source_evidence_aliases"] == ["E4_channel", "E4_device"]
 
 
 def test_plan_compiler_builds_broad_gmv_product_first_with_all_required_drilldowns() -> None:

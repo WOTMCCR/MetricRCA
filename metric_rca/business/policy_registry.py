@@ -487,6 +487,19 @@ UV_INTERACTION_DISCOVERY_LANES: tuple[DiscoveryLane, ...] = (
     ),
 )
 
+PAY_CVR_DISCOVERY_LANES: tuple[DiscoveryLane, ...] = (
+    DiscoveryLane(
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="conversion",
+        evidence_alias="E4_channel",
+    ),
+    DiscoveryLane(
+        dimension=DimensionId.DEVICE.value,
+        signal_type="conversion",
+        evidence_alias="E4_device",
+    ),
+)
+
 DEFAULT_DISCOVERY_POLICY_RULES: tuple[DiscoveryPolicyRule, ...] = (
     DiscoveryPolicyRule(
         metric_id=MetricId.UV.value,
@@ -501,10 +514,11 @@ DEFAULT_DISCOVERY_POLICY_RULES: tuple[DiscoveryPolicyRule, ...] = (
         metric_id=MetricId.PAY_CVR.value,
         question_family=None,
         analysis_strategy=None,
-        required_drilldowns=(DimensionId.CHANNEL.value,),
+        required_drilldowns=(DimensionId.CHANNEL.value, DimensionId.DEVICE.value),
         first_signal_dimension=DimensionId.CHANNEL.value,
         first_signal_type="conversion",
         enforce_first_signal_top_candidate=True,
+        lanes=PAY_CVR_DISCOVERY_LANES,
     ),
     DiscoveryPolicyRule(
         metric_id=MetricId.NET_GMV.value,

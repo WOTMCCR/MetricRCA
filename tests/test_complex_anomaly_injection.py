@@ -111,6 +111,7 @@ def test_complex_injection_functions_are_deterministic_and_exact() -> None:
     assert lagged_campaign_multiplier(business_date=LAGGED_DATE, channel="paid_ads") == (1.0, 1.0, 1.0, 1.0)
 
     assert weak_signal_multiplier(business_date=MULTI_CAUSE_DATE, channel="affiliate") == (0.82, 0.85)
+    assert weak_signal_multiplier(business_date=LAGGED_OBSERVE_DATE, channel="affiliate") == (0.82, 0.85)
     assert weak_signal_multiplier(business_date=MULTI_CAUSE_DATE, channel="paid_ads") == (1.0, 1.0)
     assert weak_signal_multiplier(business_date=MULTI_CAUSE_DATE, channel="affiliate") == (
         weak_signal_multiplier(business_date=MULTI_CAUSE_DATE, channel="affiliate")
@@ -239,6 +240,15 @@ def test_seed_applies_complex_injections_only_on_new_dates() -> None:
             affiliate_baseline = _traffic_channel_totals(conn, MULTI_CAUSE_DATE - timedelta(days=7), "affiliate")
             assert affiliate["uv"] / affiliate_baseline["uv"] < 0.90
             assert _pay_rate(affiliate) / _pay_rate(affiliate_baseline) < 0.95
+
+            lagged_affiliate = _traffic_channel_totals(conn, LAGGED_OBSERVE_DATE, "affiliate")
+            lagged_affiliate_baseline = _traffic_channel_totals(
+                conn,
+                LAGGED_OBSERVE_DATE - timedelta(days=7),
+                "affiliate",
+            )
+            assert lagged_affiliate["uv"] / lagged_affiliate_baseline["uv"] < 0.90
+            assert _pay_rate(lagged_affiliate) / _pay_rate(lagged_affiliate_baseline) < 0.95
 
             social_cvr = _traffic_channel_totals(conn, MULTI_CAUSE_CVR_DATE, "social")
             social_cvr_baseline = _traffic_channel_totals(conn, MULTI_CAUSE_CVR_DATE - timedelta(days=7), "social")
