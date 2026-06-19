@@ -1,0 +1,3412 @@
+{
+  "eval_id": "ptv-cycle-20260618-2358-round-11",
+  "cycle_id": "cycle-20260618-2358",
+  "round": 11,
+  "generated_at": "2026-06-19T17:14:28Z",
+  "analysis_source": {
+    "predictions": "eval_out/ptv/cycle-20260618-2358/round-11/predictions.jsonl",
+    "eval_result": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result.json",
+    "prediction_diff": "eval_out/ptv/cycle-20260618-2358/round-11/prediction_diff.json",
+    "round10_trajectory": "eval_out/ptv/cycle-20260618-2358/round-10/ptv_trajectory.jsonl",
+    "round10_diagnosis": "eval_out/ptv/cycle-20260618-2358/round-10/diagnosis.jsonl",
+    "round10_optimization_summary": "eval_out/ptv/cycle-20260618-2358/round-10/optimization_summary.json"
+  },
+  "input_hashes": {
+    "predictions": "sha256:c06e0e6e05f24e0fba41be5d45023b26f3c02e725f86da2a36d7a990587051a6",
+    "eval_result": "sha256:b9093ac1425a944f0394ce5220e14f4cd184be4d45b28c1e3b8c025da599121f",
+    "prediction_diff": "sha256:7813ecded61d40d3ca80dab971f9183855935648d8e6455c21a3f5e04fb29a96",
+    "round10_trajectory": "sha256:885c98b27231f9bb4c2635608218163bbe660c0cb424a3195c75fbf923e4bd23",
+    "round10_diagnosis": "sha256:bf3e3d78b723a5df24c2929d6cc39c8f8fc677a93db0a0c18e51dae7842c7021",
+    "round10_optimization_summary": "sha256:acea591ba650d7a1b3766aa44155f87892f00da0ed108ea2f78af6d67f51fb0c"
+  },
+  "gap_analyzer": {
+    "implementation": "metric_rca.evals.gap_analyzer.analyze_gaps",
+    "cli_used": false,
+    "cli_not_used_reason": "The existing CLI expects eval JSON at output_dir/{eval_id}.json, while this PTV round stores eval-result.json inside round-11; the same analyze_gaps() function was applied directly to predictions.jsonl and eval-result.json['cases']."
+  },
+  "summary": {
+    "total": 276,
+    "by_divergence": {
+      "correct": 267,
+      "overfit": 5,
+      "complexity_gap": 3,
+      "design_flaw": 1
+    },
+    "by_aspect": {
+      "intent": {
+        "correct": 46
+      },
+      "execution": {
+        "correct": 44,
+        "complexity_gap": 1,
+        "overfit": 1
+      },
+      "evidence": {
+        "correct": 46
+      },
+      "memory": {
+        "correct": 46
+      },
+      "outcome": {
+        "correct": 44,
+        "design_flaw": 1,
+        "overfit": 1
+      },
+      "multi_cause_outcome": {
+        "correct": 41,
+        "overfit": 3,
+        "complexity_gap": 2
+      }
+    },
+    "accuracy": 0.9674,
+    "design_flaw_count": 1,
+    "complexity_gap_count": 3,
+    "prediction_coverage": {
+      "lines": 276,
+      "cases": 46,
+      "expected_cases": 46,
+      "aspects": {
+        "evidence": 46,
+        "execution": 46,
+        "intent": 46,
+        "memory": 46,
+        "multi_cause_outcome": 46,
+        "outcome": 46
+      },
+      "all_six_aspects_predicted": true,
+      "missing_aspects_by_case": {},
+      "missing_prediction_cases": [],
+      "extra_prediction_cases": []
+    },
+    "gaps_scope": "gaps lists non-correct prediction-vs-actual divergences only; summary.total is all 276 aspect predictions."
+  },
+  "aggregate_metrics": {
+    "case_total": 46,
+    "completed_case_total": 46,
+    "completed_memory_case_total": 46,
+    "complete": true,
+    "intent_accuracy": 1.0,
+    "top1_rate": 0.869565,
+    "top3_rate": 0.891304,
+    "dominant_top1_rate": 0.869565,
+    "root_cause_set_recall_avg": 0.974638,
+    "root_cause_set_precision_avg": 0.75471,
+    "weighted_explanation_coverage_avg": 0.983043,
+    "top3_contains_all_major_causes_rate": 0.891304,
+    "anomaly_accuracy": 1.0,
+    "evidence_coverage_avg": 1.0,
+    "sql_safe_rate": 1.0,
+    "report_traceable_rate": 1.0,
+    "reflection_repair_ok": true,
+    "memory_pollution_ok": true,
+    "memory_hit_improvement": 0.0,
+    "dangerous_sql_blocked": true,
+    "no_anomaly_correct": true,
+    "per_family_gate": false,
+    "memory_treatment_gate": false,
+    "thresholds_met": false
+  },
+  "round10_effects": {
+    "fix_category_in_effect": "FIX-M",
+    "fix_commit": "6662db90765beca4d783a5fe8790540eb7c92ead",
+    "improved_metrics": [
+      "top3_rate",
+      "root_cause_set_precision_avg",
+      "top3_contains_all_major_causes_rate"
+    ],
+    "regressed_metrics": [
+      "root_cause_set_recall_avg",
+      "weighted_explanation_coverage_avg",
+      "memory_hit_improvement"
+    ],
+    "notable_improvements": {
+      "top3_rate": {
+        "round_10": 0.847826,
+        "round_11": 0.891304
+      },
+      "top3_contains_all_major_causes_rate": {
+        "round_10": 0.847826,
+        "round_11": 0.891304
+      },
+      "root_cause_set_precision_avg": {
+        "round_10": 0.653269,
+        "round_11": 0.75471
+      }
+    },
+    "interpretation": "Round 10 FIX-M helped aggregate top3/top3_contains and precision, fixing C21/RS01/RS02 top3. It did not move the multi_cause family gate and introduced/exposed MC02 and MC03 multi-cause quality regressions, so repeating FIX-M before discovery work is not justified."
+  },
+  "thresholds": {
+    "thresholds_met": false,
+    "classification": "mixed: aggregate top3/top3_contains and precision gates fail, plus the multi_cause family gate remains the dominant family blocker",
+    "source": "metric_rca/evals/runner.py::_thresholds_met and docs/ptv/bindings/metricrca.md",
+    "failures": [
+      {
+        "scope": "aggregate_metric",
+        "metric": "top3_rate",
+        "actual": 0.891304,
+        "threshold": ">= 0.90",
+        "passed": false,
+        "failing_cases": [
+          "MC01_gmv_multi_cause_overall",
+          "MC03_cvr_multi_signal_drop",
+          "MC04_gmv_weak_set",
+          "MC07_uv_weak_multi_driver",
+          "MC08_gmv_channel_category_mix"
+        ],
+        "distance_to_gate": 0.008696
+      },
+      {
+        "scope": "aggregate_metric",
+        "metric": "root_cause_set_precision_avg",
+        "actual": 0.75471,
+        "threshold": ">= 0.85",
+        "passed": false,
+        "failing_cases": [
+          "C06_gmv_multi_channel_drop",
+          "C07_gmv_category_channel_cross",
+          "C08_gmv_aov_drop",
+          "C09_gmv_uv_organic_drop",
+          "C14_net_gmv_gmv_driven",
+          "C21_cvr_discovery",
+          "C23_uv_organic_drop",
+          "C24_gmv_positive_spike",
+          "C25_refund_discovery",
+          "C26_ambiguous_intent",
+          "C27_composite_cause",
+          "C28_multi_day_drift",
+          "MC01_gmv_multi_cause_overall",
+          "MC02_uv_multi_channel_drop",
+          "MC03_cvr_multi_signal_drop",
+          "MC04_gmv_weak_set",
+          "MC05_gmv_lag_stockout_mix",
+          "MC08_gmv_channel_category_mix",
+          "IX02_gmv_interaction_discovery",
+          "RS01_gmv_residual_dual_mechanism",
+          "RS02_gmv_residual_discovery"
+        ],
+        "distance_to_gate": 0.09529,
+        "note": "Precision remains depressed by broad E4 candidate sets; Round 10 FIX-M improved precision from 0.653269 to 0.754710 but did not clear the gate."
+      },
+      {
+        "scope": "aggregate_metric",
+        "metric": "top3_contains_all_major_causes_rate",
+        "actual": 0.891304,
+        "threshold": ">= 0.90",
+        "passed": false,
+        "failing_cases": [
+          "MC01_gmv_multi_cause_overall",
+          "MC03_cvr_multi_signal_drop",
+          "MC04_gmv_weak_set",
+          "MC07_uv_weak_multi_driver",
+          "MC08_gmv_channel_category_mix"
+        ],
+        "distance_to_gate": 0.008696
+      },
+      {
+        "scope": "family_specific",
+        "metric": "per_family_gate.multi_cause.top3_rate",
+        "actual": 0.444444,
+        "threshold": ">= 0.85",
+        "passed": false,
+        "family": "multi_cause",
+        "failing_cases": [
+          "MC01_gmv_multi_cause_overall",
+          "MC03_cvr_multi_signal_drop",
+          "MC04_gmv_weak_set",
+          "MC07_uv_weak_multi_driver",
+          "MC08_gmv_channel_category_mix"
+        ],
+        "note": "Runner family grouping includes RS01 in multi_cause; docs binding MC-prefixed gate is also 4/8 and fails the required 6/8."
+      }
+    ],
+    "passes": [
+      {
+        "scope": "aggregate_metric",
+        "metric": "intent_accuracy",
+        "actual": 1.0,
+        "threshold": "== 1.0",
+        "passed": true
+      },
+      {
+        "scope": "aggregate_metric",
+        "metric": "top1_rate",
+        "actual": 0.869565,
+        "threshold": ">= 0.80",
+        "passed": true,
+        "failing_cases": [
+          "C21_cvr_discovery",
+          "C23_uv_organic_drop",
+          "MC02_uv_multi_channel_drop",
+          "MC04_gmv_weak_set",
+          "MC06_net_gmv_multi_driver",
+          "IX02_gmv_interaction_discovery"
+        ]
+      },
+      {
+        "scope": "aggregate_metric",
+        "metric": "dominant_top1_rate",
+        "actual": 0.869565,
+        "threshold": ">= 0.80",
+        "passed": true
+      },
+      {
+        "scope": "aggregate_metric",
+        "metric": "root_cause_set_recall_avg",
+        "actual": 0.974638,
+        "threshold": ">= 0.85",
+        "passed": true,
+        "failing_cases": [
+          "MC02_uv_multi_channel_drop",
+          "MC03_cvr_multi_signal_drop",
+          "MC07_uv_weak_multi_driver"
+        ]
+      },
+      {
+        "scope": "aggregate_metric",
+        "metric": "weighted_explanation_coverage_avg",
+        "actual": 0.983043,
+        "threshold": ">= 0.85",
+        "passed": true,
+        "failing_cases": [
+          "MC03_cvr_multi_signal_drop",
+          "MC07_uv_weak_multi_driver"
+        ]
+      },
+      {
+        "scope": "aggregate_metric",
+        "metric": "anomaly_accuracy",
+        "actual": 1.0,
+        "threshold": "== 1.0",
+        "passed": true
+      },
+      {
+        "scope": "aggregate_metric",
+        "metric": "evidence_coverage_avg",
+        "actual": 1.0,
+        "threshold": "== 1.0",
+        "passed": true
+      },
+      {
+        "scope": "aggregate_metric",
+        "metric": "sql_safe_rate",
+        "actual": 1.0,
+        "threshold": "== 1.0",
+        "passed": true
+      },
+      {
+        "scope": "aggregate_metric",
+        "metric": "report_traceable_rate",
+        "actual": 1.0,
+        "threshold": "== 1.0",
+        "passed": true
+      },
+      {
+        "scope": "aggregate_metric",
+        "metric": "memory_hit_improvement",
+        "actual": 0.0,
+        "threshold": ">= 0.0",
+        "passed": true
+      },
+      {
+        "scope": "safety_gate",
+        "metric": "dangerous_sql_blocked",
+        "actual": true,
+        "threshold": "is true",
+        "passed": true
+      },
+      {
+        "scope": "case_family",
+        "metric": "no_anomaly_correct",
+        "actual": true,
+        "threshold": "is true",
+        "passed": true
+      }
+    ],
+    "non_blocking_observations": [
+      {
+        "scope": "suite_specific",
+        "metric": "memory_treatment_gate",
+        "actual": false,
+        "threshold": "required only for eval_suite=memory-treatment",
+        "passed": true,
+        "blocking_in_regression_suite": false
+      }
+    ]
+  },
+  "family_gates": {
+    "runner_per_family": {
+      "adtributor": {
+        "case_total": 2,
+        "top3_rate": 1.0,
+        "anomaly_rate": 1.0,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 68.0
+      },
+      "ambiguous": {
+        "case_total": 1,
+        "top3_rate": 1.0,
+        "anomaly_rate": 1.0,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 68.0
+      },
+      "campaign": {
+        "case_total": 1,
+        "top3_rate": 1.0,
+        "anomaly_rate": 1.0,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 12.0
+      },
+      "composite": {
+        "case_total": 1,
+        "top3_rate": 1.0,
+        "anomaly_rate": 1.0,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 68.0
+      },
+      "conversion": {
+        "case_total": 1,
+        "top3_rate": 1.0,
+        "anomaly_rate": 1.0,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 8.0
+      },
+      "inventory": {
+        "case_total": 1,
+        "top3_rate": 1.0,
+        "anomaly_rate": 1.0,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 12.0
+      },
+      "multi_cause": {
+        "case_total": 9,
+        "top3_rate": 0.444444,
+        "anomaly_rate": 1.0,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 68.0
+      },
+      "multi_day": {
+        "case_total": 1,
+        "top3_rate": 1.0,
+        "anomaly_rate": 1.0,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 68.0
+      },
+      "net_gmv": {
+        "case_total": 2,
+        "top3_rate": 1.0,
+        "anomaly_rate": 1.0,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 34.0
+      },
+      "no_anomaly": {
+        "case_total": 5,
+        "top3_rate": 1.0,
+        "anomaly_rate": 1.0,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 2.0
+      },
+      "phase_c": {
+        "case_total": 8,
+        "top3_rate": 1.0,
+        "anomaly_rate": 1.0,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 68.0
+      },
+      "positive_anomaly": {
+        "case_total": 1,
+        "top3_rate": 1.0,
+        "anomaly_rate": 1.0,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 68.0
+      },
+      "quality": {
+        "case_total": 1,
+        "top3_rate": 1.0,
+        "anomaly_rate": 1.0,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 8.0
+      },
+      "regression": {
+        "case_total": 12,
+        "top3_rate": 1.0,
+        "anomaly_rate": 1.0,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 38.0
+      }
+    },
+    "runner_family_failures": {
+      "multi_cause": {
+        "metrics": {
+          "case_total": 9,
+          "top3_rate": 0.444444,
+          "anomaly_rate": 1.0,
+          "evidence_coverage_rate": 1.0,
+          "memory_pollution_ok": true,
+          "p95_latency_ms": 0.0,
+          "p95_sql_count": 68.0
+        },
+        "reason": "non-strict family top3_rate must be >= 0.85",
+        "failing_cases": [
+          "MC01_gmv_multi_cause_overall",
+          "MC03_cvr_multi_signal_drop",
+          "MC04_gmv_weak_set",
+          "MC07_uv_weak_multi_driver",
+          "MC08_gmv_channel_category_mix"
+        ]
+      }
+    },
+    "ptv_binding_prefixed_family_gates": {
+      "multi_cause_prefixed": {
+        "passed": false,
+        "actual": "3/8",
+        "threshold": "6/8",
+        "failing_cases": [
+          "MC01_gmv_multi_cause_overall",
+          "MC03_cvr_multi_signal_drop",
+          "MC04_gmv_weak_set",
+          "MC07_uv_weak_multi_driver",
+          "MC08_gmv_channel_category_mix"
+        ]
+      },
+      "interaction_prefixed": {
+        "passed": true,
+        "actual": "4/4",
+        "threshold": "2/4",
+        "failing_cases": []
+      },
+      "lagged_prefixed": {
+        "passed": true,
+        "actual": "2/2",
+        "threshold": "1/2",
+        "failing_cases": []
+      },
+      "weak_signal_prefixed": {
+        "passed": true,
+        "actual": "2/2",
+        "threshold": "1/2",
+        "failing_cases": []
+      }
+    }
+  },
+  "failing_cases": [
+    {
+      "case_id": "C06_gmv_multi_channel_drop",
+      "scenario_family": "adtributor",
+      "status": "succeeded",
+      "metric_id": "gmv",
+      "failed_metrics": [
+        "root_cause_set_precision=0.428571"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 1,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.428571,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.967695835847918,
+        "evidence_support": 1.0,
+        "eng_confidence": 0.967695835847918,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "channel",
+            "affiliate"
+          ],
+          [
+            "channel",
+            "social"
+          ],
+          [
+            "category",
+            "electronics"
+          ],
+          [
+            "product",
+            "2"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 1.0
+        }
+      ],
+      "trace_step_count": 24,
+      "sql_count": 68,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/C06_gmv_multi_channel_drop.json"
+    },
+    {
+      "case_id": "C07_gmv_category_channel_cross",
+      "scenario_family": "adtributor",
+      "status": "succeeded",
+      "metric_id": "gmv",
+      "failed_metrics": [
+        "root_cause_set_precision=0.428571"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 1,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.428571,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.967695835847918,
+        "evidence_support": 1.0,
+        "eng_confidence": 0.967695835847918,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "channel",
+            "affiliate"
+          ],
+          [
+            "channel",
+            "social"
+          ],
+          [
+            "category",
+            "electronics"
+          ],
+          [
+            "product",
+            "2"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 1.0
+        }
+      ],
+      "trace_step_count": 24,
+      "sql_count": 68,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/C07_gmv_category_channel_cross.json"
+    },
+    {
+      "case_id": "C08_gmv_aov_drop",
+      "scenario_family": "regression",
+      "status": "succeeded",
+      "metric_id": "gmv",
+      "failed_metrics": [
+        "root_cause_set_precision=0.2"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 1,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.2,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "aov_drop",
+        "dimension": "product",
+        "element": "2",
+        "contribution_pct": 1.0,
+        "signal_severity": 1.0,
+        "evidence_support": 1.0,
+        "eng_confidence": 1.0,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "product",
+            "2"
+          ],
+          [
+            "product",
+            "5"
+          ],
+          [
+            "product",
+            "1"
+          ],
+          [
+            "category",
+            "electronics"
+          ],
+          [
+            "channel",
+            "paid_ads"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "aov_drop",
+          "dimension": "product",
+          "element": "2",
+          "weight": 1.0
+        }
+      ],
+      "trace_step_count": 15,
+      "sql_count": 38,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/C08_gmv_aov_drop.json"
+    },
+    {
+      "case_id": "C09_gmv_uv_organic_drop",
+      "scenario_family": "regression",
+      "status": "succeeded",
+      "metric_id": "gmv",
+      "failed_metrics": [
+        "root_cause_set_precision=0.142857"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 1,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.142857,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "organic",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.951085659747077,
+        "evidence_support": 1.0,
+        "eng_confidence": 0.951085659747077,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "organic"
+          ],
+          [
+            "channel",
+            "affiliate"
+          ],
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "channel",
+            "social"
+          ],
+          [
+            "category",
+            "electronics"
+          ],
+          [
+            "product",
+            "2"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "organic",
+          "weight": 1.0
+        }
+      ],
+      "trace_step_count": 24,
+      "sql_count": 68,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/C09_gmv_uv_organic_drop.json"
+    },
+    {
+      "case_id": "C14_net_gmv_gmv_driven",
+      "scenario_family": "net_gmv",
+      "status": "succeeded",
+      "metric_id": "net_gmv",
+      "failed_metrics": [
+        "root_cause_set_precision=0.6"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 1,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.6,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.983029275034552,
+        "evidence_support": 1.0,
+        "eng_confidence": 0.983029275034552,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "channel",
+            "affiliate"
+          ],
+          [
+            "channel",
+            "social"
+          ],
+          [
+            "category",
+            "electronics"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 1.0
+        }
+      ],
+      "trace_step_count": 13,
+      "sql_count": 34,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/C14_net_gmv_gmv_driven.json"
+    },
+    {
+      "case_id": "C21_cvr_discovery",
+      "scenario_family": "regression",
+      "status": "succeeded",
+      "metric_id": "pay_cvr",
+      "failed_metrics": [
+        "top1_ok=0",
+        "dominant_top1_ok=0",
+        "root_cause_set_precision=0.5"
+      ],
+      "scores": {
+        "top1_ok": 0,
+        "top3_ok": 1,
+        "dominant_top1_ok": 0,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.5,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "conversion_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "contribution_pct": 0.2874367012298047,
+        "signal_severity": 0.8526466380543634,
+        "evidence_support": 1.0,
+        "eng_confidence": 0.5555688913419738,
+        "explanatory_power": null,
+        "dimension_elements": []
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "conversion_drop",
+          "dimension": "device",
+          "element": "mobile",
+          "weight": 1.0
+        }
+      ],
+      "trace_step_count": 11,
+      "sql_count": 18,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/C21_cvr_discovery.json"
+    },
+    {
+      "case_id": "C23_uv_organic_drop",
+      "scenario_family": "regression",
+      "status": "succeeded",
+      "metric_id": "uv",
+      "failed_metrics": [
+        "top1_ok=0",
+        "dominant_top1_ok=0",
+        "root_cause_set_precision=0.5"
+      ],
+      "scores": {
+        "top1_ok": 0,
+        "top3_ok": 1,
+        "dominant_top1_ok": 0,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.5,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "interaction_channel_category",
+        "dimension": "channel",
+        "element": "organic",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.7582700844909065,
+        "evidence_support": 1.0,
+        "eng_confidence": 1.0,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "organic"
+          ],
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "category",
+            "electronics"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "organic",
+          "weight": 1.0
+        }
+      ],
+      "trace_step_count": 11,
+      "sql_count": 18,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/C23_uv_organic_drop.json"
+    },
+    {
+      "case_id": "C24_gmv_positive_spike",
+      "scenario_family": "positive_anomaly",
+      "status": "succeeded",
+      "metric_id": "gmv",
+      "failed_metrics": [
+        "root_cause_set_precision=0.25"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 1,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.25,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "contribution_pct": 1.0,
+        "signal_severity": 1.0,
+        "evidence_support": 1.0,
+        "eng_confidence": 1.0,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "category",
+            "electronics"
+          ],
+          [
+            "product",
+            "2"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 1.0
+        }
+      ],
+      "trace_step_count": 24,
+      "sql_count": 68,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/C24_gmv_positive_spike.json"
+    },
+    {
+      "case_id": "C25_refund_discovery",
+      "scenario_family": "regression",
+      "status": "succeeded",
+      "metric_id": "refund_rate",
+      "failed_metrics": [
+        "root_cause_set_precision=0.2"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 1,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.2,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "complaint_or_quality_issue",
+        "dimension": "product",
+        "element": "1",
+        "contribution_pct": 0.29119218151222476,
+        "signal_severity": 1.0,
+        "evidence_support": 1.0,
+        "eng_confidence": 0.3359582627851865,
+        "explanatory_power": null,
+        "dimension_elements": []
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "complaint_or_quality_issue",
+          "dimension": "product",
+          "element": "1",
+          "weight": 1.0
+        }
+      ],
+      "trace_step_count": 6,
+      "sql_count": 10,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/C25_refund_discovery.json"
+    },
+    {
+      "case_id": "C26_ambiguous_intent",
+      "scenario_family": "ambiguous",
+      "status": "succeeded",
+      "metric_id": "gmv",
+      "failed_metrics": [
+        "root_cause_set_precision=0.428571"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 1,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.428571,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.967695835847918,
+        "evidence_support": 1.0,
+        "eng_confidence": 0.967695835847918,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "channel",
+            "affiliate"
+          ],
+          [
+            "channel",
+            "social"
+          ],
+          [
+            "category",
+            "electronics"
+          ],
+          [
+            "product",
+            "2"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 1.0
+        }
+      ],
+      "trace_step_count": 24,
+      "sql_count": 68,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/C26_ambiguous_intent.json"
+    },
+    {
+      "case_id": "C27_composite_cause",
+      "scenario_family": "composite",
+      "status": "succeeded",
+      "metric_id": "gmv",
+      "failed_metrics": [
+        "root_cause_set_precision=0.428571"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 1,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.428571,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.967695835847918,
+        "evidence_support": 1.0,
+        "eng_confidence": 0.967695835847918,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "channel",
+            "affiliate"
+          ],
+          [
+            "channel",
+            "social"
+          ],
+          [
+            "category",
+            "electronics"
+          ],
+          [
+            "product",
+            "2"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 1.0
+        }
+      ],
+      "trace_step_count": 24,
+      "sql_count": 68,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/C27_composite_cause.json"
+    },
+    {
+      "case_id": "C28_multi_day_drift",
+      "scenario_family": "multi_day",
+      "status": "succeeded",
+      "metric_id": "gmv",
+      "failed_metrics": [
+        "root_cause_set_precision=0.142857"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 1,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.142857,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "organic",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.951085659747077,
+        "evidence_support": 1.0,
+        "eng_confidence": 0.951085659747077,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "organic"
+          ],
+          [
+            "channel",
+            "affiliate"
+          ],
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "channel",
+            "social"
+          ],
+          [
+            "category",
+            "electronics"
+          ],
+          [
+            "product",
+            "2"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "organic",
+          "weight": 1.0
+        }
+      ],
+      "trace_step_count": 24,
+      "sql_count": 68,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/C28_multi_day_drift.json"
+    },
+    {
+      "case_id": "IX02_gmv_interaction_discovery",
+      "scenario_family": "phase_c",
+      "status": "succeeded",
+      "metric_id": "gmv",
+      "failed_metrics": [
+        "top1_ok=0",
+        "dominant_top1_ok=0",
+        "root_cause_set_precision=0.333333"
+      ],
+      "scores": {
+        "top1_ok": 0,
+        "top3_ok": 1,
+        "dominant_top1_ok": 0,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.333333,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.7525891248337067,
+        "evidence_support": 1.0,
+        "eng_confidence": 1.0,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "category",
+            "electronics"
+          ],
+          [
+            "product",
+            "2"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "interaction_channel_category",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 1.0
+        }
+      ],
+      "trace_step_count": 24,
+      "sql_count": 68,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/IX02_gmv_interaction_discovery.json"
+    },
+    {
+      "case_id": "MC01_gmv_multi_cause_overall",
+      "scenario_family": "multi_cause",
+      "status": "succeeded",
+      "metric_id": "gmv",
+      "failed_metrics": [
+        "top3_ok=0",
+        "top3_contains_all_major_causes=0",
+        "root_cause_set_precision=0.8"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 0,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.8,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 0,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.4400983221117879,
+        "evidence_support": 1.0,
+        "eng_confidence": 0.4400983221117879,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "category",
+            "electronics"
+          ],
+          [
+            "product",
+            "2"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 0.48
+        },
+        {
+          "root_cause_type": "stockout",
+          "dimension": "category",
+          "element": "electronics",
+          "weight": 0.32
+        },
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "affiliate",
+          "weight": 0.2
+        }
+      ],
+      "trace_step_count": 24,
+      "sql_count": 68,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/MC01_gmv_multi_cause_overall.json"
+    },
+    {
+      "case_id": "MC02_uv_multi_channel_drop",
+      "scenario_family": "multi_cause",
+      "status": "succeeded",
+      "metric_id": "uv",
+      "failed_metrics": [
+        "top1_ok=0",
+        "dominant_top1_ok=0",
+        "root_cause_set_recall=0.666667",
+        "root_cause_set_precision=0.333333"
+      ],
+      "scores": {
+        "top1_ok": 0,
+        "top3_ok": 1,
+        "dominant_top1_ok": 0,
+        "root_cause_set_recall": 0.666667,
+        "root_cause_set_precision": 0.333333,
+        "weighted_explanation_coverage": 0.85,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "interaction_channel_category",
+        "dimension": "channel",
+        "element": "social",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.6282914880587875,
+        "evidence_support": 1.0,
+        "eng_confidence": 1.0,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "social"
+          ],
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "category",
+            "electronics"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 0.5
+        },
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "social",
+          "weight": 0.35
+        },
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "affiliate",
+          "weight": 0.15
+        }
+      ],
+      "trace_step_count": 11,
+      "sql_count": 18,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/MC02_uv_multi_channel_drop.json"
+    },
+    {
+      "case_id": "MC03_cvr_multi_signal_drop",
+      "scenario_family": "multi_cause",
+      "status": "succeeded",
+      "metric_id": "pay_cvr",
+      "failed_metrics": [
+        "top3_ok=0",
+        "top3_contains_all_major_causes=0",
+        "root_cause_set_recall=0.5",
+        "root_cause_set_precision=0.5",
+        "weighted_explanation_coverage=0.67"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 0,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 0.5,
+        "root_cause_set_precision": 0.5,
+        "weighted_explanation_coverage": 0.67,
+        "top3_contains_all_major_causes": 0,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "conversion_drop",
+        "dimension": "channel",
+        "element": "social",
+        "contribution_pct": 0.6754416349151366,
+        "signal_severity": 0.7070340826686005,
+        "evidence_support": 1.0,
+        "eng_confidence": 1.0,
+        "explanatory_power": null,
+        "dimension_elements": []
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "conversion_drop",
+          "dimension": "channel",
+          "element": "social",
+          "weight": 0.67
+        },
+        {
+          "root_cause_type": "conversion_drop",
+          "dimension": "channel",
+          "element": "organic",
+          "weight": 0.33
+        }
+      ],
+      "trace_step_count": 11,
+      "sql_count": 18,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/MC03_cvr_multi_signal_drop.json"
+    },
+    {
+      "case_id": "MC04_gmv_weak_set",
+      "scenario_family": "multi_cause",
+      "status": "succeeded",
+      "metric_id": "gmv",
+      "failed_metrics": [
+        "top1_ok=0",
+        "top3_ok=0",
+        "dominant_top1_ok=0",
+        "top3_contains_all_major_causes=0",
+        "root_cause_set_precision=0.4"
+      ],
+      "scores": {
+        "top1_ok": 0,
+        "top3_ok": 0,
+        "dominant_top1_ok": 0,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.4,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 0,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.4400983221117879,
+        "evidence_support": 1.0,
+        "eng_confidence": 0.4400983221117879,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "category",
+            "electronics"
+          ],
+          [
+            "product",
+            "2"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "affiliate",
+          "weight": 0.55
+        },
+        {
+          "root_cause_type": "conversion_drop",
+          "dimension": "channel",
+          "element": "affiliate",
+          "weight": 0.45
+        }
+      ],
+      "trace_step_count": 24,
+      "sql_count": 68,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/MC04_gmv_weak_set.json"
+    },
+    {
+      "case_id": "MC05_gmv_lag_stockout_mix",
+      "scenario_family": "multi_cause",
+      "status": "succeeded",
+      "metric_id": "gmv",
+      "failed_metrics": [
+        "root_cause_set_precision=0.8"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 1,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.8,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "social",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.6858638743455497,
+        "evidence_support": 1.0,
+        "eng_confidence": 0.6858638743455497,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "social"
+          ],
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "category",
+            "electronics"
+          ],
+          [
+            "product",
+            "2"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "social",
+          "weight": 0.45
+        },
+        {
+          "root_cause_type": "stockout",
+          "dimension": "category",
+          "element": "electronics",
+          "weight": 0.35
+        },
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 0.2
+        }
+      ],
+      "trace_step_count": 24,
+      "sql_count": 68,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/MC05_gmv_lag_stockout_mix.json"
+    },
+    {
+      "case_id": "MC06_net_gmv_multi_driver",
+      "scenario_family": "multi_cause",
+      "status": "succeeded",
+      "metric_id": "net_gmv",
+      "failed_metrics": [
+        "top1_ok=0",
+        "dominant_top1_ok=0"
+      ],
+      "scores": {
+        "top1_ok": 0,
+        "top3_ok": 1,
+        "dominant_top1_ok": 0,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 1.0,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "stockout",
+        "dimension": "category",
+        "element": "electronics",
+        "contribution_pct": 1.0,
+        "signal_severity": 1.0,
+        "evidence_support": 1.0,
+        "eng_confidence": 1.0,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "category",
+            "electronics"
+          ],
+          [
+            "category",
+            "fashion"
+          ],
+          [
+            "channel",
+            "paid_ads"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 0.5
+        },
+        {
+          "root_cause_type": "stockout",
+          "dimension": "category",
+          "element": "electronics",
+          "weight": 0.3
+        },
+        {
+          "root_cause_type": "conversion_drop",
+          "dimension": "channel",
+          "element": "affiliate",
+          "weight": 0.2
+        }
+      ],
+      "trace_step_count": 13,
+      "sql_count": 34,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/MC06_net_gmv_multi_driver.json"
+    },
+    {
+      "case_id": "MC07_uv_weak_multi_driver",
+      "scenario_family": "multi_cause",
+      "status": "succeeded",
+      "metric_id": "uv",
+      "failed_metrics": [
+        "top3_ok=0",
+        "top3_contains_all_major_causes=0",
+        "root_cause_set_recall=0.666667",
+        "weighted_explanation_coverage=0.7"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 0,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 0.666667,
+        "root_cause_set_precision": 1.0,
+        "weighted_explanation_coverage": 0.7,
+        "top3_contains_all_major_causes": 0,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "social",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.6282914880587875,
+        "evidence_support": 1.0,
+        "eng_confidence": 1.0,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "social"
+          ],
+          [
+            "channel",
+            "paid_ads"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "social",
+          "weight": 0.45
+        },
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "affiliate",
+          "weight": 0.3
+        },
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 0.25
+        }
+      ],
+      "trace_step_count": 6,
+      "sql_count": 10,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/MC07_uv_weak_multi_driver.json"
+    },
+    {
+      "case_id": "MC08_gmv_channel_category_mix",
+      "scenario_family": "multi_cause",
+      "status": "succeeded",
+      "metric_id": "gmv",
+      "failed_metrics": [
+        "top3_ok=0",
+        "top3_contains_all_major_causes=0",
+        "root_cause_set_precision=0.8"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 0,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.8,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 0,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.4400983221117879,
+        "evidence_support": 1.0,
+        "eng_confidence": 0.4400983221117879,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "category",
+            "electronics"
+          ],
+          [
+            "product",
+            "2"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 0.45
+        },
+        {
+          "root_cause_type": "stockout",
+          "dimension": "category",
+          "element": "electronics",
+          "weight": 0.35
+        },
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "affiliate",
+          "weight": 0.2
+        }
+      ],
+      "trace_step_count": 24,
+      "sql_count": 68,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/MC08_gmv_channel_category_mix.json"
+    },
+    {
+      "case_id": "RS01_gmv_residual_dual_mechanism",
+      "scenario_family": "multi_cause",
+      "status": "succeeded",
+      "metric_id": "gmv",
+      "failed_metrics": [
+        "root_cause_set_precision=0.75"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 1,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.75,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.8171986743415315,
+        "evidence_support": 1.0,
+        "eng_confidence": 1.0,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "category",
+            "fashion"
+          ],
+          [
+            "product",
+            "5"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 0.58
+        },
+        {
+          "root_cause_type": "aov_drop",
+          "dimension": "category",
+          "element": "fashion",
+          "weight": 0.42
+        }
+      ],
+      "trace_step_count": 24,
+      "sql_count": 68,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/RS01_gmv_residual_dual_mechanism.json"
+    },
+    {
+      "case_id": "RS02_gmv_residual_discovery",
+      "scenario_family": "phase_c",
+      "status": "succeeded",
+      "metric_id": "gmv",
+      "failed_metrics": [
+        "root_cause_set_precision=0.75"
+      ],
+      "scores": {
+        "top1_ok": 1,
+        "top3_ok": 1,
+        "dominant_top1_ok": 1,
+        "root_cause_set_recall": 1.0,
+        "root_cause_set_precision": 0.75,
+        "weighted_explanation_coverage": 1.0,
+        "top3_contains_all_major_causes": 1,
+        "evidence_coverage": 1.0
+      },
+      "selected_candidate": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "contribution_pct": 1.0,
+        "signal_severity": 0.8171986743415315,
+        "evidence_support": 1.0,
+        "eng_confidence": 1.0,
+        "explanatory_power": 1.0,
+        "dimension_elements": [
+          [
+            "channel",
+            "paid_ads"
+          ],
+          [
+            "category",
+            "fashion"
+          ],
+          [
+            "product",
+            "5"
+          ]
+        ]
+      },
+      "expected_root_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 0.58
+        },
+        {
+          "root_cause_type": "aov_drop",
+          "dimension": "category",
+          "element": "fashion",
+          "weight": 0.42
+        }
+      ],
+      "trace_step_count": 24,
+      "sql_count": 68,
+      "tool_sequence": [
+        "detect_anomaly",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes"
+      ],
+      "artifact_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/cases/RS02_gmv_residual_discovery.json"
+    }
+  ],
+  "prediction_vs_actual": {
+    "non_correct_count": 9,
+    "non_correct_gaps": [
+      {
+        "case_id": "C21_cvr_discovery",
+        "aspect": "multi_cause_outcome",
+        "divergence": "overfit",
+        "predicted": {
+          "root_causes": [
+            {
+              "root_cause_type": "conversion_drop",
+              "dimension": "channel",
+              "element": "paid_ads",
+              "source": "selected_candidate"
+            }
+          ],
+          "top3_ok": false,
+          "top3_contains_all_major_causes": false,
+          "root_cause_set_recall": 1.0,
+          "root_cause_set_precision": 0.166667,
+          "weighted_explanation_coverage": 1.0,
+          "observed_candidate_count_hint": 1,
+          "round11_basis": {
+            "round": 11,
+            "head": "2cef642d410a",
+            "basis_fix_commit": "6662db90765b",
+            "round10_observed_status": "succeeded",
+            "round10_failure_clusters": [
+              "top1_ordering_case_specific"
+            ],
+            "round10_prediction_divergences": [],
+            "fix_category_in_effect": "FIX-M"
+          }
+        },
+        "actual": {
+          "top3_ok": true,
+          "top3_contains_all_major_causes": true,
+          "root_cause_set_recall": 1.0,
+          "weighted_explanation_coverage": 1.0
+        },
+        "detail": "predicted multi-cause top3 fail but actual pass"
+      },
+      {
+        "case_id": "MC02_uv_multi_channel_drop",
+        "aspect": "execution",
+        "divergence": "complexity_gap",
+        "predicted": {
+          "status": "succeeded",
+          "step_count": 6,
+          "sql_count": 10,
+          "tool_sequence": [
+            "detect_anomaly",
+            "drilldown_dimension",
+            "select_signal_element",
+            "fetch_related_signal",
+            "calculate_contribution",
+            "rank_root_causes"
+          ],
+          "compiled_scope_mode": "single_dimension_dynamic_discovery",
+          "critical_decisions": [
+            "Round10 observed 6 tools / 6 trace steps",
+            "single_E4_path",
+            "plan budget remains governed by RcaPlanCompiler._plan_budget for single_dimension_dynamic_discovery"
+          ],
+          "round11_basis": {
+            "round": 11,
+            "head": "2cef642d410a",
+            "basis_fix_commit": "6662db90765b",
+            "round10_observed_status": "succeeded",
+            "round10_failure_clusters": [
+              "weak_or_minor_cause_discovery"
+            ],
+            "round10_prediction_divergences": [
+              "multi_cause_outcome:complexity_gap"
+            ],
+            "fix_category_in_effect": "FIX-M"
+          }
+        },
+        "actual": {
+          "trace_step_count": 11
+        },
+        "detail": "more steps than predicted (predicted=6, actual=11, +5)"
+      },
+      {
+        "case_id": "MC02_uv_multi_channel_drop",
+        "aspect": "outcome",
+        "divergence": "design_flaw",
+        "predicted": {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "social",
+          "status": "succeeded",
+          "top1_ok": true,
+          "anomaly_ok": true,
+          "intent_ok": true,
+          "selected_candidate": {
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "social",
+            "contribution_pct": 1.0,
+            "signal_severity": 0.628291,
+            "eng_confidence": 1.0,
+            "explanatory_power": 1.0,
+            "dimension_elements": [
+              [
+                "channel",
+                "social"
+              ],
+              [
+                "channel",
+                "paid_ads"
+              ]
+            ]
+          },
+          "round11_basis": {
+            "round": 11,
+            "head": "2cef642d410a",
+            "basis_fix_commit": "6662db90765b",
+            "round10_observed_status": "succeeded",
+            "round10_failure_clusters": [
+              "weak_or_minor_cause_discovery"
+            ],
+            "round10_prediction_divergences": [
+              "multi_cause_outcome:complexity_gap"
+            ],
+            "fix_category_in_effect": "FIX-M"
+          }
+        },
+        "actual": {
+          "root_cause_type": "interaction_channel_category",
+          "dimension": "channel",
+          "element": "social",
+          "top1_ok": false,
+          "anomaly_ok": true,
+          "intent_ok": true
+        },
+        "detail": "wrong root cause type: predicted campaign_traffic_drop, got interaction_channel_category"
+      },
+      {
+        "case_id": "MC02_uv_multi_channel_drop",
+        "aspect": "multi_cause_outcome",
+        "divergence": "complexity_gap",
+        "predicted": {
+          "root_causes": [
+            {
+              "root_cause_type": "campaign_traffic_drop",
+              "dimension": "channel",
+              "element": "social",
+              "source": "selected_candidate"
+            },
+            {
+              "root_cause_type": "campaign_traffic_drop",
+              "dimension": "channel",
+              "element": "social",
+              "source": "candidate_dimension_elements"
+            }
+          ],
+          "top3_ok": true,
+          "top3_contains_all_major_causes": true,
+          "root_cause_set_recall": 0.666667,
+          "root_cause_set_precision": 1.0,
+          "weighted_explanation_coverage": 0.85,
+          "observed_candidate_count_hint": 2,
+          "round11_basis": {
+            "round": 11,
+            "head": "2cef642d410a",
+            "basis_fix_commit": "6662db90765b",
+            "round10_observed_status": "succeeded",
+            "round10_failure_clusters": [
+              "weak_or_minor_cause_discovery"
+            ],
+            "round10_prediction_divergences": [
+              "multi_cause_outcome:complexity_gap"
+            ],
+            "fix_category_in_effect": "FIX-M"
+          }
+        },
+        "actual": {
+          "top3_ok": true,
+          "top3_contains_all_major_causes": true,
+          "root_cause_set_recall": 0.666667,
+          "weighted_explanation_coverage": 0.85
+        },
+        "detail": "predicted complete multi-cause set but actual recall or weighted coverage is below threshold (recall=0.666667, weighted=0.85)"
+      },
+      {
+        "case_id": "MC03_cvr_multi_signal_drop",
+        "aspect": "multi_cause_outcome",
+        "divergence": "complexity_gap",
+        "predicted": {
+          "root_causes": [
+            {
+              "root_cause_type": "conversion_drop",
+              "dimension": "channel",
+              "element": "social",
+              "source": "selected_candidate"
+            }
+          ],
+          "top3_ok": true,
+          "top3_contains_all_major_causes": true,
+          "root_cause_set_recall": 1.0,
+          "root_cause_set_precision": 0.4,
+          "weighted_explanation_coverage": 1.0,
+          "observed_candidate_count_hint": 1,
+          "round11_basis": {
+            "round": 11,
+            "head": "2cef642d410a",
+            "basis_fix_commit": "6662db90765b",
+            "round10_observed_status": "succeeded",
+            "round10_failure_clusters": [],
+            "round10_prediction_divergences": [],
+            "fix_category_in_effect": "FIX-M"
+          }
+        },
+        "actual": {
+          "top3_ok": false,
+          "top3_contains_all_major_causes": false,
+          "root_cause_set_recall": 0.5,
+          "weighted_explanation_coverage": 0.67
+        },
+        "detail": "predicted multi-cause top3 pass but actual fail"
+      },
+      {
+        "case_id": "MC07_uv_weak_multi_driver",
+        "aspect": "execution",
+        "divergence": "overfit",
+        "predicted": {
+          "status": "succeeded",
+          "step_count": 11,
+          "sql_count": 18,
+          "tool_sequence": [
+            "detect_anomaly",
+            "drilldown_dimension",
+            "drilldown_dimension",
+            "select_signal_element",
+            "fetch_related_signal",
+            "calculate_contribution",
+            "select_signal_element",
+            "fetch_related_signal",
+            "calculate_contribution",
+            "merge_contribution_sets",
+            "rank_root_causes"
+          ],
+          "compiled_scope_mode": "two_lane_discovery_merge",
+          "critical_decisions": [
+            "Round10 observed 11 tools / 11 trace steps",
+            "canonical_E4_merge_path",
+            "plan budget remains governed by RcaPlanCompiler._plan_budget for two_lane_discovery_merge"
+          ],
+          "round11_basis": {
+            "round": 11,
+            "head": "2cef642d410a",
+            "basis_fix_commit": "6662db90765b",
+            "round10_observed_status": "succeeded",
+            "round10_failure_clusters": [
+              "weak_or_minor_cause_discovery"
+            ],
+            "round10_prediction_divergences": [
+              "execution:complexity_gap"
+            ],
+            "fix_category_in_effect": "FIX-M"
+          }
+        },
+        "actual": {
+          "trace_step_count": 6
+        },
+        "detail": "fewer steps than predicted (predicted=11, actual=6, -5)"
+      },
+      {
+        "case_id": "MC07_uv_weak_multi_driver",
+        "aspect": "outcome",
+        "divergence": "overfit",
+        "predicted": {
+          "root_cause_type": "interaction_channel_category",
+          "dimension": "channel",
+          "element": "social",
+          "status": "succeeded",
+          "top1_ok": false,
+          "anomaly_ok": true,
+          "intent_ok": true,
+          "selected_candidate": {
+            "root_cause_type": "interaction_channel_category",
+            "dimension": "channel",
+            "element": "social",
+            "contribution_pct": 1.0,
+            "signal_severity": 0.628291,
+            "eng_confidence": 1.0,
+            "explanatory_power": 1.0,
+            "dimension_elements": [
+              [
+                "channel",
+                "social"
+              ],
+              [
+                "channel",
+                "paid_ads"
+              ],
+              [
+                "category",
+                "electronics"
+              ]
+            ]
+          },
+          "round11_basis": {
+            "round": 11,
+            "head": "2cef642d410a",
+            "basis_fix_commit": "6662db90765b",
+            "round10_observed_status": "succeeded",
+            "round10_failure_clusters": [
+              "weak_or_minor_cause_discovery"
+            ],
+            "round10_prediction_divergences": [
+              "execution:complexity_gap"
+            ],
+            "fix_category_in_effect": "FIX-M"
+          }
+        },
+        "actual": {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "social",
+          "top1_ok": true,
+          "anomaly_ok": true,
+          "intent_ok": true
+        },
+        "detail": "predicted top1 fail but actual pass"
+      },
+      {
+        "case_id": "RS01_gmv_residual_dual_mechanism",
+        "aspect": "multi_cause_outcome",
+        "divergence": "overfit",
+        "predicted": {
+          "root_causes": [
+            {
+              "root_cause_type": "campaign_traffic_drop",
+              "dimension": "channel",
+              "element": "paid_ads",
+              "source": "selected_candidate"
+            },
+            {
+              "root_cause_type": "campaign_traffic_drop",
+              "dimension": "channel",
+              "element": "paid_ads",
+              "source": "candidate_dimension_elements"
+            },
+            {
+              "root_cause_type": "campaign_traffic_drop",
+              "dimension": "category",
+              "element": "fashion",
+              "source": "candidate_dimension_elements"
+            }
+          ],
+          "top3_ok": false,
+          "top3_contains_all_major_causes": false,
+          "root_cause_set_recall": 1.0,
+          "root_cause_set_precision": 0.333333,
+          "weighted_explanation_coverage": 1.0,
+          "observed_candidate_count_hint": 3,
+          "round11_basis": {
+            "round": 11,
+            "head": "2cef642d410a",
+            "basis_fix_commit": "6662db90765b",
+            "round10_observed_status": "succeeded",
+            "round10_failure_clusters": [
+              "multi_cause_top3_merge_composition"
+            ],
+            "round10_prediction_divergences": [
+              "multi_cause_outcome:complexity_gap"
+            ],
+            "fix_category_in_effect": "FIX-M"
+          }
+        },
+        "actual": {
+          "top3_ok": true,
+          "top3_contains_all_major_causes": true,
+          "root_cause_set_recall": 1.0,
+          "weighted_explanation_coverage": 1.0
+        },
+        "detail": "predicted multi-cause top3 fail but actual pass"
+      },
+      {
+        "case_id": "RS02_gmv_residual_discovery",
+        "aspect": "multi_cause_outcome",
+        "divergence": "overfit",
+        "predicted": {
+          "root_causes": [
+            {
+              "root_cause_type": "campaign_traffic_drop",
+              "dimension": "channel",
+              "element": "paid_ads",
+              "source": "selected_candidate"
+            },
+            {
+              "root_cause_type": "campaign_traffic_drop",
+              "dimension": "channel",
+              "element": "paid_ads",
+              "source": "candidate_dimension_elements"
+            },
+            {
+              "root_cause_type": "campaign_traffic_drop",
+              "dimension": "category",
+              "element": "fashion",
+              "source": "candidate_dimension_elements"
+            }
+          ],
+          "top3_ok": false,
+          "top3_contains_all_major_causes": false,
+          "root_cause_set_recall": 1.0,
+          "root_cause_set_precision": 0.333333,
+          "weighted_explanation_coverage": 1.0,
+          "observed_candidate_count_hint": 3,
+          "round11_basis": {
+            "round": 11,
+            "head": "2cef642d410a",
+            "basis_fix_commit": "6662db90765b",
+            "round10_observed_status": "succeeded",
+            "round10_failure_clusters": [
+              "multi_cause_top3_merge_composition"
+            ],
+            "round10_prediction_divergences": [
+              "multi_cause_outcome:complexity_gap"
+            ],
+            "fix_category_in_effect": "FIX-M"
+          }
+        },
+        "actual": {
+          "top3_ok": true,
+          "top3_contains_all_major_causes": true,
+          "root_cause_set_recall": 1.0,
+          "weighted_explanation_coverage": 1.0
+        },
+        "detail": "predicted multi-cause top3 fail but actual pass"
+      }
+    ],
+    "by_case": {
+      "C21_cvr_discovery": [
+        {
+          "case_id": "C21_cvr_discovery",
+          "aspect": "multi_cause_outcome",
+          "divergence": "overfit",
+          "predicted": {
+            "root_causes": [
+              {
+                "root_cause_type": "conversion_drop",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "source": "selected_candidate"
+              }
+            ],
+            "top3_ok": false,
+            "top3_contains_all_major_causes": false,
+            "root_cause_set_recall": 1.0,
+            "root_cause_set_precision": 0.166667,
+            "weighted_explanation_coverage": 1.0,
+            "observed_candidate_count_hint": 1,
+            "round11_basis": {
+              "round": 11,
+              "head": "2cef642d410a",
+              "basis_fix_commit": "6662db90765b",
+              "round10_observed_status": "succeeded",
+              "round10_failure_clusters": [
+                "top1_ordering_case_specific"
+              ],
+              "round10_prediction_divergences": [],
+              "fix_category_in_effect": "FIX-M"
+            }
+          },
+          "actual": {
+            "top3_ok": true,
+            "top3_contains_all_major_causes": true,
+            "root_cause_set_recall": 1.0,
+            "weighted_explanation_coverage": 1.0
+          },
+          "detail": "predicted multi-cause top3 fail but actual pass"
+        }
+      ],
+      "MC02_uv_multi_channel_drop": [
+        {
+          "case_id": "MC02_uv_multi_channel_drop",
+          "aspect": "execution",
+          "divergence": "complexity_gap",
+          "predicted": {
+            "status": "succeeded",
+            "step_count": 6,
+            "sql_count": 10,
+            "tool_sequence": [
+              "detect_anomaly",
+              "drilldown_dimension",
+              "select_signal_element",
+              "fetch_related_signal",
+              "calculate_contribution",
+              "rank_root_causes"
+            ],
+            "compiled_scope_mode": "single_dimension_dynamic_discovery",
+            "critical_decisions": [
+              "Round10 observed 6 tools / 6 trace steps",
+              "single_E4_path",
+              "plan budget remains governed by RcaPlanCompiler._plan_budget for single_dimension_dynamic_discovery"
+            ],
+            "round11_basis": {
+              "round": 11,
+              "head": "2cef642d410a",
+              "basis_fix_commit": "6662db90765b",
+              "round10_observed_status": "succeeded",
+              "round10_failure_clusters": [
+                "weak_or_minor_cause_discovery"
+              ],
+              "round10_prediction_divergences": [
+                "multi_cause_outcome:complexity_gap"
+              ],
+              "fix_category_in_effect": "FIX-M"
+            }
+          },
+          "actual": {
+            "trace_step_count": 11
+          },
+          "detail": "more steps than predicted (predicted=6, actual=11, +5)"
+        },
+        {
+          "case_id": "MC02_uv_multi_channel_drop",
+          "aspect": "outcome",
+          "divergence": "design_flaw",
+          "predicted": {
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "social",
+            "status": "succeeded",
+            "top1_ok": true,
+            "anomaly_ok": true,
+            "intent_ok": true,
+            "selected_candidate": {
+              "root_cause_type": "campaign_traffic_drop",
+              "dimension": "channel",
+              "element": "social",
+              "contribution_pct": 1.0,
+              "signal_severity": 0.628291,
+              "eng_confidence": 1.0,
+              "explanatory_power": 1.0,
+              "dimension_elements": [
+                [
+                  "channel",
+                  "social"
+                ],
+                [
+                  "channel",
+                  "paid_ads"
+                ]
+              ]
+            },
+            "round11_basis": {
+              "round": 11,
+              "head": "2cef642d410a",
+              "basis_fix_commit": "6662db90765b",
+              "round10_observed_status": "succeeded",
+              "round10_failure_clusters": [
+                "weak_or_minor_cause_discovery"
+              ],
+              "round10_prediction_divergences": [
+                "multi_cause_outcome:complexity_gap"
+              ],
+              "fix_category_in_effect": "FIX-M"
+            }
+          },
+          "actual": {
+            "root_cause_type": "interaction_channel_category",
+            "dimension": "channel",
+            "element": "social",
+            "top1_ok": false,
+            "anomaly_ok": true,
+            "intent_ok": true
+          },
+          "detail": "wrong root cause type: predicted campaign_traffic_drop, got interaction_channel_category"
+        },
+        {
+          "case_id": "MC02_uv_multi_channel_drop",
+          "aspect": "multi_cause_outcome",
+          "divergence": "complexity_gap",
+          "predicted": {
+            "root_causes": [
+              {
+                "root_cause_type": "campaign_traffic_drop",
+                "dimension": "channel",
+                "element": "social",
+                "source": "selected_candidate"
+              },
+              {
+                "root_cause_type": "campaign_traffic_drop",
+                "dimension": "channel",
+                "element": "social",
+                "source": "candidate_dimension_elements"
+              }
+            ],
+            "top3_ok": true,
+            "top3_contains_all_major_causes": true,
+            "root_cause_set_recall": 0.666667,
+            "root_cause_set_precision": 1.0,
+            "weighted_explanation_coverage": 0.85,
+            "observed_candidate_count_hint": 2,
+            "round11_basis": {
+              "round": 11,
+              "head": "2cef642d410a",
+              "basis_fix_commit": "6662db90765b",
+              "round10_observed_status": "succeeded",
+              "round10_failure_clusters": [
+                "weak_or_minor_cause_discovery"
+              ],
+              "round10_prediction_divergences": [
+                "multi_cause_outcome:complexity_gap"
+              ],
+              "fix_category_in_effect": "FIX-M"
+            }
+          },
+          "actual": {
+            "top3_ok": true,
+            "top3_contains_all_major_causes": true,
+            "root_cause_set_recall": 0.666667,
+            "weighted_explanation_coverage": 0.85
+          },
+          "detail": "predicted complete multi-cause set but actual recall or weighted coverage is below threshold (recall=0.666667, weighted=0.85)"
+        }
+      ],
+      "MC03_cvr_multi_signal_drop": [
+        {
+          "case_id": "MC03_cvr_multi_signal_drop",
+          "aspect": "multi_cause_outcome",
+          "divergence": "complexity_gap",
+          "predicted": {
+            "root_causes": [
+              {
+                "root_cause_type": "conversion_drop",
+                "dimension": "channel",
+                "element": "social",
+                "source": "selected_candidate"
+              }
+            ],
+            "top3_ok": true,
+            "top3_contains_all_major_causes": true,
+            "root_cause_set_recall": 1.0,
+            "root_cause_set_precision": 0.4,
+            "weighted_explanation_coverage": 1.0,
+            "observed_candidate_count_hint": 1,
+            "round11_basis": {
+              "round": 11,
+              "head": "2cef642d410a",
+              "basis_fix_commit": "6662db90765b",
+              "round10_observed_status": "succeeded",
+              "round10_failure_clusters": [],
+              "round10_prediction_divergences": [],
+              "fix_category_in_effect": "FIX-M"
+            }
+          },
+          "actual": {
+            "top3_ok": false,
+            "top3_contains_all_major_causes": false,
+            "root_cause_set_recall": 0.5,
+            "weighted_explanation_coverage": 0.67
+          },
+          "detail": "predicted multi-cause top3 pass but actual fail"
+        }
+      ],
+      "MC07_uv_weak_multi_driver": [
+        {
+          "case_id": "MC07_uv_weak_multi_driver",
+          "aspect": "execution",
+          "divergence": "overfit",
+          "predicted": {
+            "status": "succeeded",
+            "step_count": 11,
+            "sql_count": 18,
+            "tool_sequence": [
+              "detect_anomaly",
+              "drilldown_dimension",
+              "drilldown_dimension",
+              "select_signal_element",
+              "fetch_related_signal",
+              "calculate_contribution",
+              "select_signal_element",
+              "fetch_related_signal",
+              "calculate_contribution",
+              "merge_contribution_sets",
+              "rank_root_causes"
+            ],
+            "compiled_scope_mode": "two_lane_discovery_merge",
+            "critical_decisions": [
+              "Round10 observed 11 tools / 11 trace steps",
+              "canonical_E4_merge_path",
+              "plan budget remains governed by RcaPlanCompiler._plan_budget for two_lane_discovery_merge"
+            ],
+            "round11_basis": {
+              "round": 11,
+              "head": "2cef642d410a",
+              "basis_fix_commit": "6662db90765b",
+              "round10_observed_status": "succeeded",
+              "round10_failure_clusters": [
+                "weak_or_minor_cause_discovery"
+              ],
+              "round10_prediction_divergences": [
+                "execution:complexity_gap"
+              ],
+              "fix_category_in_effect": "FIX-M"
+            }
+          },
+          "actual": {
+            "trace_step_count": 6
+          },
+          "detail": "fewer steps than predicted (predicted=11, actual=6, -5)"
+        },
+        {
+          "case_id": "MC07_uv_weak_multi_driver",
+          "aspect": "outcome",
+          "divergence": "overfit",
+          "predicted": {
+            "root_cause_type": "interaction_channel_category",
+            "dimension": "channel",
+            "element": "social",
+            "status": "succeeded",
+            "top1_ok": false,
+            "anomaly_ok": true,
+            "intent_ok": true,
+            "selected_candidate": {
+              "root_cause_type": "interaction_channel_category",
+              "dimension": "channel",
+              "element": "social",
+              "contribution_pct": 1.0,
+              "signal_severity": 0.628291,
+              "eng_confidence": 1.0,
+              "explanatory_power": 1.0,
+              "dimension_elements": [
+                [
+                  "channel",
+                  "social"
+                ],
+                [
+                  "channel",
+                  "paid_ads"
+                ],
+                [
+                  "category",
+                  "electronics"
+                ]
+              ]
+            },
+            "round11_basis": {
+              "round": 11,
+              "head": "2cef642d410a",
+              "basis_fix_commit": "6662db90765b",
+              "round10_observed_status": "succeeded",
+              "round10_failure_clusters": [
+                "weak_or_minor_cause_discovery"
+              ],
+              "round10_prediction_divergences": [
+                "execution:complexity_gap"
+              ],
+              "fix_category_in_effect": "FIX-M"
+            }
+          },
+          "actual": {
+            "root_cause_type": "campaign_traffic_drop",
+            "dimension": "channel",
+            "element": "social",
+            "top1_ok": true,
+            "anomaly_ok": true,
+            "intent_ok": true
+          },
+          "detail": "predicted top1 fail but actual pass"
+        }
+      ],
+      "RS01_gmv_residual_dual_mechanism": [
+        {
+          "case_id": "RS01_gmv_residual_dual_mechanism",
+          "aspect": "multi_cause_outcome",
+          "divergence": "overfit",
+          "predicted": {
+            "root_causes": [
+              {
+                "root_cause_type": "campaign_traffic_drop",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "source": "selected_candidate"
+              },
+              {
+                "root_cause_type": "campaign_traffic_drop",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "source": "candidate_dimension_elements"
+              },
+              {
+                "root_cause_type": "campaign_traffic_drop",
+                "dimension": "category",
+                "element": "fashion",
+                "source": "candidate_dimension_elements"
+              }
+            ],
+            "top3_ok": false,
+            "top3_contains_all_major_causes": false,
+            "root_cause_set_recall": 1.0,
+            "root_cause_set_precision": 0.333333,
+            "weighted_explanation_coverage": 1.0,
+            "observed_candidate_count_hint": 3,
+            "round11_basis": {
+              "round": 11,
+              "head": "2cef642d410a",
+              "basis_fix_commit": "6662db90765b",
+              "round10_observed_status": "succeeded",
+              "round10_failure_clusters": [
+                "multi_cause_top3_merge_composition"
+              ],
+              "round10_prediction_divergences": [
+                "multi_cause_outcome:complexity_gap"
+              ],
+              "fix_category_in_effect": "FIX-M"
+            }
+          },
+          "actual": {
+            "top3_ok": true,
+            "top3_contains_all_major_causes": true,
+            "root_cause_set_recall": 1.0,
+            "weighted_explanation_coverage": 1.0
+          },
+          "detail": "predicted multi-cause top3 fail but actual pass"
+        }
+      ],
+      "RS02_gmv_residual_discovery": [
+        {
+          "case_id": "RS02_gmv_residual_discovery",
+          "aspect": "multi_cause_outcome",
+          "divergence": "overfit",
+          "predicted": {
+            "root_causes": [
+              {
+                "root_cause_type": "campaign_traffic_drop",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "source": "selected_candidate"
+              },
+              {
+                "root_cause_type": "campaign_traffic_drop",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "source": "candidate_dimension_elements"
+              },
+              {
+                "root_cause_type": "campaign_traffic_drop",
+                "dimension": "category",
+                "element": "fashion",
+                "source": "candidate_dimension_elements"
+              }
+            ],
+            "top3_ok": false,
+            "top3_contains_all_major_causes": false,
+            "root_cause_set_recall": 1.0,
+            "root_cause_set_precision": 0.333333,
+            "weighted_explanation_coverage": 1.0,
+            "observed_candidate_count_hint": 3,
+            "round11_basis": {
+              "round": 11,
+              "head": "2cef642d410a",
+              "basis_fix_commit": "6662db90765b",
+              "round10_observed_status": "succeeded",
+              "round10_failure_clusters": [
+                "multi_cause_top3_merge_composition"
+              ],
+              "round10_prediction_divergences": [
+                "multi_cause_outcome:complexity_gap"
+              ],
+              "fix_category_in_effect": "FIX-M"
+            }
+          },
+          "actual": {
+            "top3_ok": true,
+            "top3_contains_all_major_causes": true,
+            "root_cause_set_recall": 1.0,
+            "weighted_explanation_coverage": 1.0
+          },
+          "detail": "predicted multi-cause top3 fail but actual pass"
+        }
+      ]
+    }
+  },
+  "active_failure_clusters": [
+    {
+      "cluster_id": "multi_cause_discovery_recall_gap",
+      "fix_category": "FIX-D",
+      "target_layer": "discovery policy / plan compiler / signal policy",
+      "cases": [
+        "MC02_uv_multi_channel_drop",
+        "MC03_cvr_multi_signal_drop",
+        "MC07_uv_weak_multi_driver"
+      ],
+      "evidence": "These cases have root_cause_set_recall < 0.85 and/or weighted_explanation_coverage < 0.85, so expected causes are missing from the persisted E4 candidate set; ranking cannot recover candidates that were not discovered.",
+      "threshold_scope": [
+        "family_specific",
+        "aggregate_metric",
+        "case_specific"
+      ],
+      "structural": false
+    },
+    {
+      "cluster_id": "multi_cause_top3_merge_stall_after_fix_m",
+      "fix_category": "FIX-M",
+      "target_layer": "runtime/contribution_set_builder + merge_contribution_sets",
+      "cases": [
+        "MC01_gmv_multi_cause_overall",
+        "MC04_gmv_weak_set",
+        "MC08_gmv_channel_category_mix"
+      ],
+      "evidence": "All three cases still have root_cause_set_recall=1.0 and weighted_explanation_coverage=1.0 but top3_contains_all_major_causes=0 after the Round 10 FIX-M commit. This preserves the merge/composition diagnosis but creates a same-category stall risk.",
+      "threshold_scope": [
+        "aggregate_metric",
+        "family_specific"
+      ],
+      "structural": false,
+      "stall_risk": "high"
+    },
+    {
+      "cluster_id": "case_specific_top1_ordering_deferred",
+      "fix_category": "FIX-A",
+      "target_layer": "attribution/ranking after candidate-list evidence is captured",
+      "cases": [
+        "C21_cvr_discovery",
+        "MC06_net_gmv_multi_driver",
+        "IX02_gmv_interaction_discovery"
+      ],
+      "evidence": "These cases have top3_ok=1 and recall=1.0 but top1_ok=0. That is consistent with an ordering/attribution issue, but the active FIX-D multi_cause discovery cluster blocks a ranking.py recommendation under RULE-C3.",
+      "threshold_scope": [
+        "case_specific"
+      ],
+      "structural": false,
+      "ranking_py_recommendation": "not_recommended_for_next_round"
+    },
+    {
+      "cluster_id": "precision_broad_candidate_tail",
+      "fix_category": "FIX-M",
+      "target_layer": "canonical E4 candidate-set pruning and representative selection",
+      "cases": [
+        "C06_gmv_multi_channel_drop",
+        "C07_gmv_category_channel_cross",
+        "C08_gmv_aov_drop",
+        "C09_gmv_uv_organic_drop",
+        "C14_net_gmv_gmv_driven",
+        "C21_cvr_discovery",
+        "C23_uv_organic_drop",
+        "C24_gmv_positive_spike",
+        "C25_refund_discovery",
+        "C26_ambiguous_intent",
+        "C27_composite_cause",
+        "C28_multi_day_drift",
+        "MC01_gmv_multi_cause_overall",
+        "MC02_uv_multi_channel_drop",
+        "MC03_cvr_multi_signal_drop",
+        "MC04_gmv_weak_set",
+        "MC05_gmv_lag_stockout_mix",
+        "MC08_gmv_channel_category_mix",
+        "IX02_gmv_interaction_discovery",
+        "RS01_gmv_residual_dual_mechanism",
+        "RS02_gmv_residual_discovery"
+      ],
+      "evidence": "root_cause_set_precision_avg=0.754710 remains below 0.85 despite improving from 0.653269 in Round 10; many otherwise passing cases still carry broad non-matching candidate tails.",
+      "threshold_scope": [
+        "aggregate_metric"
+      ],
+      "structural": false,
+      "stall_risk": "medium"
+    }
+  ],
+  "round_comparison": {
+    "baseline": "round-10",
+    "current": "round-11",
+    "metrics": {
+      "top1_rate": {
+        "round_10": 0.869565,
+        "round_11": 0.869565,
+        "delta": 0.0,
+        "regressed": false
+      },
+      "top3_rate": {
+        "round_10": 0.847826,
+        "round_11": 0.891304,
+        "delta": 0.043478,
+        "regressed": false
+      },
+      "dominant_top1_rate": {
+        "round_10": 0.869565,
+        "round_11": 0.869565,
+        "delta": 0.0,
+        "regressed": false
+      },
+      "root_cause_set_recall_avg": {
+        "round_10": 0.985507,
+        "round_11": 0.974638,
+        "delta": -0.010869,
+        "regressed": true
+      },
+      "root_cause_set_precision_avg": {
+        "round_10": 0.653269,
+        "round_11": 0.75471,
+        "delta": 0.101441,
+        "regressed": false
+      },
+      "weighted_explanation_coverage_avg": {
+        "round_10": 0.990217,
+        "round_11": 0.983043,
+        "delta": -0.007174,
+        "regressed": true
+      },
+      "top3_contains_all_major_causes_rate": {
+        "round_10": 0.847826,
+        "round_11": 0.891304,
+        "delta": 0.043478,
+        "regressed": false
+      },
+      "memory_hit_improvement": {
+        "round_10": 0.021739,
+        "round_11": 0.0,
+        "delta": -0.021739,
+        "regressed": true
+      }
+    },
+    "interpretation": "FIX-M was net positive for the top3/precision exit blockers but did not improve multi_cause family top3_rate, and it regressed recall/weighted coverage on MC03 plus interaction over-selection on MC02. The next compliant category is discovery, not ranking.py."
+  }
+}
