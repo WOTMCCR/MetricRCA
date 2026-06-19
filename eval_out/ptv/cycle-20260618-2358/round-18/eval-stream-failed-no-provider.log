@@ -1,0 +1,3 @@
+python -m metric_rca.evals.runner --stream --output-dir eval_out/ptv/cycle-20260618-2358/round-18 --eval-id eval-result
+{"error_code": "LLM_REQUIRED_UNAVAILABLE", "message": "LLM_REQUIRED_UNAVAILABLE: eval-result-mem-gmv_paid_ads_drop-r3"}
+make: *** [Makefile:50: eval-stream] Error 1

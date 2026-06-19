@@ -1,0 +1,68 @@
+{
+  "cycle_id": "cycle-20260618-2358",
+  "round": 18,
+  "layer": 1,
+  "status": "fix",
+  "eval_complete": false,
+  "blocking_case_id": "C06_gmv_multi_channel_drop",
+  "blocking_error_code": "REFLECTION_REPAIR_FAILED",
+  "blocking_check": "ATTRIBUTION_COVERAGE_LOW",
+  "selected_fix_category": "FIX-T",
+  "selected_target_layer": "policy",
+  "selected_target_files": [
+    "metric_rca/agent/reflection.py",
+    "tests/test_reflection.py"
+  ],
+  "controller_decision": "Switch from merge/ranking work to reflection verifier policy. C06 discovery and ranking completed with guard-passed E1/E2/E3/E4/E_rank evidence and adtributor_internal, so another rank repair is a self-loop.",
+  "case_specific_evidence": {
+    "selected_root_cause_type": "campaign_traffic_drop",
+    "dimension": "channel",
+    "element": "paid_ads",
+    "dimension_elements": [
+      [
+        "channel",
+        "paid_ads"
+      ]
+    ],
+    "contribution_pct": 0.3283161395107113,
+    "explanatory_power": 0.3283161395107113,
+    "ranker": "adtributor_internal",
+    "sql_evidence_rows": 24,
+    "sql_guard_passed_rows": 24,
+    "trace_step_count": 25
+  },
+  "rule_c1_triggered": true,
+  "rule_c1_blocked_categories": [
+    "FIX-M"
+  ],
+  "rule_c1_reason": "The preceding FIX-M code state produced a fatal reflection regression before eval-result.json. The next round cannot choose FIX-M.",
+  "rule_c2_triggered": false,
+  "rule_c2_promoted_category": null,
+  "rule_c2_reason": "Deferred FIX-A ranking work is nonblocking while eval completion is blocked by the reflection verifier.",
+  "rule_c3_triggered": false,
+  "rule_c3_discovery_priority": false,
+  "rule_c3_reason": "No discovery blocker is present: C06 persisted E1, E2, E3, E4, and E_rank evidence.",
+  "rule_c4_revert_assessment": {
+    "triggered": false,
+    "required": false,
+    "regressed_metrics": [
+      "eval_completion",
+      "reflection_repair_ok"
+    ],
+    "revert_decision": "keep_and_fix_policy",
+    "justification": "Aggregate metrics cannot be computed without eval-result.json. The observed failure is narrower than reverting the FIX-M projection: the final candidate is correct and narrow, while reflection repeats an already-exhausted rank repair."
+  },
+  "rule_c5_triggered": false,
+  "rule_c5_risk": true,
+  "rule_c5_reason": "Selecting FIX-M again would continue the same C06 loop after a FIX-M-induced fatal regression.",
+  "stall_analysis": {
+    "category_streak": {
+      "FIX-M": 1
+    },
+    "case_stall_risk": {
+      "C06_gmv_multi_channel_drop": "high"
+    },
+    "recommended_next_category": "FIX-T"
+  },
+  "expected_effect": "Allow low-coverage additive candidates to pass only when persisted E4/E_rank prove that adtributor ranking has already executed for the same current-run candidate; preserve ATTRIBUTION_COVERAGE_LOW for unsupported low-coverage candidates."
+}

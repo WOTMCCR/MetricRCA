@@ -1,0 +1,185 @@
+{
+  "eval_id": "eval-result",
+  "ptv_round": 18,
+  "cycle_id": "cycle-20260618-2358",
+  "status": "failed_partial",
+  "eval_complete": false,
+  "eval_result_present": false,
+  "eval_result_path": "eval_out/ptv/cycle-20260618-2358/round-18/eval-result.json",
+  "analysis_timestamp": "2026-06-20T04:47:53+08:00",
+  "round_dir": "eval_out/ptv/cycle-20260618-2358/round-18",
+  "input_hashes": {
+    "predictions": "sha256:bcbfd6015baaa1f2b840c14382ebd0d4feec9c9baed213165f1a84eba8d595a0",
+    "prediction_diff": "sha256:de21cfcc5b22deac2ce9293d46ac7d47d9f9d1e7d300c74328bd25007e6bbf40",
+    "meta": "sha256:7bdb61f4417368b1991c8de799cffa4d6bb52abaa35fe185dd2b7ce11f23687e",
+    "eval_stream_log": "sha256:4f383f36fdd82afb959c99be2f03f724912ce2142600eec5d7aed70ecae9a4a1",
+    "eval_stream_failed_no_provider_log": "sha256:9f175e3c2329c36b24b49eb9385501932f42da9e48bdc149519bb127ad13d1ce",
+    "eval_stream_failed_duplicate_log": "sha256:4f383f36fdd82afb959c99be2f03f724912ce2142600eec5d7aed70ecae9a4a1"
+  },
+  "partial_eval_observation": {
+    "completed_agent_runs_before_failure": 5,
+    "completed_run_statuses": {
+      "succeeded": 4,
+      "no_anomaly": 1
+    },
+    "failing_run_id": "eval-result-mem-C06_gmv_multi-40a4e2e5",
+    "failing_case_id": "C06_gmv_multi_channel_drop",
+    "failing_question": "Why did overall GMV fall yesterday?",
+    "failing_metric_id": "gmv",
+    "failing_status": "failed",
+    "failing_error_code": "REFLECTION_REPAIR_FAILED",
+    "trace_step_count": 25,
+    "core_tool_steps_after_memory_read": 24,
+    "sql_evidence_rows": 24,
+    "sql_guard_passed_rows": 24,
+    "final_rank_action": "rank_root_causes",
+    "final_ranker": "adtributor_internal",
+    "selected_candidate": {
+      "root_cause_type": "campaign_traffic_drop",
+      "dimension": "channel",
+      "element": "paid_ads",
+      "contribution_pct": 0.3283161395107113,
+      "explanatory_power": 0.3283161395107113,
+      "signal_severity": 0.9748593844296922,
+      "eng_confidence": 0.320062069661745,
+      "dimension_elements": [
+        [
+          "channel",
+          "paid_ads"
+        ]
+      ],
+      "evidence_ids": [
+        "eval-result-mem-C06_gmv_multi-40a4e2e5:E1",
+        "eval-result-mem-C06_gmv_multi-40a4e2e5:E2_channel",
+        "eval-result-mem-C06_gmv_multi-40a4e2e5:E_select_channel",
+        "eval-result-mem-C06_gmv_multi-40a4e2e5:E3_ch",
+        "eval-result-mem-C06_gmv_multi-40a4e2e5:E4_channel",
+        "eval-result-mem-C06_gmv_multi-40a4e2e5:E4",
+        "eval-result-mem-C06_gmv_multi-40a4e2e5:E_rank"
+      ]
+    },
+    "reflection_issue": {
+      "check": "ATTRIBUTION_COVERAGE_LOW",
+      "threshold": 0.5,
+      "observed_candidate_contribution_pct": 0.3283161395107113,
+      "observed_candidate_explanatory_power": 0.3283161395107113,
+      "repair_result": "REFLECTION_REPAIR_FAILED"
+    }
+  },
+  "prediction_comparison": {
+    "case_id": "C06_gmv_multi_channel_drop",
+    "predicted": {
+      "status": "succeeded",
+      "step_count": 24,
+      "root_cause_type": "campaign_traffic_drop",
+      "dimension": "channel",
+      "element": "paid_ads",
+      "dimension_elements": [
+        [
+          "channel",
+          "paid_ads"
+        ]
+      ],
+      "root_cause_set_precision": 1.0,
+      "root_cause_set_recall": 1.0,
+      "top1_ok": true,
+      "top3_ok": true,
+      "weighted_explanation_coverage": 1.0,
+      "projection_behavior": "round18_primary_pair_collapse"
+    },
+    "actual_partial": {
+      "status": "failed",
+      "error_code": "REFLECTION_REPAIR_FAILED",
+      "reflection_check": "ATTRIBUTION_COVERAGE_LOW",
+      "trace_step_count": 25,
+      "core_tool_steps_after_memory_read": 24,
+      "root_cause_type": "campaign_traffic_drop",
+      "dimension": "channel",
+      "element": "paid_ads",
+      "dimension_elements": [
+        [
+          "channel",
+          "paid_ads"
+        ]
+      ],
+      "contribution_pct": 0.3283161395107113,
+      "explanatory_power": 0.3283161395107113
+    },
+    "divergence": "prediction expected the FIX-M projection to pass reflection; actual rank projection collapsed precision tail but exposed a below-threshold single-element coverage value that the verifier tried and failed to repair."
+  },
+  "gaps": [
+    {
+      "case_id": "C06_gmv_multi_channel_drop",
+      "aspect": "reflection",
+      "divergence": "design_flaw",
+      "diagnosis": "design_flaw",
+      "gate_blocking": true,
+      "fix_category": "FIX-T",
+      "blocking_error_code": "REFLECTION_REPAIR_FAILED",
+      "blocking_check": "ATTRIBUTION_COVERAGE_LOW",
+      "evidence": "The first provider/model run reached C06 memory eval, executed 24 core tool steps plus memory_read, persisted 24 guard-passed evidence rows, and ranked with adtributor_internal. E4 and E_rank selected campaign_traffic_drop channel paid_ads with contribution_pct/explanatory_power=0.328316 and dimension_elements=[[channel, paid_ads]]. verify_reflection then rejected the top candidate because additive-metric coverage is below 0.50 and the one repair path could not make the narrowed rank output pass.",
+      "root_cause": "Round 18 FIX-M numeric projection/collapse removed the broad final-candidate tail and exposed the true paid_ads contribution value. The reflection low-coverage rule still treats that single selected candidate percentage as a hard additive coverage gate for gmv, even when the persisted E4 contribution_set/factor_graph contains broader source evidence and the ranker has already run.",
+      "predicted_failure_mode": "not predicted; C06 outcome/evidence predictions assumed primary-pair collapse would preserve reflection success.",
+      "recommended_next_category": "FIX-T"
+    }
+  ],
+  "nonblocking_subdiagnoses": [
+    {
+      "id": "environment_provider_model_missing",
+      "aspect": "environment",
+      "gate_blocking": false,
+      "observed_log": "eval-stream-failed-no-provider.log",
+      "error_code": "LLM_REQUIRED_UNAVAILABLE",
+      "message": "The first failed attempt lacked required provider/model configuration and stopped at eval-result-mem-gmv_paid_ads_drop-r3. A later provider/model run progressed through five runs and failed at C06, so this is not the actionable Round 18 gate blocker."
+    },
+    {
+      "id": "duplicate_system_table_write_rerun",
+      "aspect": "log_integrity",
+      "gate_blocking": false,
+      "observed_log": "eval-stream.log",
+      "error_code": "SYSTEM_TABLE_WRITE_FAILED",
+      "message": "The canonical eval-stream.log currently records a duplicate write for eval-result-mem-gmv_paid_ads_drop because the eval command was rerun without reseeding. The DB state and persisted artifacts identify the true provider/model failure as C06 REFLECTION_REPAIR_FAILED."
+    }
+  ],
+  "metrics_summary": {
+    "complete": false,
+    "thresholds_met": false,
+    "case_total_expected": 46,
+    "case_total_scored": 0,
+    "completed_agent_runs_before_failure": 5,
+    "dangerous_sql_blocked_status": "not_computed_eval_result_missing",
+    "aggregate_metrics_status": "not_computed_eval_result_missing",
+    "blocking_metric": "eval_completion",
+    "blocking_error_code": "REFLECTION_REPAIR_FAILED",
+    "blocking_case_id": "C06_gmv_multi_channel_drop"
+  },
+  "rule_c_signals": {
+    "rule_c1_triggered": true,
+    "rule_c1_blocked_categories": [
+      "FIX-M"
+    ],
+    "rule_c1_reason": "Round 18 applied FIX-M and regressed from Round 17 complete scoring with reflection_repair_ok=true to failed_partial before eval-result.json. Full aggregate top1/top3 metrics are unavailable because of the fatal, so FIX-M should be treated as blocked for the next round rather than repeated.",
+    "rule_c2_triggered": false,
+    "rule_c2_promoted": null,
+    "rule_c2_reason": "The previously deferred FIX-A ordering work remains nonblocking while the eval cannot complete. The gate-blocking issue is a reflection verifier/pipeline failure.",
+    "rule_c3_triggered": false,
+    "rule_c3_discovery_priority": false,
+    "rule_c3_reason": "C06 discovery is not missing: E1, E2, E3, E4, and E_rank evidence were persisted and guard-passed.",
+    "rule_c4_revert_assessment": {
+      "triggered": false,
+      "required": false,
+      "comparison_baseline": "round-17 complete eval",
+      "regressed_metrics": [
+        "eval_completion",
+        "reflection_repair_ok"
+      ],
+      "revert_decision": "defer_to_controller",
+      "justification": "The protocol's aggregate regression condition cannot be computed without eval-result.json. The observed fatal is narrower than a full merge revert: the collapse produced the intended primary pair but the reflection low-coverage policy failed after rank had already run."
+    },
+    "rule_c5_triggered": false,
+    "rule_c5_risk": true,
+    "rule_c5_reason": "Round 18 is a FIX-M code-state round after a recent FIX-M-heavy sequence. Recommending FIX-M again would continue the same C06 loop after a fatal regression even if it is not yet a formal third consecutive applied category."
+  },
+  "recommended_next_category": "FIX-T",
+  "recommendation_reason": "Treat the next action as reflection/verifier tool-policy work: make verify_reflection and its low-coverage repair path evaluate persisted E4/E_rank contribution-set context and avoid rerunning an already-exhausted rank repair for collapsed adtributor outputs. Do not choose FIX-M next because the blocker is not missing merge output; it is the verifier policy applied after FIX-M's projection."
+}

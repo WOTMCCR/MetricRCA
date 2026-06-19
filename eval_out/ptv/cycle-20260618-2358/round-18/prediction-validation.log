@@ -1,0 +1,30 @@
+$ python -m metric_rca.evals.prediction eval_out/ptv/cycle-20260618-2358/round-18/predictions.jsonl
+exit_status=0
+structured_checks:
+{
+  "aspect_counts": {
+    "evidence": 46,
+    "execution": 46,
+    "intent": 46,
+    "memory": 46,
+    "multi_cause_outcome": 46,
+    "outcome": 46
+  },
+  "case_count": 46,
+  "changed_count": 276,
+  "checks": {
+    "case_count_is_46": true,
+    "diff_changed_count_matches_276": true,
+    "diff_changed_count_nonzero": true,
+    "each_aspect_has_46_rows": true,
+    "each_case_has_6_rows": true,
+    "jsonl_row_count_is_276": true,
+    "no_duplicate_case_aspect_keys": true,
+    "payload_changed_count_matches_276": true,
+    "unique_reasoning_at_least_138": true
+  },
+  "duplicate_keys": [],
+  "prediction_payload_changed_count": 276,
+  "row_count": 276,
+  "unique_reasoning": 276
+}
