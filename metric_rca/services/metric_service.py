@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from metric_rca.config.settings import Settings, get_settings
 from metric_rca.domain.models import MetricDefinition
+from metric_rca.services.date_context import resolve_target_date_for_run_context
 from metric_rca.services.intent_planner import LLMIntentPlanner
 from metric_rca.services.metric_contracts import (
     SUPPORTED_QUESTION_FAMILIES,
@@ -120,6 +121,12 @@ def parse_question(
         supported_families=supported_families,
     )
     parsed = _apply_intent_alias_constraints(question=question, parsed=parsed)
+    parsed = _apply_run_target_date_contract(
+        question=question,
+        parsed=parsed,
+        business_today=business_today,
+        run_target_date=run_target_date,
+    )
     _validate_explicit_dimension_filters(
         question=question,
         parsed=parsed,
@@ -170,6 +177,24 @@ def _apply_intent_alias_constraints(*, question: str, parsed: ParsedIntent) -> P
     ):
         return parsed.model_copy(update={"analysis_strategy": "signal_first"})
     return parsed
+
+
+def _apply_run_target_date_contract(
+    *,
+    question: str,
+    parsed: ParsedIntent,
+    business_today: date,
+    run_target_date: date | None,
+) -> ParsedIntent:
+    target_date = resolve_target_date_for_run_context(
+        question,
+        parsed_target_date=parsed.target_date,
+        business_today=business_today,
+        run_target_date=run_target_date,
+    )
+    if target_date == parsed.target_date:
+        return parsed
+    return parsed.model_copy(update={"target_date": target_date})
 
 
 def _validate_parsed_intent(

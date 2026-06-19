@@ -1,0 +1,441 @@
+{
+  "aspect_count": 6,
+  "base_round": "round-08",
+  "calibration_summary": {
+    "round8_failure": "C14_net_gmv_gmv_driven failed before SQL at select_signal_element because explicit_scope_policy leaked into SelectSignalElementArgs StrictModel.",
+    "round9_expected_change": "ToolExecutor strips explicit_scope_policy before tool schema validation for select_signal_element, fetch_related_signal, and calculate_contribution; C14 and MC06 should no longer fail solely on that metadata.",
+    "unchanged_risks": [
+      "dynamic element selection can choose the wrong channel/category under weak signals",
+      "merge/ranking can still mis-order multi-cause or residual candidates",
+      "full eval may expose later failures because Round 8 aborted during memory prelude before all cases were scored"
+    ]
+  },
+  "case_count": 46,
+  "case_groups": {
+    "broad_gmv_six_lane_cases": [
+      "C06_gmv_multi_channel_drop",
+      "C07_gmv_category_channel_cross",
+      "C09_gmv_uv_organic_drop",
+      "C24_gmv_positive_spike",
+      "C26_ambiguous_intent",
+      "C27_composite_cause",
+      "C28_multi_day_drift",
+      "IX02_gmv_interaction_discovery",
+      "MC01_gmv_multi_cause_overall",
+      "MC04_gmv_weak_set",
+      "MC05_gmv_lag_stockout_mix",
+      "MC08_gmv_channel_category_mix",
+      "RS01_gmv_residual_dual_mechanism",
+      "RS02_gmv_residual_discovery"
+    ],
+    "explicit_scope_policy_fix_cases": [
+      "C14_net_gmv_gmv_driven",
+      "MC06_net_gmv_multi_driver"
+    ],
+    "explicit_single_net_gmv_product": [
+      "C13_net_gmv_refund_spike"
+    ],
+    "interaction_cases": [
+      "IX01_gmv_channel_category_interaction",
+      "IX02_gmv_interaction_discovery",
+      "IX03_uv_interaction_cell",
+      "IX04_gmv_interaction_no_single_driver"
+    ],
+    "no_anomaly_detect_only": [
+      "C19_gmv_seasonal_false_positive",
+      "C20_cvr_no_anomaly_noise",
+      "C22_gmv_borderline",
+      "WK02_gmv_no_anomaly_weak",
+      "gmv_no_anomaly"
+    ]
+  },
+  "changed_by_aspect": {
+    "evidence": 46,
+    "execution": 46,
+    "intent": 46,
+    "memory": 46,
+    "multi_cause_outcome": 46,
+    "outcome": 46
+  },
+  "changed_by_case": {
+    "C06_gmv_multi_channel_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C07_gmv_category_channel_cross": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C08_gmv_aov_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C09_gmv_uv_organic_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C10_gmv_price_change": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C11_gmv_promo_end_falloff": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C12_gmv_single_sku_stockout": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C13_net_gmv_refund_spike": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C14_net_gmv_gmv_driven": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C15_refund_rate_logistics": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C16_stockout_rate_warehouse": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C17_complaint_rate_quality": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C18_cvr_channel_landing": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C19_gmv_seasonal_false_positive": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C20_cvr_no_anomaly_noise": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C21_cvr_discovery": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C22_gmv_borderline": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C23_uv_organic_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C24_gmv_positive_spike": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C25_refund_discovery": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C26_ambiguous_intent": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C27_composite_cause": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "C28_multi_day_drift": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "IX01_gmv_channel_category_interaction": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "IX02_gmv_interaction_discovery": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "IX03_uv_interaction_cell": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "IX04_gmv_interaction_no_single_driver": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "LG01_gmv_lagged_social": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "LG02_uv_lagged_social_discovery": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC01_gmv_multi_cause_overall": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC02_uv_multi_channel_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC03_cvr_multi_signal_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC04_gmv_weak_set": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC05_gmv_lag_stockout_mix": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC06_net_gmv_multi_driver": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC07_uv_weak_multi_driver": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "MC08_gmv_channel_category_mix": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "RS01_gmv_residual_dual_mechanism": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "RS02_gmv_residual_discovery": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "WK01_gmv_weak_affiliate_boundary": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "WK02_gmv_no_anomaly_weak": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "cvr_mobile_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "gmv_no_anomaly": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "gmv_paid_ads_drop": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "gmv_stockout_electronics": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "refund_rate_product_quality": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ]
+  },
+  "changed_count": 276,
+  "created_at": "2026-06-19T15:43:47.604342+00:00",
+  "current_head": "e384da4",
+  "hashes": {
+    "round8_predictions": "sha256:4985addf9189b6159ae04ea5242dc86d45b4b0221ccb5fc3871b65243ee44df4",
+    "round9_predictions": "sha256:d7f98a8368f4622adb3bfa773a3ddca7c3715e39c7f46431787ae1ee63c33d9f"
+  },
+  "line_count": 276,
+  "prediction_field_changed_count": 276,
+  "round": "round-09",
+  "round8_fix_commit": "9654a58408dfcb1870b4f7d18cedaaf51b479af0"
+}

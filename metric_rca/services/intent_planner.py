@@ -10,6 +10,7 @@ from pydantic import Field, ValidationError
 
 from metric_rca.domain.models import StrictModel
 from metric_rca.intelligence.agent_runtime import AgentRuntime, AgentRuntimeError
+from metric_rca.services.date_context import should_retry_run_target_date_error
 from metric_rca.services.llm_client import LLMClientConfigError, build_agent_runtime
 from metric_rca.services.metric_contracts import (
     AnalysisStrategy,
@@ -291,6 +292,17 @@ class LLMIntentPlanner:
                 if attempt < LLM_INTENT_PARSE_MAX_ATTEMPTS:
                     continue
                 raise last_parse_error
+            if parsed_payload.error_code == "DATE_RANGE_INVALID" and should_retry_run_target_date_error(
+                question,
+                run_target_date=run_target_date,
+            ):
+                last_parse_error = MetricServiceError(
+                    "DATE_RANGE_INVALID",
+                    "intent parsing failed: DATE_RANGE_INVALID",
+                )
+                if attempt < LLM_INTENT_PARSE_MAX_ATTEMPTS:
+                    continue
+                raise last_parse_error
             if parsed_payload.error_code is not None:
                 raise MetricServiceError(parsed_payload.error_code, f"intent parsing failed: {parsed_payload.error_code}")
             try:
@@ -334,8 +346,11 @@ def _human_prompt(question: str, *, attempt: int) -> str:
         return question
     return (
         f"{question}\n\n"
-        "Previous parser attempt returned PARSE_FAILED or an invalid schema for this same question. "
+        "Previous parser attempt returned DATE_RANGE_INVALID, PARSE_FAILED, or an invalid schema for this same question. "
         "Re-evaluate against the supported metrics, dimensions, values, and examples. "
+        "When RUN TARGET DATE is present and this is a relative-date or generic anomaly question, "
+        "return a single-date intent using RUN TARGET DATE. "
+        "Do not do this for true multi-day ranges or explicit current/future dates. "
         "If it is supported, return a valid structured intent; if it is truly unsupported, return the typed error."
     )
 

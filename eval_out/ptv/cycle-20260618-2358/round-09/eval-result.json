@@ -1,0 +1,62 @@
+{
+  "eval_id": "eval-result",
+  "round": 9,
+  "status": "eval_aborted",
+  "error_code": "DATE_RANGE_INVALID",
+  "message": "make eval-stream exited before full regression result at eval-result-C22_gmv_borderline; main run failed in intent/date-context parsing before trace_step or sql_audit rows were created.",
+  "exit_status": "2",
+  "partial_memory_case_total": 46,
+  "partial_main_case_total": 21,
+  "full_case_total": 0,
+  "result_file_present": false,
+  "first_error": {
+    "case_id": "C22_gmv_borderline",
+    "run_id": "eval-result-C22_gmv_borderline",
+    "question": "Was GMV abnormal two days ago?",
+    "metric_id": null,
+    "target_date": "2026-06-03",
+    "status": "failed",
+    "error_code": "DATE_RANGE_INVALID",
+    "trace_step_count": 0,
+    "sql_audit_count": 0
+  },
+  "control_evidence": {
+    "memory_phase_same_case": {
+      "run_id": "eval-result-mem-C22_gmv_borderline",
+      "metric_id": "gmv",
+      "target_date": "2026-06-03",
+      "status": "no_anomaly",
+      "tool_sequence": [
+        "read_priors",
+        "detect_anomaly"
+      ],
+      "sql_count": 2,
+      "z_score": 0.440802761233677
+    }
+  },
+  "observed_partial_case_failures_before_abort": [
+    {
+      "case_id": "C21_cvr_discovery",
+      "status": "succeeded",
+      "intent_ok": 1,
+      "anomaly_ok": 1,
+      "top1_ok": 0,
+      "top3_ok": 0,
+      "dominant_top1_ok": 0,
+      "final_run_id": "eval-result-C21_cvr_discovery"
+    }
+  ],
+  "evidence_files": {
+    "eval_stream_log": "eval_out/ptv/cycle-20260618-2358/round-09/eval-stream.log",
+    "eval_stream_exit_status": "eval_out/ptv/cycle-20260618-2358/round-09/eval-stream.exit-status",
+    "case_artifacts_dir": "eval_out/ptv/cycle-20260618-2358/round-09/eval-result",
+    "gap_report": "eval_out/ptv/cycle-20260618-2358/round-09/gap_report.json",
+    "diagnosis": "eval_out/ptv/cycle-20260618-2358/round-09/diagnosis.jsonl",
+    "trajectory": "eval_out/ptv/cycle-20260618-2358/round-09/ptv_trajectory.jsonl"
+  },
+  "investigation": {
+    "failure_mechanism": "The configured per-case run target date was executable in memory phase, but the main-phase LLM intent boundary was allowed to emit or preserve an invalid relative-date target before MetricService validation.",
+    "not_structural": true,
+    "aggregate_metrics_not_computed": true
+  }
+}
