@@ -114,8 +114,8 @@
       "metric_rca/agent/tools/schemas.py"
     ],
     "justification": "The memory phase proves 2026-06-03 is a valid executable target for C22. The service boundary must enforce configured run target date semantics for relative-date and generic anomaly questions while preserving fail-fast behavior for explicit future/current dates and true multi-day ranges.",
-    "fix_commit": null,
-    "fix_status": "tested_pending_commit"
+    "fix_commit": "b769be12eacfbbbb0b4061a274048e0cd5e2cf89",
+    "fix_status": "committed"
   },
   "selected_fix_category": "FIX-I",
   "target_layer": "intent/date_context",
@@ -141,6 +141,6 @@
     "full": "PATH=.venv/bin:$PATH make test",
     "full_result": "598 passed, 8 skipped"
   },
-  "fix_commit": null,
-  "fix_status": "tested_pending_commit"
+  "fix_commit": "b769be12eacfbbbb0b4061a274048e0cd5e2cf89",
+  "fix_status": "committed"
 }
