@@ -1,0 +1,141 @@
+{
+  "eval_id": "eval-result",
+  "round": 14,
+  "status": "failed_partial",
+  "prediction_summary": {
+    "prediction_lines": 276,
+    "required_aspects": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "prediction_diff": {
+      "aspects": [
+        "intent",
+        "execution",
+        "evidence",
+        "memory",
+        "outcome",
+        "multi_cause_outcome"
+      ],
+      "changed_all": true,
+      "changed_count": 276,
+      "line_count": 276,
+      "previous_round": 13,
+      "round": 14
+    }
+  },
+  "eval_summary": {
+    "complete": false,
+    "case_total_configured": 46,
+    "memory_cases_completed_before_failure": 20,
+    "thresholds_met": false,
+    "blocking_failure": "CONTRIBUTION_SET_SELECTED_MISSING during canonical E4 merge for C21_cvr_discovery"
+  },
+  "gaps": [
+    {
+      "case_id": "C21_cvr_discovery",
+      "aspect": "execution",
+      "divergence": "design_flaw",
+      "diagnosis": "complexity_gap",
+      "detail": "The eval agent failed before scoring because canonical E4 merge selected a conversion runner candidate that merge_contribution_sets could not map to a selected source summary.",
+      "actual": {
+        "status": "failed",
+        "error_code": "CONTRIBUTION_SET_SELECTED_MISSING",
+        "run_id": "eval-result-mem-C21_cvr_discovery",
+        "trace_actions": [
+          "read_priors",
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets"
+        ],
+        "channel_selected": {
+          "root_cause_type": "conversion_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "contribution_pct": 0.29831006612784716,
+          "signal_severity": 0.871244635193133,
+          "eng_confidence": 0.2599010447379956
+        },
+        "device_selected": {
+          "root_cause_type": "conversion_drop",
+          "dimension": "device",
+          "element": "mobile",
+          "contribution_pct": 0.5117150890346767,
+          "signal_severity": 0.8504672897196263,
+          "eng_confidence": 0.4351969448799587
+        },
+        "channel_candidates": [
+          {
+            "root_cause_type": "conversion_drop",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "contribution_pct": 0.29831006612784716,
+            "signal_severity": 0.871244635193133,
+            "eng_confidence": 0.2599010447379956
+          },
+          {
+            "root_cause_type": "conversion_drop",
+            "dimension": "channel",
+            "element": "social",
+            "contribution_pct": 0.2795738427626745,
+            "signal_severity": 0.8323004010207802,
+            "eng_confidence": 0.8953000619172852
+          },
+          {
+            "root_cause_type": "conversion_drop",
+            "dimension": "channel",
+            "element": "affiliate",
+            "contribution_pct": 0.24087680626989957,
+            "signal_severity": 0.7734958710184822,
+            "eng_confidence": 0.7168775149084577
+          },
+          {
+            "root_cause_type": "conversion_drop",
+            "dimension": "channel",
+            "element": "organic",
+            "contribution_pct": 0.1812392848395787,
+            "signal_severity": 0.541727672035139,
+            "eng_confidence": 0.3777681461666896
+          }
+        ],
+        "device_candidates": [
+          {
+            "root_cause_type": "conversion_drop",
+            "dimension": "device",
+            "element": "mobile",
+            "contribution_pct": 0.5117150890346767,
+            "signal_severity": 0.8504672897196263,
+            "eng_confidence": 0.4351969448799587
+          },
+          {
+            "root_cause_type": "conversion_drop",
+            "dimension": "device",
+            "element": "desktop",
+            "contribution_pct": 0.4882849109653233,
+            "signal_severity": 0.7031039136302294,
+            "eng_confidence": 0.7888727986383366
+          }
+        ]
+      },
+      "expected": {
+        "status": "succeeded",
+        "selected_candidate": {
+          "root_cause_type": "conversion_drop",
+          "dimension": "device",
+          "element": "mobile"
+        }
+      }
+    }
+  ]
+}

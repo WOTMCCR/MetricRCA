@@ -1,0 +1,15 @@
+{
+  "aspects": [
+    "intent",
+    "execution",
+    "evidence",
+    "memory",
+    "outcome",
+    "multi_cause_outcome"
+  ],
+  "changed_all": true,
+  "changed_count": 276,
+  "line_count": 276,
+  "previous_round": 13,
+  "round": 14
+}

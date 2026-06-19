@@ -1,0 +1,159 @@
+{
+  "cycle_id": "20260618-2358",
+  "round": 14,
+  "layer": "Layer 1 - controller decision",
+  "decision": "fix",
+  "status": "implemented",
+  "selected_fix_category": "FIX-M",
+  "selected_target_layer": "pipeline/merge",
+  "target_files": [
+    "metric_rca/runtime/contribution_set_builder.py",
+    "metric_rca/agent/tools/merge_contribution_sets.py",
+    "tests/test_contribution_set_builder.py",
+    "tests/test_merge_contribution_sets_tool.py"
+  ],
+  "round14_eval_status": {
+    "complete": false,
+    "case_total_configured": 46,
+    "memory_cases_completed_before_failure": 20,
+    "thresholds_met": false,
+    "blocking_failure": "CONTRIBUTION_SET_SELECTED_MISSING during canonical E4 merge for C21_cvr_discovery"
+  },
+  "rule_c1_blocked_categories": [
+    "FIX-D"
+  ],
+  "rule_c1_reason": "Round 13 applied FIX-D and Round 14 failed during eval on C21 with CONTRIBUTION_SET_SELECTED_MISSING after the new pay_cvr lanes reached merge. Do not apply another FIX-D until merge semantics are repaired.",
+  "rule_c2_triggered": false,
+  "rule_c2_promoted": null,
+  "rule_c2_reason": "FIX-A has deferred interaction ordering targets, but the active eval-fatal merge failure blocks trustworthy scoring; FIX-M must run before any ranking/attribution category.",
+  "rule_c3_triggered": false,
+  "rule_c3_assessment": "The C21 correct device candidate is now discovered in E4_device; the current blocker is merge selection/source-summary semantics, not absence of a discovery lane.",
+  "rule_c4_triggered": true,
+  "revert_assessment": {
+    "triggered": true,
+    "regressed_metrics": [
+      "eval_completion"
+    ],
+    "revert_decision": "targeted_fix_not_full_revert",
+    "justification": "Full revert of f6e0701 would remove the pay_cvr device lane and reopen the prior C21 discovery gap. The trace shows a narrow merge-ordering/source-resolution bug, so targeted FIX-M is lower risk."
+  },
+  "rule_c5_category_streak": {
+    "current": "FIX-D",
+    "streak": 1,
+    "violates": false
+  },
+  "stall_analysis_from_analyst": {
+    "category_history": [
+      "FIX-D",
+      "FIX-T",
+      "FIX-D",
+      "FIX-D",
+      "FIX-T",
+      "FIX-D",
+      "FIX-T",
+      "FIX-T",
+      "FIX-I",
+      "FIX-M",
+      "FIX-D",
+      "FIX-M",
+      "FIX-D"
+    ],
+    "current_streak": {
+      "FIX-D": 1
+    },
+    "category_streak": {
+      "FIX-D": 1
+    },
+    "deferred_streak_from_prior_rounds": {
+      "FIX-A": 3,
+      "FIX-M": 1,
+      "FIX-D": 0,
+      "FIX-INJ": 0
+    },
+    "same_case_same_category_stalls": {},
+    "rule_c1_blocked_categories": [
+      "FIX-D"
+    ],
+    "rule_c1_reason": "Round 13 applied FIX-D and Round 14 failed during eval on C21 with CONTRIBUTION_SET_SELECTED_MISSING after the new pay_cvr lanes reached merge. Do not apply another FIX-D until merge semantics are repaired.",
+    "rule_c2_promoted": null,
+    "rule_c2_reason": "FIX-A has deferred interaction ordering targets, but the active eval-fatal merge failure blocks trustworthy scoring; FIX-M must run before any ranking/attribution category.",
+    "rule_c3_triggered": false,
+    "rule_c3_reason": "The C21 correct device candidate is now discovered in E4_device; the current blocker is merge selection/source-summary semantics, not absence of a discovery lane.",
+    "rule_c4_revert_assessment": {
+      "triggered": true,
+      "regressed_metrics": [
+        "eval_completion"
+      ],
+      "revert_decision": "targeted_fix_not_full_revert",
+      "justification": "Full revert of f6e0701 would remove the pay_cvr device lane and reopen the prior C21 discovery gap. The trace shows a narrow merge-ordering/source-resolution bug, so targeted FIX-M is lower risk."
+    },
+    "rule_c5_triggered": false,
+    "rule_c5_reason": "The previous selected category was FIX-D x1; switching to FIX-M respects the consecutive-category cap and anti-stall protocol.",
+    "recommended_next_category": "FIX-M",
+    "recommendation_reason": "C21 has E4_device mobile discovered, but canonical merge selected a lower-impact high-confidence runner and then could not resolve its source summary. The MetricRCA priority matrix maps merge logic wrong to FIX-M.",
+    "invalid_rationale": [
+      "Continue FIX-D before repairing merge selection/source lookup.",
+      "Patch ranking.py to reorder candidates after canonical E4 merge has already failed.",
+      "Change scorer thresholds or ground truth to avoid CONTRIBUTION_SET_SELECTED_MISSING."
+    ]
+  },
+  "anti_stall_assessment": "Switch from FIX-D to FIX-M. The failed trace proves device/mobile is discovered; continuing discovery would be a self-lock loop while merge semantics are broken.",
+  "evidence": {
+    "C21_failed_trace": "E4_device selected mobile, but confidence-first conversion merge preferred channel/social runner and source summary lookup only accepted source_set.selected_candidate.",
+    "post_fix_smoke": "ptv-r14-c21-smoke-C21_cvr_discovery selected device/mobile with precision=1.0 and recall=1.0."
+  },
+  "planned_fix": "Prioritize conversion-only merge selection by contribution_pct, then signal_severity, then eng_confidence; resolve selected source summary by membership in source_set.candidates.",
+  "implemented_fix": {
+    "contribution_set_builder": "conversion-only preferred candidate key changed to contribution impact before confidence",
+    "merge_contribution_sets": "selected source summary lookup now requires selected key to be present in source_set.candidates",
+    "ranking_py_touched": false
+  },
+  "trajectory_reference": "eval_out/ptv/cycle-20260618-2358/round-14/ptv_trajectory.jsonl",
+  "gap_report_reference": "eval_out/ptv/cycle-20260618-2358/round-14/gap_report.json",
+  "diagnosis_reference": "eval_out/ptv/cycle-20260618-2358/round-14/diagnosis.jsonl",
+  "validation": [
+    {
+      "command": "PATH=.venv/bin:$PATH python -m pytest tests/test_contribution_set_builder.py::test_contribution_set_builder_selects_conversion_by_impact_before_confidence tests/test_merge_contribution_sets_tool.py::test_merge_contribution_sets_resolves_selected_runner_source_summary -q",
+      "result": "RED before production change: 2 failed for expected C21 selection/source-summary reasons; GREEN after production change covered by related-file test command."
+    },
+    {
+      "command": "PATH=.venv/bin:$PATH python -m pytest tests/test_business_signal_policy.py tests/test_runtime_plan.py tests/test_contribution_set_builder.py tests/test_merge_contribution_sets_tool.py tests/test_tools.py tests/test_multi_agent.py -q",
+      "result": "130 passed"
+    },
+    {
+      "command": "single-case C21 smoke via metric_rca.evals.runner._run_and_score_case with real MetricRepository",
+      "result": "C21 selected conversion_drop device/mobile; top1=1 top3=1 precision=1.0 recall=1.0"
+    },
+    {
+      "command": "PATH=.venv/bin:$PATH make seed",
+      "result": "seed_profile=regression loaded 46-case slice; row_counts fact_order=26639, fact_traffic=4320"
+    },
+    {
+      "command": "PATH=.venv/bin:$PATH make test",
+      "result": "607 passed, 8 skipped, 29 warnings"
+    },
+    {
+      "command": "rg -n \"fallback|graceful|degrad|except Exception|pass\\s*$|default provider|mock|stub|demo\" <touched files>",
+      "result": "No matches in touched production/test files"
+    }
+  ],
+  "fix_commit": "77255d1",
+  "subagent_review": {
+    "agent_id": "019ee12d-74eb-7922-9c1a-b9c62eff20bf",
+    "type": "read_only_subagent_review",
+    "findings": [
+      "Confirmed C21 root cause: confidence-first conversion-only merge selected channel/social runner; merge source lookup required source_set.selected_candidate and failed.",
+      "Confirmed contribution_pct-first ordering is appropriate as a conversion-only merge exception, not a general ranking rewrite.",
+      "Confirmed merge_contribution_sets should resolve selected candidates by source_set.candidates membership while still fail-fast when absent.",
+      "Regression risks: MC03 channel-social/organic conversion merge must be guarded; MC06 low risk because mixed net_gmv is not conversion-only; precision gates depend on retained candidates and should not be broadened."
+    ],
+    "commands": [
+      "sed",
+      "rg",
+      "nl -ba",
+      "git status --short",
+      "git diff"
+    ],
+    "files_edited": []
+  }
+}
