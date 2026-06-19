@@ -81,6 +81,6 @@
     "description": "Make canonical E4 merge composition representative: keep the preferred selected candidate, source-selected representatives, material campaign channel runners, selected conversion/device representatives, and strong cross-dimension interaction representatives; prune non-representative long tails and single-dimension interaction duplicates.",
     "expected_impact": "Raise multi_cause top3/top3_contains rates and root_cause_set_precision without changing ranking.py or scorer behavior. Round 10 trace what-if predicts C21, RS01, and RS02 top3 improvement while preserving IX02 top3."
   },
-  "fix_status": "planned",
-  "fix_commit": null
+  "fix_status": "committed",
+  "fix_commit": "6662db90765beca4d783a5fe8790540eb7c92ead"
 }
