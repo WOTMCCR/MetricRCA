@@ -631,6 +631,62 @@ def test_select_signal_element_uses_grouped_queries_not_per_candidate_queries() 
     assert repository.persisted_evidence["result_summary"]["candidate_count"] == 30
 
 
+def test_select_signal_element_persists_policy_alias_for_parallel_same_dimension_lanes() -> None:
+    repository = _ParallelSelectionRepository(
+        {
+            "run-1:E1": {
+                "evidence_id": "run-1:E1",
+                "guard_status": "passed",
+                "result_summary": {"is_anomaly": True},
+            },
+            "run-1:E2_channel": {
+                "evidence_id": "run-1:E2_channel",
+                "guard_status": "passed",
+                "result_summary": {
+                    "candidates": [{"element": "paid_ads"}, {"element": "affiliate"}],
+                },
+            },
+            "run-1:E_select_channel": {
+                "evidence_id": "run-1:E_select_channel",
+                "run_id": "run-1",
+                "guard_status": "passed",
+                "result_summary": {
+                    "metric_id": "gmv",
+                    "signal_type": "campaign",
+                    "dimension": "channel",
+                    "filters": {},
+                    "input_evidence_ids": ["run-1:E1", "run-1:E2_channel"],
+                    "selected_element": "paid_ads",
+                },
+            },
+        }
+    )
+
+    result = select_signal_element(
+        SelectSignalElementArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            signal_type="conversion",
+            dimension="channel",
+            evidence_ids=["run-1:E1", "run-1:E2_channel"],
+            element_selection="signal_anomaly",
+            evidence_alias="E_select_ch_conversion",
+        ),
+        repository=repository,
+        metric_service=_MetricService(),
+        renderer=SQLRenderer(),
+        settings=SimpleNamespace(signal_metric_by_type={"conversion": "pay_cvr"}),
+    )
+
+    assert result.observation.ok is True
+    assert result.evidence_alias == "E_select_ch_conversion"
+    assert result.evidences[0].evidence_id == "run-1:E_select_ch_conversion"
+    assert repository.persisted_by_id["run-1:E_select_ch_conversion"]["result_summary"]["signal_type"] == "conversion"
+    assert repository.persisted_by_id["run-1:E_select_channel"]["result_summary"]["signal_type"] == "campaign"
+    assert result.sql_count == 2
+
+
 class _Repository:
     def __init__(self, rows: dict[str, dict[str, object]]) -> None:
         self._rows = rows
@@ -756,4 +812,55 @@ class _GroupedSelectionRepository(_Repository):
         )
 
     def create_evidence(self, row: dict[str, Any]) -> None:
+        self.persisted_evidence = row
+
+
+class _ParallelSelectionRepository(_GroupedSelectionRepository):
+    def __init__(self, rows: dict[str, dict[str, object]]) -> None:
+        super().__init__(rows)
+        self.persisted_by_id: dict[str, dict[str, Any]] = {
+            str(row["evidence_id"]): dict(row)
+            for row in rows.values()
+            if row.get("evidence_id")
+        }
+
+    def get_evidence(self, *, run_id: str, evidence_id: str) -> dict[str, object] | None:
+        row = self.persisted_by_id.get(evidence_id)
+        if row is None or not str(row.get("evidence_id", "")).startswith(f"{run_id}:"):
+            return None
+        return row
+
+    def get_evidences(self, run_id: str) -> list[dict[str, object]]:
+        return [
+            row
+            for row in self.persisted_by_id.values()
+            if str(row.get("evidence_id", "")).startswith(f"{run_id}:")
+        ]
+
+    def execute_plan(self, plan, *, run_id: str):
+        assert plan.guard_status == "passed"
+        self.executed_signal_queries += 1
+        if "baseline_d0" in getattr(plan, "params", {}):
+            return SimpleNamespace(
+                rows=[
+                    {"business_date": date(2026, 5, 29), "channel": "paid_ads", "metric_value": 100.0},
+                    {"business_date": date(2026, 5, 29), "channel": "affiliate", "metric_value": 100.0},
+                ],
+                row_count=2,
+                latency_ms=1,
+            )
+        return SimpleNamespace(
+            rows=[
+                {"channel": "paid_ads", "metric_value": 96.0},
+                {"channel": "affiliate", "metric_value": 60.0},
+            ],
+            row_count=2,
+            latency_ms=1,
+        )
+
+    def create_evidence(self, row: dict[str, Any]) -> None:
+        evidence_id = str(row["evidence_id"])
+        if evidence_id in self.persisted_by_id:
+            raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED: duplicate evidence")
+        self.persisted_by_id[evidence_id] = row
         self.persisted_evidence = row

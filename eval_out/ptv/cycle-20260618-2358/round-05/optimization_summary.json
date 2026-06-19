@@ -1,0 +1,64 @@
+{
+  "ptv_round": 5,
+  "cycle_id": "20260618-2358",
+  "created_at": "2026-06-19T15:00:39.663724+00:00",
+  "layer": "Layer 1 optimization summary",
+  "inputs": {
+    "gap_report": "eval_out/ptv/cycle-20260618-2358/round-05/gap_report.json",
+    "diagnosis": "eval_out/ptv/cycle-20260618-2358/round-05/diagnosis.jsonl",
+    "trajectory": "eval_out/ptv/cycle-20260618-2358/round-05/ptv_trajectory.jsonl",
+    "eval_result": "eval_out/ptv/cycle-20260618-2358/round-05/eval-result.json"
+  },
+  "metrics_before": {
+    "status": "eval_aborted",
+    "exit_status": "2",
+    "full_case_total": 0,
+    "partial_memory_case_total": 5,
+    "error_code": "SYSTEM_TABLE_WRITE_FAILED",
+    "trace_failure": "TOOL_SQL_COUNT_MISMATCH on select_signal_element conversion lane"
+  },
+  "rule_c1_blocked_categories": [
+    "FIX-D"
+  ],
+  "rule_c1_reason": "Round 4 FIX-D introduced/activated a same-dimension dynamic selection lane that caused Round 5 eval abort through TOOL_SQL_COUNT_MISMATCH. Round 5 cannot use FIX-D.",
+  "rule_c2_deferred_categories": {
+    "FIX-T": 0,
+    "FIX-A": 2,
+    "FIX-M": 2
+  },
+  "rule_c2_forced_category": "FIX-T",
+  "rule_c2_reason": "The active blocker is an execution/tool contract failure; ranking and merge are deferred because no full eval result exists after abort.",
+  "rule_c3_discovery_priority_applied": false,
+  "rule_c3_reason": "Discovery priority is superseded by RULE-C1 and eval abort: the new discovery lane cannot be evaluated until the tool alias contract is fixed.",
+  "rule_c4_revert_assessment": {
+    "triggered": true,
+    "aggregate_regressions": [
+      "eval_aborted",
+      "memory_regression_path_failed_before_full_cases"
+    ],
+    "decision": "keep_with_tool_contract_fix",
+    "justification": "The Round 4 policy direction is still needed for MC04/MC06/IX02 candidate discovery, but the failure is localized to select_signal_element alias persistence. A narrow FIX-T preserves useful discovery work and removes the abort."
+  },
+  "rule_c5_category_streak": {
+    "FIX-D": 2
+  },
+  "rule_c5_allowed": true,
+  "stall_analysis_used": true,
+  "anti_stall_decision": "Switch category from FIX-D to FIX-T; continuing discovery would violate RULE-C1/C5 and repeat the self-lock pattern.",
+  "selected_fix_category": "FIX-T",
+  "target_layer": "tool",
+  "target_files": [
+    "metric_rca/agent/tools/schemas.py",
+    "metric_rca/agent/tools/select_signal_element.py",
+    "metric_rca/runtime/plan_compiler.py",
+    "tests/test_runtime_tool_executor.py"
+  ],
+  "do_not_modify": [
+    "metric_rca/runtime/ranking.py"
+  ],
+  "case_targets": [
+    "C06_gmv_multi_channel_drop execution abort",
+    "same-dimension campaign/conversion selection lanes"
+  ],
+  "expected_change": "select_signal_element honors per-lane evidence_alias and returns correct sql_count after guarded SQL execution paths."
+}

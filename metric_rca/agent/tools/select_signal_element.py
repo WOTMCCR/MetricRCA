@@ -121,7 +121,7 @@ def select_signal_element(
             sql_count=2,
         )
 
-    evidence_alias = f"E_select_{args.dimension}"
+    evidence_alias = _selection_evidence_alias(args)
     result_summary = {
         "metric_id": args.metric_id,
         "signal_type": args.signal_type,
@@ -164,7 +164,7 @@ def select_signal_element(
 
 
 def _existing_selection_result(args: SelectSignalElementArgs, *, repository: Any) -> ToolResult | None:
-    evidence_alias = f"E_select_{args.dimension}"
+    evidence_alias = _selection_evidence_alias(args)
     evidence_id = f"{args.run_id}:{evidence_alias}"
     row = repository.get_evidence(run_id=args.run_id, evidence_id=evidence_id)
     if row is None or row.get("guard_status") != "passed":
@@ -191,6 +191,10 @@ def _existing_selection_result(args: SelectSignalElementArgs, *, repository: Any
         evidence_alias=evidence_alias,
         sql_count=0,
     )
+
+
+def _selection_evidence_alias(args: SelectSignalElementArgs) -> str:
+    return args.evidence_alias or f"E_select_{args.dimension}"
 
 
 def _candidate_elements(args: SelectSignalElementArgs, *, repository: Any) -> list[str]:

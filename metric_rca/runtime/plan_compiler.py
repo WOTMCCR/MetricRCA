@@ -456,6 +456,7 @@ def _parallel_broad_contribution_chains(
                         "dimension": dimension,
                         "filters": signal_filters,
                         "element_selection": lane.element_selection,
+                        "evidence_alias": selection_alias,
                         **scope_policy_args,
                     },
                     requires=["E1", f"E2_{dimension}"],

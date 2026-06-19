@@ -35,6 +35,7 @@ class SelectSignalElementArgs(StrictModel):
     evidence_ids: list[str]
     filters: dict[str, str] = Field(default_factory=dict)
     element_selection: Literal["top_candidate", "signal_anomaly", "signal_level"] = "top_candidate"
+    evidence_alias: str | None = Field(default=None, pattern=r"^E_select(_[A-Za-z0-9]+)+$")
 
 
 class FetchRelatedSignalArgs(StrictModel):
