@@ -105,7 +105,9 @@
       "metric_rca/runtime/plan_compiler.py",
       "metric_rca/agent/tools/schemas.py"
     ],
-    "justification": "ActionGate consumes explicit_scope_policy before ToolExecutor validates tool args. The runtime boundary should strip gate-only metadata rather than expanding deterministic tool schemas."
+    "justification": "ActionGate consumes explicit_scope_policy before ToolExecutor validates tool args. The runtime boundary should strip gate-only metadata rather than expanding deterministic tool schemas.",
+    "fix_commit": "9654a58408dfcb1870b4f7d18cedaaf51b479af0",
+    "fix_status": "committed"
   },
   "selected_fix_category": "FIX-T",
   "target_layer": "pipeline/tool_boundary",
@@ -123,6 +125,6 @@
     "explicit_multi_driver conversion lane"
   ],
   "expected_change": "ToolExecutor strips explicit_scope_policy after ActionGate validation and before StrictModel tool schema validation for select/fetch/calculate actions.",
-  "fix_commit": null,
-  "fix_status": "pending_commit"
+  "fix_commit": "9654a58408dfcb1870b4f7d18cedaaf51b479af0",
+  "fix_status": "committed"
 }
