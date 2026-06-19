@@ -88,7 +88,9 @@
     "do_not_modify": [
       "metric_rca/runtime/ranking.py"
     ],
-    "justification": "The active failure is a plan_compiler budget contract mismatch. Correct candidates are now in the compiled plan; ranking changes cannot make an over-budget evidence chain finish."
+    "justification": "The active failure is a plan_compiler budget contract mismatch. Correct candidates are now in the compiled plan; ranking changes cannot make an over-budget evidence chain finish.",
+    "fix_commit": "f2d451e44c54f4c9e9254d62f8a34ccaf51597f9",
+    "fix_status": "committed"
   },
   "selected_fix_category": "FIX-D",
   "target_layer": "pipeline",
@@ -104,6 +106,6 @@
     "broad GMV multisignal plan"
   ],
   "expected_change": "Broad GMV multisignal plan budget increases from max_query=50 to an action-cost-derived max_query=70 without modifying ranking.py.",
-  "fix_commit": null,
-  "fix_status": "pending_commit"
+  "fix_commit": "f2d451e44c54f4c9e9254d62f8a34ccaf51597f9",
+  "fix_status": "committed"
 }
