@@ -270,6 +270,54 @@ def test_tool_executor_resolves_top_candidate_dynamic_element_from_selection_evi
     assert captured["evidence_ids"] == ["run-1:E1", "run-1:E2_channel", "run-1:E_select_channel"]
 
 
+def test_tool_executor_injects_only_requested_lane_scoped_e3_evidence() -> None:
+    captured: dict[str, Any] = {}
+
+    def handler(args: _CalculateArgs, dependencies: object) -> ToolExecutionResult:
+        captured.update(args.model_dump(mode="json"))
+        return ToolExecutionResult(
+            observation=Observation(action_name="calculate_contribution", ok=True, evidence_ids=["run-1:E4_channel_conversion"]),
+            evidence_ids=["run-1:E4_channel_conversion"],
+        )
+
+    executor = ToolExecutor(
+        dependencies=object(),
+        handlers={
+            "calculate_contribution": MetricRCAToolHandler(args_model=_CalculateArgs, call=handler),
+        },
+    )
+    ctx = RunContext(run_id="run-1", metric_id="net_gmv", target_date=date(2026, 5, 29))
+    action = RcaAction(
+        action_id="A10",
+        kind="calculate_contribution",
+        args={
+            "metric_id": "net_gmv",
+            "target_date": date(2026, 5, 29),
+            "dimension": "channel",
+            "element": "paid_ads",
+        },
+        requires=["E1", "E2_channel", "E3_ch_conversion"],
+    )
+    graph = EvidenceGraph(
+        run_id="run-1",
+        evidence_ids=[
+            "run-1:E1",
+            "run-1:E2_channel",
+            "run-1:E3_ch_campaign_paid_ads",
+            "run-1:E3_ch_conversion_paid_ads",
+        ],
+    )
+
+    result = executor.execute(ctx, action, graph)
+
+    assert result.observation.ok is True
+    assert captured["evidence_ids"] == [
+        "run-1:E1",
+        "run-1:E2_channel",
+        "run-1:E3_ch_conversion_paid_ads",
+    ]
+
+
 def test_tool_executor_runs_select_action_without_element_resolution_and_preserves_selection_mode() -> None:
     captured: dict[str, Any] = {}
 

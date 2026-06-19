@@ -46,6 +46,7 @@ class FetchRelatedSignalArgs(StrictModel):
     element: str
     evidence_ids: list[str]
     filters: dict[str, str] = Field(default_factory=dict)
+    evidence_alias: str | None = Field(default=None, pattern=r"^E3(_[A-Za-z0-9]+)+$")
 
 
 class CalculateContributionArgs(StrictModel):

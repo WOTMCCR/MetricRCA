@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from metric_rca.agent.evidence_aliases import e3_alias_for_dimension
+from metric_rca.agent.evidence_aliases import e3_alias_for_dimension, e3_alias_for_signal_lane
 from metric_rca.business.discovery_policy import DiscoveryLane, DiscoveryPolicy, discovery_policy_from_intent
 from metric_rca.business.policy_registry import allowed_dimensions_validator_from_metric_definition
 from metric_rca.runtime.plan_models import CasePrior, RcaAction, RcaPlan
@@ -419,7 +419,11 @@ def _parallel_broad_contribution_chains(
         scoped_element = scoped_elements.get(dimension) if scoped_elements else None
         first_signal_element = _lane_element(lane, scoped_element=scoped_element, explicit_scope=explicit_scope)
         selection_alias = f"E_select_{dimension}"
-        e3_alias = e3_alias_for_dimension(dimension) or f"E3_{dimension}"
+        e3_alias = e3_alias_for_signal_lane(
+            dimension,
+            lane.signal_type,
+            element_known=first_signal_element is not None,
+        )
         e4_alias = lane.evidence_alias or f"E4_{dimension}"
         e4_aliases.append(e4_alias)
         e3_aliases.append(e3_alias)
@@ -465,6 +469,7 @@ def _parallel_broad_contribution_chains(
                     "element": first_signal_element,
                     "filters": signal_filters,
                     "element_selection": lane.element_selection,
+                    "evidence_alias": e3_alias,
                 },
                 requires=fetch_requires,
                 produces=[e3_alias],

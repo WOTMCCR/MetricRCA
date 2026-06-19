@@ -26,6 +26,13 @@ def e3_alias_for_dimension(dimension: str) -> str | None:
     return E3_ALIAS_BY_DIMENSION.get(dimension)
 
 
+def e3_alias_for_signal_lane(dimension: str, signal_type: str, *, element_known: bool) -> str:
+    dimension_alias = e3_alias_for_dimension(dimension) or f"E3_{dimension}"
+    if not element_known:
+        return dimension_alias
+    return f"{dimension_alias}_{signal_type}"
+
+
 def e2_alias_for_e3_id(e3_id: str, *, run_id: str) -> str | None:
     alias = e3_id.removeprefix(f"{run_id}:")
     for e3_prefix, e2_alias in E3_ALIAS_TO_E2_ALIAS.items():

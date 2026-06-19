@@ -272,6 +272,13 @@ class FailingEvidenceRepository(SpyRepository):
         raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED")
 
 
+class DuplicateRejectingEvidenceRepository(SpyRepository):
+    def create_evidence(self, row: dict[str, Any]) -> None:
+        if row["evidence_id"] in self.persisted_evidence:
+            raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED")
+        super().create_evidence(row)
+
+
 class NetGmvRefundDriverRepository(SpyRepository):
     def execute_plan(self, plan: SQLPlan, *, run_id: str):
         self.executed.append(plan)
@@ -922,6 +929,72 @@ def test_fetch_related_signal_accepts_complementary_interaction_filters() -> Non
     assert len(repo.executed) == 2
     assert all(plan.params["filter_channel"] == "paid_ads" for plan in repo.executed)
     assert all(plan.params["filter_category"] == "electronics" for plan in repo.executed)
+
+
+def test_fetch_related_signal_uses_lane_evidence_alias_to_avoid_same_dimension_collision() -> None:
+    repo = DuplicateRejectingEvidenceRepository()
+    repo.runs["run-1"]["metric_id"] = "net_gmv"
+    repo.runs["run-1"]["target_date"] = date(2026, 5, 29)
+    repo.seed_e2_family("E2_channel")
+
+    campaign = fetch_related_signal(
+        FetchRelatedSignalArgs(
+            run_id="run-1",
+            metric_id="net_gmv",
+            target_date=date(2026, 5, 29),
+            signal_type="campaign",
+            dimension="channel",
+            element="paid_ads",
+            evidence_ids=["run-1:E1", "run-1:E2_channel"],
+            evidence_alias="E3_ch_campaign",
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+    conversion = fetch_related_signal(
+        FetchRelatedSignalArgs(
+            run_id="run-1",
+            metric_id="net_gmv",
+            target_date=date(2026, 5, 29),
+            signal_type="conversion",
+            dimension="channel",
+            element="paid_ads",
+            evidence_ids=["run-1:E1", "run-1:E2_channel"],
+            evidence_alias="E3_ch_conversion",
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert campaign.observation.ok is True
+    assert campaign.evidence_alias == "E3_ch_campaign_paid_ads"
+    assert conversion.observation.ok is True
+    assert conversion.evidence_alias == "E3_ch_conversion_paid_ads"
+    assert "run-1:E3_ch_campaign_paid_ads" in repo.persisted_evidence
+    assert "run-1:E3_ch_conversion_paid_ads" in repo.persisted_evidence
+
+
+def test_fetch_related_signal_reports_sql_count_when_persistence_fails_after_queries() -> None:
+    repo = FailingEvidenceRepository()
+    repo.seed_e2_family("E2_channel")
+
+    result = fetch_related_signal(
+        FetchRelatedSignalArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            signal_type="campaign",
+            dimension="channel",
+            element="paid_ads",
+            evidence_ids=["run-1:E1", "run-1:E2_channel"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == "SYSTEM_TABLE_WRITE_FAILED"
+    assert result.sql_count == 2
 
 
 def test_fetch_related_signal_accepts_e2_family_alias_and_hints_missing_e1() -> None:

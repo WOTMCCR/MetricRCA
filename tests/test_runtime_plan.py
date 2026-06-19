@@ -295,8 +295,18 @@ def test_plan_compiler_expands_net_gmv_paid_ads_slice_to_multi_driver_discovery(
         ("category", "inventory", None),
         ("channel", "conversion", "paid_ads"),
     ]
+    assert [(action.produces, action.args["evidence_alias"]) for action in signal_actions] == [
+        (["E3_ch_campaign"], "E3_ch_campaign"),
+        (["E3_cat"], "E3_cat"),
+        (["E3_ch_conversion"], "E3_ch_conversion"),
+    ]
     assert [action.dynamic for action in signal_actions] == [False, True, False]
     assert [action.args["filters"] for action in signal_actions] == [{}, {}, {}]
+    assert [action.requires[-1] for action in contribution_actions] == [
+        "E3_ch_campaign",
+        "E3_cat",
+        "E3_ch_conversion",
+    ]
     assert [(action.args["dimension"], action.args["element"], action.args["evidence_alias"]) for action in contribution_actions] == [
         ("channel", "paid_ads", "E4_channel"),
         ("category", None, "E4_category"),

@@ -168,7 +168,7 @@ def fetch_related_signal(
     try:
         persist_evidence(repository=repository, row=evidence_row(args.run_id, evidence))
     except ToolRuntimeError as exc:
-        return runtime_error(action, exc)
+        return runtime_error(action, exc, sql_count=2)
     return ToolResult(
         observation=Observation(
             action_name=action,
@@ -214,6 +214,8 @@ def _existing_signal_result(args: FetchRelatedSignalArgs, *, repository: Any) ->
 
 
 def _signal_evidence_alias(args: FetchRelatedSignalArgs) -> str:
+    if args.evidence_alias is not None:
+        return f"{args.evidence_alias}_{_alias_token(args.element)}"
     dimension_prefix = e3_alias_for_dimension(args.dimension)
     dimension_token = (
         dimension_prefix.removeprefix("E3_")
