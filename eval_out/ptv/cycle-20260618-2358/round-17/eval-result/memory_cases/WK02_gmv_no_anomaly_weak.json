@@ -1,0 +1,50 @@
+{
+  "phase": "memory",
+  "case_id": "WK02_gmv_no_anomaly_weak",
+  "intent_ok": 1,
+  "anomaly_ok": 1,
+  "top1_ok": 1,
+  "top3_ok": 1,
+  "dominant_top1_ok": 1,
+  "root_cause_set_recall": 1.0,
+  "root_cause_set_precision": 1.0,
+  "weighted_explanation_coverage": 1.0,
+  "top3_contains_all_major_causes": 1,
+  "evidence_coverage": 1.0,
+  "sql_safe": 1,
+  "reflection_repair_ok": 1,
+  "report_traceable_ok": 1,
+  "memory_pollution_ok": 1,
+  "no_anomaly_task_ok": 1,
+  "adtributor_used": 0,
+  "multi_agent_path": "single_agent",
+  "detail": {
+    "status": "no_anomaly",
+    "metric_id": "gmv",
+    "expected_metric": "gmv",
+    "selected_candidate": null,
+    "expected_root_causes": [],
+    "token_count": 0,
+    "latency_ms": 0,
+    "sql_count": 2,
+    "trace_step_count": 2,
+    "memory_read_seen": true,
+    "tool_sequence": [
+      "read_priors",
+      "detect_anomaly"
+    ],
+    "memory_record_count": 1,
+    "memory_layers": [
+      "semantic"
+    ],
+    "eval_attempts": 1,
+    "final_run_id": "eval-result-mem-WK02_gmv_no_a-5b6aef83",
+    "memory_enabled": true,
+    "tags": [
+      "phase_c",
+      "weak_signal",
+      "no_anomaly"
+    ],
+    "scenario_family": "no_anomaly"
+  }
+}

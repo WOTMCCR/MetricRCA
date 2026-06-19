@@ -1,0 +1,376 @@
+{
+  "base_commit": "944460c",
+  "controller_rules_applied": {
+    "rule_c1_blocked_categories": [],
+    "rule_c1_reason": "Round 16 applied FIX-I but produced no complete gate-valid eval; comparing Round 17 to the last complete Round 15 baseline shows top1, top3, and multi_cause top3 all improved, so no category is blocked by regression.",
+    "rule_c2_promoted": null,
+    "rule_c2_reason": "No gate-blocking deferred category outranks the current FIX-M precision blocker. FIX-A deferral is nonblocking because top1/top3 aggregate gates pass and ranking cannot remove broad false-positive final candidate tails.",
+    "rule_c3_discovery_priority": false,
+    "rule_c3_reason": "No active FIX-D discovery gap blocks Round 17: top3_contains_all_major_causes_rate=1.0, root_cause_set_recall_avg=1.0, and weighted_explanation_coverage_avg=1.0. Discovery is complete enough for merge-output precision work.",
+    "rule_c4_revert_assessment": {
+      "comparison_baseline": "round-15 last complete; round-16 was eval-fatal/incomplete",
+      "justification": "Round 16 FIX-I removed the fatal and Round 17 improved the RULE-C1 aggregate metrics plus recall/weighted coverage versus Round 15. There is no revert trigger.",
+      "regressed_metrics": [],
+      "revert_decision": "keep",
+      "triggered": false
+    },
+    "rule_c5_streak_counts": {
+      "FIX-I": 1
+    },
+    "rule_c5_triggered": false,
+    "selected_fix_category": "FIX-M",
+    "selection_justification": "Analyst recommends FIX-M for gate-blocking precision tails; FIX-M is allowed because Round 16 was FIX-I, no FIX-D blocker is present, and no regression/revert gate is triggered."
+  },
+  "controller_status": "fix_selected",
+  "cycle_id": "cycle-20260618-2358",
+  "decision_basis": {
+    "analyst_recommended_next_category": "FIX-M",
+    "blocking_metric": "root_cause_set_precision_avg",
+    "blocking_metric_required": 0.85,
+    "blocking_metric_value": 0.811335,
+    "diagnosis_counts": {
+      "by_aspect": {
+        "execution": 1,
+        "multi_cause_outcome": 19,
+        "outcome": 2
+      },
+      "by_divergence": {
+        "complexity_gap": 19,
+        "overfit": 3
+      },
+      "by_fix_category": {
+        "FIX-A": 2,
+        "FIX-D": 1,
+        "FIX-M": 19
+      },
+      "entries": 22,
+      "gate_blocking_actionable_by_fix_category": {
+        "FIX-M": 18
+      }
+    },
+    "gap_accuracy": null,
+    "gate_blocking_diagnoses": 18,
+    "passing_metrics": {
+      "evidence_coverage_avg": 1.0,
+      "intent_accuracy": 1.0,
+      "per_family_gate": true,
+      "root_cause_set_recall_avg": 1.0,
+      "sql_safe_rate": 1.0,
+      "top1_rate": 0.934783,
+      "top3_rate": 1.0,
+      "weighted_explanation_coverage_avg": 1.0
+    },
+    "thresholds_met": false
+  },
+  "exit_decision": "continue_until_metricrca_gates_pass",
+  "failure_patterns": [
+    {
+      "cases": [
+        "C08_gmv_aov_drop",
+        "C25_refund_discovery",
+        "C24_gmv_positive_spike",
+        "IX02_gmv_interaction_discovery",
+        "C06_gmv_multi_channel_drop",
+        "C07_gmv_category_channel_cross",
+        "C09_gmv_uv_organic_drop",
+        "C26_ambiguous_intent",
+        "C27_composite_cause",
+        "C28_multi_day_drift",
+        "C14_net_gmv_gmv_driven",
+        "MC04_gmv_weak_set",
+        "IX03_uv_interaction_cell",
+        "RS01_gmv_residual_dual_mechanism",
+        "RS02_gmv_residual_discovery",
+        "MC01_gmv_multi_cause_overall",
+        "MC05_gmv_lag_stockout_mix",
+        "MC08_gmv_channel_category_mix"
+      ],
+      "cluster_id": "precision_final_candidate_tail",
+      "evidence": "root_cause_set_precision_avg=0.811335 < 0.85 while top3, recall, weighted coverage, intent, anomaly, evidence, SQL safety, reflection, and report traceability all pass. Low-precision cases have final candidate tails or selected_candidate.dimension_elements that retain false-positive representatives.",
+      "fix_category": "FIX-M",
+      "gate_blocking": true
+    },
+    {
+      "cases": [
+        "IX02_gmv_interaction_discovery",
+        "IX03_uv_interaction_cell"
+      ],
+      "cluster_id": "interaction_top1_secondary",
+      "evidence": "IX02 and IX03 still select campaign_traffic_drop top1 instead of interaction_channel_category, but expected interaction causes are in top3/full recall. Treat the precision-tail part as FIX-M and defer pure ranking until after the aggregate precision gate clears.",
+      "fix_category": "FIX-M",
+      "gate_blocking": true,
+      "secondary_fix_category": "FIX-A"
+    },
+    {
+      "cases": [
+        "IX02_gmv_interaction_discovery",
+        "IX03_uv_interaction_cell",
+        "MC06_net_gmv_multi_driver"
+      ],
+      "cluster_id": "dominant_top1_nonblocking",
+      "evidence": "MC06, IX02, and IX03 miss dominant top1, but top3_contains_all_major_causes_rate=1.0 and root_cause_set_recall_avg=1.0; these do not explain thresholds_met=false.",
+      "fix_category": "FIX-A",
+      "gate_blocking": false
+    },
+    {
+      "cases": [
+        "MC02_uv_multi_channel_drop",
+        "RS01_gmv_residual_dual_mechanism"
+      ],
+      "cluster_id": "prediction_overfit_calibration",
+      "evidence": "Gap analyzer found three overfit prediction gaps: MC02 actual path was shorter than predicted; RS01 actual top1/top3/coverage passed despite predicted risk.",
+      "fix_category": "FIX-D/FIX-A/FIX-M",
+      "gate_blocking": false
+    }
+  ],
+  "forbidden_files_this_round": [
+    "metric_rca/evals/scorer.py",
+    "metric_rca/data/seed_data.py",
+    "metric_rca/evals/regression_private_ground_truth.jsonl"
+  ],
+  "next_optimization_target": {
+    "files": [
+      "metric_rca/runtime/ranking.py",
+      "tests/test_tools.py"
+    ],
+    "layer": "pipeline/merge projection",
+    "rationale": "Round 17 precision tails are selected-candidate dimension_elements added during adtributor/rank projection. Correct candidates are present and top3/recall are green; output projection is over-broad."
+  },
+  "optimization_summary": {
+    "expected_effect": "Raise precision for broad single-cause tails C06/C07/C08/C09/C14/C24/C26/C27/C28 without reducing top3/recall for MC and interaction cases.",
+    "hypothesis": "_enhance_with_adtributor appends every top adtributor pair by dimension to every candidate.dimension_elements. In broad single-cause cases this re-inflates selected candidates with unrelated channel/category/product pairs after ContributionSetBuilder collapsed the candidate list, dragging root_cause_set_precision below 0.85.",
+    "known_risks": [
+      "Over-pruning dimension_elements could drop embedded secondary causes from multi-cause candidates. Tests must cover low-confidence multi-cause preservation.",
+      "Changing ranking.py has prior regression history, so scope must be projection-only and not alter candidate order/top1 selection."
+    ],
+    "planned_change": "Constrain adtributor dimension_elements projection for high-confidence single-driver candidate sets so the ranked selected candidate keeps its own primary pair instead of absorbing unrelated top pairs. Preserve multi-cause low-confidence sets and interaction-bearing sets."
+  },
+  "ptv_round": 17,
+  "remaining_gaps": [
+    {
+      "cases": [
+        "C08_gmv_aov_drop",
+        "C25_refund_discovery",
+        "C24_gmv_positive_spike",
+        "IX02_gmv_interaction_discovery",
+        "C06_gmv_multi_channel_drop",
+        "C07_gmv_category_channel_cross",
+        "C09_gmv_uv_organic_drop",
+        "C26_ambiguous_intent",
+        "C27_composite_cause",
+        "C28_multi_day_drift",
+        "C14_net_gmv_gmv_driven",
+        "MC04_gmv_weak_set",
+        "IX03_uv_interaction_cell",
+        "RS01_gmv_residual_dual_mechanism",
+        "RS02_gmv_residual_discovery",
+        "MC01_gmv_multi_cause_overall",
+        "MC05_gmv_lag_stockout_mix",
+        "MC08_gmv_channel_category_mix"
+      ],
+      "cluster_id": "precision_final_candidate_tail",
+      "evidence": "root_cause_set_precision_avg=0.811335 < 0.85 while top3, recall, weighted coverage, intent, anomaly, evidence, SQL safety, reflection, and report traceability all pass. Low-precision cases have final candidate tails or selected_candidate.dimension_elements that retain false-positive representatives.",
+      "fix_category": "FIX-M",
+      "gate_blocking": true
+    },
+    {
+      "cases": [
+        "IX02_gmv_interaction_discovery",
+        "IX03_uv_interaction_cell"
+      ],
+      "cluster_id": "interaction_top1_secondary",
+      "evidence": "IX02 and IX03 still select campaign_traffic_drop top1 instead of interaction_channel_category, but expected interaction causes are in top3/full recall. Treat the precision-tail part as FIX-M and defer pure ranking until after the aggregate precision gate clears.",
+      "fix_category": "FIX-M",
+      "gate_blocking": true,
+      "secondary_fix_category": "FIX-A"
+    },
+    {
+      "cases": [
+        "IX02_gmv_interaction_discovery",
+        "IX03_uv_interaction_cell",
+        "MC06_net_gmv_multi_driver"
+      ],
+      "cluster_id": "dominant_top1_nonblocking",
+      "evidence": "MC06, IX02, and IX03 miss dominant top1, but top3_contains_all_major_causes_rate=1.0 and root_cause_set_recall_avg=1.0; these do not explain thresholds_met=false.",
+      "fix_category": "FIX-A",
+      "gate_blocking": false
+    },
+    {
+      "cases": [
+        "MC02_uv_multi_channel_drop",
+        "RS01_gmv_residual_dual_mechanism"
+      ],
+      "cluster_id": "prediction_overfit_calibration",
+      "evidence": "Gap analyzer found three overfit prediction gaps: MC02 actual path was shorter than predicted; RS01 actual top1/top3/coverage passed despite predicted risk.",
+      "fix_category": "FIX-D/FIX-A/FIX-M",
+      "gate_blocking": false
+    }
+  ],
+  "revert_assessment": {
+    "comparison_baseline": "round-15 last complete; round-16 was eval-fatal/incomplete",
+    "justification": "Round 16 FIX-I removed the fatal and Round 17 improved the RULE-C1 aggregate metrics plus recall/weighted coverage versus Round 15. There is no revert trigger.",
+    "regressed_metrics": [],
+    "revert_decision": "keep",
+    "triggered": false
+  },
+  "round": 17,
+  "rule_c1_blocked_categories": [],
+  "rule_c1_reason": "Round 16 applied FIX-I but produced no complete gate-valid eval; comparing Round 17 to the last complete Round 15 baseline shows top1, top3, and multi_cause top3 all improved, so no category is blocked by regression.",
+  "rule_c2_promoted": null,
+  "rule_c2_reason": "No gate-blocking deferred category outranks the current FIX-M precision blocker. FIX-A deferral is nonblocking because top1/top3 aggregate gates pass and ranking cannot remove broad false-positive final candidate tails.",
+  "rule_c3_reason": "No active FIX-D discovery gap blocks Round 17: top3_contains_all_major_causes_rate=1.0, root_cause_set_recall_avg=1.0, and weighted_explanation_coverage_avg=1.0. Discovery is complete enough for merge-output precision work.",
+  "rule_c4_revert_assessment": {
+    "comparison_baseline": "round-15 last complete; round-16 was eval-fatal/incomplete",
+    "justification": "Round 16 FIX-I removed the fatal and Round 17 improved the RULE-C1 aggregate metrics plus recall/weighted coverage versus Round 15. There is no revert trigger.",
+    "regressed_metrics": [],
+    "revert_decision": "keep",
+    "triggered": false
+  },
+  "rule_c5_reason": "Rounds 14 and 15 selected FIX-M, but Round 16 selected FIX-I. The current applied streak is FIX-I x1, so selecting FIX-M for Round 18 would not be a third consecutive FIX-M.",
+  "selected_fix_category": "FIX-M",
+  "stall_analysis_from_analyst": {
+    "category_history": [
+      "FIX-D",
+      "FIX-T",
+      "FIX-D",
+      "FIX-D",
+      "FIX-T",
+      "FIX-D",
+      "FIX-T",
+      "FIX-T",
+      "FIX-I",
+      "FIX-M",
+      "FIX-D",
+      "FIX-M",
+      "FIX-D",
+      "FIX-M",
+      "FIX-M",
+      "FIX-I"
+    ],
+    "category_history_by_round": [
+      {
+        "category": "FIX-D",
+        "round": 1
+      },
+      {
+        "category": "FIX-T",
+        "round": 2
+      },
+      {
+        "category": "FIX-D",
+        "round": 3
+      },
+      {
+        "category": "FIX-D",
+        "round": 4
+      },
+      {
+        "category": "FIX-T",
+        "round": 5
+      },
+      {
+        "category": "FIX-D",
+        "round": 6
+      },
+      {
+        "category": "FIX-T",
+        "round": 7
+      },
+      {
+        "category": "FIX-T",
+        "round": 8
+      },
+      {
+        "category": "FIX-I",
+        "round": 9
+      },
+      {
+        "category": "FIX-M",
+        "round": 10
+      },
+      {
+        "category": "FIX-D",
+        "round": 11
+      },
+      {
+        "category": "FIX-M",
+        "round": 12
+      },
+      {
+        "category": "FIX-D",
+        "round": 13
+      },
+      {
+        "category": "FIX-M",
+        "round": 14
+      },
+      {
+        "category": "FIX-M",
+        "round": 15
+      },
+      {
+        "category": "FIX-I",
+        "round": 16
+      }
+    ],
+    "category_streak": {
+      "FIX-I": 1
+    },
+    "current_streak": {
+      "FIX-I": 1
+    },
+    "deferred_streak": {
+      "FIX-A": 5,
+      "FIX-D": 0,
+      "FIX-I": 0,
+      "FIX-INJ": 0,
+      "FIX-M": 0,
+      "FIX-T": 0
+    },
+    "deferred_streak_note": "FIX-A top1 ordering has been tracked for several rounds, but Round 17 aggregate top1/top3 gates pass. The current gate-valid blocker is precision, so FIX-A remains nonblocking rather than a RULE-C2 mandatory promotion.",
+    "projected_streak_if_recommended_applied": {
+      "FIX-M": 1
+    },
+    "recommendation_reason": "The only failed exit gate is root_cause_set_precision_avg=0.811335 < 0.85. Candidate discovery and coverage are complete, and the low-precision cases point to final candidate-set composition. FIX-M is allowed by RULE-C1-C5 and has higher gate ROI than nonblocking FIX-A top1 tuning.",
+    "recommended_next_category": "FIX-M",
+    "rule_c1_blocking_categories": [],
+    "rule_c1_reason": "Round 16 applied FIX-I but produced no complete gate-valid eval; comparing Round 17 to the last complete Round 15 baseline shows top1, top3, and multi_cause top3 all improved, so no category is blocked by regression.",
+    "rule_c1_triggered": false,
+    "rule_c2_promoted": null,
+    "rule_c2_reason": "No gate-blocking deferred category outranks the current FIX-M precision blocker. FIX-A deferral is nonblocking because top1/top3 aggregate gates pass and ranking cannot remove broad false-positive final candidate tails.",
+    "rule_c2_triggered": false,
+    "rule_c3_reason": "No active FIX-D discovery gap blocks Round 17: top3_contains_all_major_causes_rate=1.0, root_cause_set_recall_avg=1.0, and weighted_explanation_coverage_avg=1.0. Discovery is complete enough for merge-output precision work.",
+    "rule_c3_triggered": false,
+    "rule_c4_revert_assessment": {
+      "comparison_baseline": "round-15 last complete; round-16 was eval-fatal/incomplete",
+      "justification": "Round 16 FIX-I removed the fatal and Round 17 improved the RULE-C1 aggregate metrics plus recall/weighted coverage versus Round 15. There is no revert trigger.",
+      "regressed_metrics": [],
+      "revert_decision": "keep",
+      "triggered": false
+    },
+    "rule_c5_reason": "Rounds 14 and 15 selected FIX-M, but Round 16 selected FIX-I. The current applied streak is FIX-I x1, so selecting FIX-M for Round 18 would not be a third consecutive FIX-M.",
+    "rule_c5_triggered": false,
+    "same_case_recurrence_note": "Many precision-tail cases also failed after Round 15 FIX-M, so proposed FIX-M has recurrence risk. Round 16 selected FIX-I and reset the consecutive-category streak; this is not a RULE-C5 or high-stall case."
+  },
+  "summary_type": "agent_optimization_context",
+  "target_files": [
+    "metric_rca/runtime/ranking.py",
+    "tests/test_tools.py"
+  ],
+  "target_layer": "pipeline_merge_projection",
+  "implemented_fix": {
+    "category": "FIX-M",
+    "description": "Constrained adtributor projection for high-confidence single-driver paths: single-candidate projections keep only the primary pair, and post-adtributor ranked tails collapse to the selected campaign/aov representative when the selected driver is high-signal/high-confidence and no interaction candidate is present. Residual multi-cause tails remain preserved below the high-signal floor.",
+    "files": [
+      "metric_rca/runtime/ranking.py",
+      "tests/test_tools.py"
+    ],
+    "validation": [
+      "PATH=.venv/bin:$PATH python -m pytest tests/test_tools.py::test_rank_root_causes_keeps_high_confidence_single_driver_projection_narrow -q",
+      "PATH=.venv/bin:$PATH python -m pytest tests/test_tools.py -q -k 'rank_root_causes'",
+      "PATH=.venv/bin:$PATH python -m pytest tests/test_tools.py -q",
+      "PATH=.venv/bin:$PATH make seed",
+      "PATH=.venv/bin:$PATH make test"
+    ]
+  }
+}
