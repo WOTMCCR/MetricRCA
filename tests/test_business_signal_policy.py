@@ -285,14 +285,28 @@ def test_net_gmv_explicit_channel_policy_declares_multi_driver_lanes() -> None:
             lane.dimension,
             lane.signal_type,
             lane.element_binding,
+            lane.element_selection,
             lane.evidence_alias,
+            lane.selection_alias,
+            lane.signal_evidence_alias,
             lane.signal_filter_mode,
+            lane.explicit_scope_policy,
         )
         for lane in policy.lanes
         ] == [
-            ("channel", "campaign", "explicit_scope", "E4_channel", "inherit"),
-            ("category", "inventory", "dynamic", "E4_category", "none"),
-            ("channel", "conversion", "explicit_scope", "E4_channel_conversion", "inherit"),
+            ("channel", "campaign", "explicit_scope", "top_candidate", "E4_channel", None, None, "inherit", "strict"),
+            ("category", "inventory", "dynamic", "top_candidate", "E4_category", None, None, "none", "strict"),
+            (
+                "channel",
+                "conversion",
+                "dynamic",
+                "signal_anomaly",
+                "E4_channel_conversion",
+                "E_select_ch_conversion",
+                "E3_ch_conversion",
+                "none",
+                "global_explanatory",
+            ),
         ]
 
 

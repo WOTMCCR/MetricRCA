@@ -411,30 +411,39 @@ def _parallel_broad_contribution_chains(
     selection_aliases: list[str] = []
     e3_aliases: list[str] = []
     next_index = first_action_index
-    dynamic_selection_dimensions: set[str] = set()
+    dynamic_selection_aliases: set[str] = set()
+    e4_alias_set: set[str] = set()
+    e3_alias_set: set[str] = set()
     for lane in lanes:
         dimension = lane.dimension
         contribution_filters = dict(scoped_filters.get(dimension, {}) if scoped_filters else {})
         signal_filters = _signal_filters_for_lane(lane, contribution_filters)
         scoped_element = scoped_elements.get(dimension) if scoped_elements else None
         first_signal_element = _lane_element(lane, scoped_element=scoped_element, explicit_scope=explicit_scope)
-        selection_alias = f"E_select_{dimension}"
-        e3_alias = e3_alias_for_signal_lane(
+        selection_alias = lane.selection_alias or f"E_select_{dimension}"
+        e3_alias = lane.signal_evidence_alias or e3_alias_for_signal_lane(
             dimension,
             lane.signal_type,
             element_known=first_signal_element is not None,
         )
         e4_alias = lane.evidence_alias or f"E4_{dimension}"
+        if e4_alias in e4_alias_set:
+            raise PlanCompilerError("DISCOVERY_LANE_ALIAS_CONFLICT", f"duplicate E4 alias {e4_alias}")
+        if e3_alias in e3_alias_set:
+            raise PlanCompilerError("DISCOVERY_LANE_ALIAS_CONFLICT", f"duplicate E3 alias {e3_alias}")
+        e4_alias_set.add(e4_alias)
+        e3_alias_set.add(e3_alias)
         e4_aliases.append(e4_alias)
         e3_aliases.append(e3_alias)
+        scope_policy_args = _explicit_scope_policy_args(lane, explicit_scope=explicit_scope)
 
         if first_signal_element is None:
-            if dimension in dynamic_selection_dimensions:
+            if selection_alias in dynamic_selection_aliases:
                 raise PlanCompilerError(
                     "DISCOVERY_LANE_ALIAS_CONFLICT",
                     f"multiple dynamic discovery lanes require {selection_alias}",
                 )
-            dynamic_selection_dimensions.add(dimension)
+            dynamic_selection_aliases.add(selection_alias)
             selection_aliases.append(selection_alias)
             actions.append(
                 RcaAction(
@@ -447,6 +456,7 @@ def _parallel_broad_contribution_chains(
                         "dimension": dimension,
                         "filters": signal_filters,
                         "element_selection": lane.element_selection,
+                        **scope_policy_args,
                     },
                     requires=["E1", f"E2_{dimension}"],
                     produces=[selection_alias],
@@ -470,6 +480,7 @@ def _parallel_broad_contribution_chains(
                     "filters": signal_filters,
                     "element_selection": lane.element_selection,
                     "evidence_alias": e3_alias,
+                    **scope_policy_args,
                 },
                 requires=fetch_requires,
                 produces=[e3_alias],
@@ -492,6 +503,7 @@ def _parallel_broad_contribution_chains(
                     "filters": contribution_filters,
                     "element_selection": lane.element_selection,
                     "evidence_alias": e4_alias,
+                    **scope_policy_args,
                 },
                 requires=calculate_requires,
                 produces=[e4_alias],
@@ -587,6 +599,12 @@ def _signal_filters_for_lane(lane: DiscoveryLane, contribution_filters: dict[str
     if lane.signal_filter_mode == "none":
         return {}
     return dict(contribution_filters)
+
+
+def _explicit_scope_policy_args(lane: DiscoveryLane, *, explicit_scope: dict[str, str] | None) -> dict[str, str]:
+    if not explicit_scope or lane.explicit_scope_policy == "strict":
+        return {}
+    return {"explicit_scope_policy": lane.explicit_scope_policy}
 
 
 def _lane_element(

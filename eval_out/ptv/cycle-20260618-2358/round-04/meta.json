@@ -1,0 +1,10 @@
+{
+  "cycle_id": "cycle-20260618-2358",
+  "round": 4,
+  "branch": "codex/c-complex-causal",
+  "base_commit": "978947e837c40eac81f28fc3f743b7051b58177c",
+  "started_at": "2026-06-19T14:10:00Z",
+  "total_cases": 46,
+  "project_binding": "metricrca",
+  "status": "in_progress"
+}

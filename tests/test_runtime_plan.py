@@ -174,6 +174,57 @@ def test_plan_compiler_builds_signal_first_gmv_without_hardcoded_element() -> No
     assert "E_select_channel" in rank_action.requires
 
 
+def test_plan_compiler_builds_broad_gmv_multisignal_discovery_lanes() -> None:
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date=date(2026, 6, 1),
+        question_family="gmv_drop",
+        analysis_strategy="standard",
+    )
+
+    plan = _compiler().compile(run_id="run-1", parsed_intent=parsed)
+
+    selections = [action for action in plan.actions if action.kind == "select_signal_element"]
+    signal_actions = [action for action in plan.actions if action.kind == "fetch_related_signal"]
+    contribution_actions = [action for action in plan.actions if action.kind == "calculate_contribution"]
+    merge_action = next(action for action in plan.actions if action.kind == "merge_contribution_sets")
+
+    assert [(action.args["dimension"], action.args["signal_type"], action.produces[0]) for action in selections] == [
+        ("channel", "campaign", "E_select_channel"),
+        ("channel", "conversion", "E_select_ch_conversion"),
+        ("category", "inventory", "E_select_category"),
+        ("product", "inventory", "E_select_product"),
+        ("channel", "interaction", "E_select_ch_interaction"),
+        ("category", "interaction", "E_select_cat_interaction"),
+    ]
+    assert [(action.args["dimension"], action.args["signal_type"], action.produces[0]) for action in signal_actions] == [
+        ("channel", "campaign", "E3_ch"),
+        ("channel", "conversion", "E3_ch_conversion"),
+        ("category", "inventory", "E3_cat"),
+        ("product", "inventory", "E3_prod"),
+        ("channel", "interaction", "E3_ch_interaction"),
+        ("category", "interaction", "E3_cat_interaction"),
+    ]
+    assert [(action.args["dimension"], action.args["evidence_alias"]) for action in contribution_actions] == [
+        ("channel", "E4_channel"),
+        ("channel", "E4_channel_conversion"),
+        ("category", "E4_category"),
+        ("product", "E4_product"),
+        ("channel", "E4_channel_interaction"),
+        ("category", "E4_category_interaction"),
+    ]
+    assert merge_action.args["source_evidence_aliases"] == [
+        "E4_channel",
+        "E4_channel_conversion",
+        "E4_category",
+        "E4_product",
+        "E4_channel_interaction",
+        "E4_category_interaction",
+    ]
+    assert len({action.produces[0] for action in selections}) == len(selections)
+    assert len({action.produces[0] for action in signal_actions}) == len(signal_actions)
+
+
 @pytest.mark.parametrize(
     ("question_family", "expected_dimension", "expected_signal_type"),
     [
@@ -286,22 +337,25 @@ def test_plan_compiler_expands_net_gmv_paid_ads_slice_to_multi_driver_discovery(
     assert plan.explicit_scope == {"channel": "paid_ads"}
     assert [action.args["dimension"] for action in drilldowns] == ["channel", "category"]
     assert [action.args["filters"] for action in drilldowns] == [{}, {"channel": "paid_ads"}]
-    assert [(action.args["dimension"], action.args["signal_type"]) for action in selections] == [
-        ("category", "inventory"),
+    assert [(action.args["dimension"], action.args["signal_type"], action.produces[0]) for action in selections] == [
+        ("category", "inventory", "E_select_category"),
+        ("channel", "conversion", "E_select_ch_conversion"),
     ]
-    assert [action.args["filters"] for action in selections] == [{}]
+    assert [action.args["filters"] for action in selections] == [{}, {}]
     assert [(action.args["dimension"], action.args["signal_type"], action.args["element"]) for action in signal_actions] == [
         ("channel", "campaign", "paid_ads"),
         ("category", "inventory", None),
-        ("channel", "conversion", "paid_ads"),
+        ("channel", "conversion", None),
     ]
     assert [(action.produces, action.args["evidence_alias"]) for action in signal_actions] == [
         (["E3_ch_campaign"], "E3_ch_campaign"),
         (["E3_cat"], "E3_cat"),
         (["E3_ch_conversion"], "E3_ch_conversion"),
     ]
-    assert [action.dynamic for action in signal_actions] == [False, True, False]
+    assert [action.dynamic for action in signal_actions] == [False, True, True]
     assert [action.args["filters"] for action in signal_actions] == [{}, {}, {}]
+    assert signal_actions[2].args["element_selection"] == "signal_anomaly"
+    assert signal_actions[2].args["explicit_scope_policy"] == "global_explanatory"
     assert [action.requires[-1] for action in contribution_actions] == [
         "E3_ch_campaign",
         "E3_cat",
@@ -310,9 +364,10 @@ def test_plan_compiler_expands_net_gmv_paid_ads_slice_to_multi_driver_discovery(
     assert [(action.args["dimension"], action.args["element"], action.args["evidence_alias"]) for action in contribution_actions] == [
         ("channel", "paid_ads", "E4_channel"),
         ("category", None, "E4_category"),
-        ("channel", "paid_ads", "E4_channel_conversion"),
+        ("channel", None, "E4_channel_conversion"),
     ]
     assert [action.args["filters"] for action in contribution_actions] == [{}, {"channel": "paid_ads"}, {}]
+    assert contribution_actions[2].args["explicit_scope_policy"] == "global_explanatory"
     assert merge_action.args["source_evidence_aliases"] == ["E4_channel", "E4_category", "E4_channel_conversion"]
     assert plan.scope_mode == "explicit_multi_driver"
     assert "metric_rca/runtime/ranking.py" not in str(plan.model_dump(mode="json"))
@@ -392,16 +447,47 @@ def test_plan_compiler_builds_parallel_broad_gmv_contribution_chains() -> None:
     merge_action = next(action for action in plan.actions if action.kind == "merge_contribution_sets")
     rank_action = plan.actions[-1]
 
-    assert [action.args["dimension"] for action in contribution_actions] == ["channel", "category", "product"]
-    assert [action.produces for action in contribution_actions] == [["E4_channel"], ["E4_category"], ["E4_product"]]
+    assert [action.args["dimension"] for action in contribution_actions] == [
+        "channel",
+        "channel",
+        "category",
+        "product",
+        "channel",
+        "category",
+    ]
+    assert [action.produces for action in contribution_actions] == [
+        ["E4_channel"],
+        ["E4_channel_conversion"],
+        ["E4_category"],
+        ["E4_product"],
+        ["E4_channel_interaction"],
+        ["E4_category_interaction"],
+    ]
     assert [action.args["evidence_alias"] for action in contribution_actions] == [
         "E4_channel",
+        "E4_channel_conversion",
         "E4_category",
         "E4_product",
+        "E4_channel_interaction",
+        "E4_category_interaction",
     ]
-    assert merge_action.requires == ["E4_channel", "E4_category", "E4_product"]
+    assert merge_action.requires == [
+        "E4_channel",
+        "E4_channel_conversion",
+        "E4_category",
+        "E4_product",
+        "E4_channel_interaction",
+        "E4_category_interaction",
+    ]
     assert merge_action.produces == ["E4"]
-    assert merge_action.args["source_evidence_aliases"] == ["E4_channel", "E4_category", "E4_product"]
+    assert merge_action.args["source_evidence_aliases"] == [
+        "E4_channel",
+        "E4_channel_conversion",
+        "E4_category",
+        "E4_product",
+        "E4_channel_interaction",
+        "E4_category_interaction",
+    ]
     assert rank_action.requires[-1] == "E4"
 
 

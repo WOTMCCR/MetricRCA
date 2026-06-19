@@ -249,6 +249,38 @@ def test_action_gate_rejects_explicit_multi_driver_same_dimension_signal_without
     assert "element=paid_ads" in (decision.message or "")
 
 
+def test_action_gate_allows_policy_marked_global_explanatory_same_dimension_lane() -> None:
+    ctx = RunContext(
+        run_id="run-1",
+        metric_id="net_gmv",
+        target_date=date(2026, 5, 29),
+        explicit_scope={"channel": "paid_ads"},
+        scope_mode="explicit_multi_driver",
+    )
+    action = RcaAction(
+        action_id="A5",
+        kind="fetch_related_signal",
+        args={
+            "metric_id": "net_gmv",
+            "target_date": date(2026, 5, 29),
+            "signal_type": "conversion",
+            "dimension": "channel",
+            "element": None,
+            "filters": {},
+            "explicit_scope_policy": "global_explanatory",
+        },
+        requires=["E1", "E2_channel", "E_select_ch_conversion"],
+    )
+    graph = EvidenceGraph(
+        run_id="run-1",
+        evidence_ids=["run-1:E1", "run-1:E2_channel", "run-1:E_select_ch_conversion"],
+    )
+
+    decision = ActionGate().validate(ctx, action, graph)
+
+    assert decision.allowed is True
+
+
 def test_action_gate_rejects_step_budget_exhaustion() -> None:
     ctx = RunContext(
         run_id="run-1",

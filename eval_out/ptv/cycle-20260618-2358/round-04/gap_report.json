@@ -1,0 +1,6146 @@
+{
+  "eval_id": "ptv-cycle-20260618-2358-round-04",
+  "gaps": [
+    {
+      "case_id": "gmv_paid_ads_drop",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "filters": {
+          "channel": "paid_ads"
+        },
+        "metric_id": "gmv",
+        "question_family": "channel_gmv_anomaly",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "gmv_paid_ads_drop",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=explicit_single",
+          "scope={'channel': 'paid_ads'}"
+        ],
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 5
+      },
+      "detail": "step count within tolerance (predicted=5, actual=5)"
+    },
+    {
+      "case_id": "gmv_paid_ads_drop",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "gmv_paid_ads_drop",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "gmv_paid_ads_drop",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "paid_ads",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "gmv_paid_ads_drop",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "gmv_stockout_electronics",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": "category",
+        "element": "electronics",
+        "filters": {
+          "category": "electronics"
+        },
+        "metric_id": "gmv",
+        "question_family": "category_gmv_anomaly",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "gmv_stockout_electronics",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=explicit_single",
+          "scope={'category': 'electronics'}"
+        ],
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 5
+      },
+      "detail": "step count within tolerance (predicted=5, actual=5)"
+    },
+    {
+      "case_id": "gmv_stockout_electronics",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_category",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "gmv_stockout_electronics",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "gmv_stockout_electronics",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "category",
+        "element": "electronics",
+        "root_cause_type": "stockout",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "stockout",
+        "dimension": "category",
+        "element": "electronics",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "gmv_stockout_electronics",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "category",
+            "element": "electronics",
+            "root_cause_type": "stockout"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "cvr_mobile_drop",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": "device",
+        "element": "mobile",
+        "filters": {
+          "device": "mobile"
+        },
+        "metric_id": "pay_cvr",
+        "question_family": "pay_cvr_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "pay_cvr"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "cvr_mobile_drop",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=explicit_single",
+          "scope={'device': 'mobile'}"
+        ],
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 5
+      },
+      "detail": "step count within tolerance (predicted=5, actual=5)"
+    },
+    {
+      "case_id": "cvr_mobile_drop",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_device",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "cvr_mobile_drop",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "cvr_mobile_drop",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "device",
+        "element": "mobile",
+        "root_cause_type": "conversion_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "conversion_drop",
+        "dimension": "device",
+        "element": "mobile",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "cvr_mobile_drop",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "device",
+            "element": "mobile",
+            "root_cause_type": "conversion_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "refund_rate_product_quality",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": "product",
+        "element": "product_1",
+        "filters": {
+          "product": "product_1"
+        },
+        "metric_id": "refund_rate",
+        "question_family": "refund_rate_increase",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "refund_rate"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "refund_rate_product_quality",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=explicit_single",
+          "scope={'product': 'product_1'}"
+        ],
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 5
+      },
+      "detail": "step count within tolerance (predicted=5, actual=5)"
+    },
+    {
+      "case_id": "refund_rate_product_quality",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_product",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "refund_rate_product_quality",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "refund_rate_product_quality",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "product",
+        "element": "product_1",
+        "root_cause_type": "complaint_or_quality_issue",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "complaint_or_quality_issue",
+        "dimension": "product",
+        "element": "1",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "refund_rate_product_quality",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "product",
+            "element": "product_1",
+            "root_cause_type": "complaint_or_quality_issue"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "gmv_no_anomaly",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "gmv_no_anomaly",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=no_anomaly",
+          "scope=unscoped"
+        ],
+        "forbidden_tools": [
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ],
+        "status": "no_anomaly",
+        "step_count": 1,
+        "tool_sequence": [
+          "detect_anomaly"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 1
+      },
+      "detail": "step count within tolerance (predicted=1, actual=1)"
+    },
+    {
+      "case_id": "gmv_no_anomaly",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "gmv_no_anomaly",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "gmv_no_anomaly",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": null,
+        "element": null,
+        "root_cause_type": null,
+        "status": "no_anomaly",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": null,
+        "dimension": null,
+        "element": null,
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "gmv_no_anomaly",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 0,
+        "root_causes": [],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C06_gmv_multi_channel_drop",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "channel_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C06_gmv_multi_channel_drop",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_gmv_channel_category_product",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 12,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 15
+      },
+      "detail": "more steps than predicted (predicted=12, actual=15, +3)"
+    },
+    {
+      "case_id": "C06_gmv_multi_channel_drop",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E3_ch",
+          "E3_cat",
+          "E3_prod",
+          "E4_channel",
+          "E4_category",
+          "E4_product",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C06_gmv_multi_channel_drop",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C06_gmv_multi_channel_drop",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "paid_ads",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C06_gmv_multi_channel_drop",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_cause_type": "campaign_traffic_drop"
+          },
+          {
+            "dimension": "channel",
+            "element": "affiliate",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C07_gmv_category_channel_cross",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "channel_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C07_gmv_category_channel_cross",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_gmv_cross_dimension",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 12,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 15
+      },
+      "detail": "more steps than predicted (predicted=12, actual=15, +3)"
+    },
+    {
+      "case_id": "C07_gmv_category_channel_cross",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E3_ch",
+          "E3_cat",
+          "E3_prod",
+          "E4_channel",
+          "E4_category",
+          "E4_product",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C07_gmv_category_channel_cross",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C07_gmv_category_channel_cross",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "paid_ads",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C07_gmv_category_channel_cross",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_cause_type": "campaign_traffic_drop"
+          },
+          {
+            "dimension": "category",
+            "element": "electronics",
+            "root_cause_type": "stockout"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C08_gmv_aov_drop",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "product_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C08_gmv_aov_drop",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_gmv_product_first",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 12,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 15
+      },
+      "detail": "more steps than predicted (predicted=12, actual=15, +3)"
+    },
+    {
+      "case_id": "C08_gmv_aov_drop",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E3_prod",
+          "E3_ch",
+          "E3_cat",
+          "E4_product",
+          "E4_channel",
+          "E4_category",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C08_gmv_aov_drop",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C08_gmv_aov_drop",
+      "aspect": "outcome",
+      "divergence": "overfit",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "product",
+        "element": "top_product",
+        "root_cause_type": "aov_drop",
+        "status": "succeeded",
+        "top1_ok": false
+      },
+      "actual": {
+        "root_cause_type": "aov_drop",
+        "dimension": "product",
+        "element": "2",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "predicted top1 fail but actual pass"
+    },
+    {
+      "case_id": "C08_gmv_aov_drop",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "product",
+            "element": "top_product",
+            "root_cause_type": "aov_drop"
+          },
+          {
+            "dimension": "product",
+            "element": "top_product",
+            "root_cause_type": "stockout"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C09_gmv_uv_organic_drop",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "signal_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C09_gmv_uv_organic_drop",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_gmv_signal_first",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 13,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 15
+      },
+      "detail": "more steps than predicted (predicted=13, actual=15, +2)"
+    },
+    {
+      "case_id": "C09_gmv_uv_organic_drop",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E_select_channel",
+          "E3_ch",
+          "E3_cat",
+          "E3_prod",
+          "E4_channel",
+          "E4_category",
+          "E4_product",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C09_gmv_uv_organic_drop",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C09_gmv_uv_organic_drop",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "organic",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "organic",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C09_gmv_uv_organic_drop",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "organic",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C10_gmv_price_change",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": "category",
+        "element": "fashion",
+        "filters": {
+          "category": "fashion"
+        },
+        "metric_id": "gmv",
+        "question_family": "category_gmv_anomaly",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C10_gmv_price_change",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=explicit_single",
+          "scope={'category': 'fashion'}"
+        ],
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 5
+      },
+      "detail": "step count within tolerance (predicted=5, actual=5)"
+    },
+    {
+      "case_id": "C10_gmv_price_change",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_category",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C10_gmv_price_change",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C10_gmv_price_change",
+      "aspect": "outcome",
+      "divergence": "overfit",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "category",
+        "element": "fashion",
+        "root_cause_type": "stockout",
+        "status": "succeeded",
+        "top1_ok": false
+      },
+      "actual": {
+        "root_cause_type": "aov_drop",
+        "dimension": "category",
+        "element": "fashion",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "predicted top1 fail but actual pass"
+    },
+    {
+      "case_id": "C10_gmv_price_change",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "category",
+            "element": "fashion",
+            "root_cause_type": "stockout"
+          },
+          {
+            "dimension": "category",
+            "element": "fashion",
+            "root_cause_type": "aov_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C11_gmv_promo_end_falloff",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": "channel",
+        "element": "affiliate",
+        "filters": {
+          "channel": "affiliate"
+        },
+        "metric_id": "gmv",
+        "question_family": "channel_gmv_anomaly",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C11_gmv_promo_end_falloff",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=explicit_single",
+          "scope={'channel': 'affiliate'}"
+        ],
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 5
+      },
+      "detail": "step count within tolerance (predicted=5, actual=5)"
+    },
+    {
+      "case_id": "C11_gmv_promo_end_falloff",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C11_gmv_promo_end_falloff",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C11_gmv_promo_end_falloff",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "affiliate",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "affiliate",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C11_gmv_promo_end_falloff",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "affiliate",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C12_gmv_single_sku_stockout",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": "product",
+        "element": "product_3",
+        "filters": {
+          "product": "product_3"
+        },
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C12_gmv_single_sku_stockout",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=explicit_single",
+          "scope={'product': 'product_3'}"
+        ],
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 5
+      },
+      "detail": "step count within tolerance (predicted=5, actual=5)"
+    },
+    {
+      "case_id": "C12_gmv_single_sku_stockout",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_product",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C12_gmv_single_sku_stockout",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C12_gmv_single_sku_stockout",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "product",
+        "element": "product_3",
+        "root_cause_type": "stockout",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "stockout",
+        "dimension": "product",
+        "element": "3",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C12_gmv_single_sku_stockout",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "product",
+            "element": "product_3",
+            "root_cause_type": "stockout"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C13_net_gmv_refund_spike",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": "product",
+        "element": "product_1",
+        "filters": {
+          "product": "product_1"
+        },
+        "metric_id": "net_gmv",
+        "question_family": "net_gmv_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "net_gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C13_net_gmv_refund_spike",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=explicit_single",
+          "scope={'product': 'product_1'}"
+        ],
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 5
+      },
+      "detail": "step count within tolerance (predicted=5, actual=5)"
+    },
+    {
+      "case_id": "C13_net_gmv_refund_spike",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_product",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C13_net_gmv_refund_spike",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C13_net_gmv_refund_spike",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "product",
+        "element": "product_1",
+        "root_cause_type": "complaint_or_quality_issue",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "complaint_or_quality_issue",
+        "dimension": "product",
+        "element": "1",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C13_net_gmv_refund_spike",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "product",
+            "element": "product_1",
+            "root_cause_type": "complaint_or_quality_issue"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C14_net_gmv_gmv_driven",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "filters": {
+          "channel": "paid_ads"
+        },
+        "metric_id": "net_gmv",
+        "question_family": "net_gmv_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "net_gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C14_net_gmv_gmv_driven",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=explicit_multi_driver_net_gmv",
+          "scope={'channel': 'paid_ads'}",
+          "978947e: campaign channel lane produces/requires E3_ch_campaign",
+          "978947e: dynamic category inventory lane keeps E3_cat and E_select_category",
+          "978947e: conversion channel lane produces/requires E3_ch_conversion, avoiding the round-03 A9 collision"
+        ],
+        "status": "succeeded",
+        "step_count": 12,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 12
+      },
+      "detail": "step count within tolerance (predicted=12, actual=12)"
+    },
+    {
+      "case_id": "C14_net_gmv_gmv_driven",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E3_ch_campaign",
+          "E4_channel",
+          "E_select_category",
+          "E3_cat",
+          "E4_category",
+          "E3_ch_conversion",
+          "E4_channel_conversion",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed",
+        "lane_alias_fix_expected": true
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C14_net_gmv_gmv_driven",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C14_net_gmv_gmv_driven",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "paid_ads",
+        "lane_alias_fix_expected": true,
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C14_net_gmv_gmv_driven",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high_after_lane_alias_fix",
+        "lane_alias_fix_expected": true,
+        "multi_cause_candidate_count": 3,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_cause_type": "campaign_traffic_drop"
+          },
+          {
+            "dimension": "category",
+            "element": "dynamic_category",
+            "root_cause_type": "stockout"
+          },
+          {
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_cause_type": "conversion_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C15_refund_rate_logistics",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": "category",
+        "element": "fashion",
+        "filters": {
+          "category": "fashion"
+        },
+        "metric_id": "refund_rate",
+        "question_family": "refund_rate_increase",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "refund_rate"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C15_refund_rate_logistics",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=explicit_single",
+          "scope={'category': 'fashion'}"
+        ],
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 5
+      },
+      "detail": "step count within tolerance (predicted=5, actual=5)"
+    },
+    {
+      "case_id": "C15_refund_rate_logistics",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_category",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C15_refund_rate_logistics",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C15_refund_rate_logistics",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "category",
+        "element": "fashion",
+        "root_cause_type": "complaint_or_quality_issue",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "complaint_or_quality_issue",
+        "dimension": "category",
+        "element": "fashion",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C15_refund_rate_logistics",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "category",
+            "element": "fashion",
+            "root_cause_type": "complaint_or_quality_issue"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C16_stockout_rate_warehouse",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": "warehouse",
+        "element": "osaka",
+        "filters": {
+          "warehouse": "osaka"
+        },
+        "metric_id": "stockout_rate",
+        "question_family": "stockout_rate_increase",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "stockout_rate"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C16_stockout_rate_warehouse",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=explicit_single",
+          "scope={'warehouse': 'osaka'}"
+        ],
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 5
+      },
+      "detail": "step count within tolerance (predicted=5, actual=5)"
+    },
+    {
+      "case_id": "C16_stockout_rate_warehouse",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_warehouse",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C16_stockout_rate_warehouse",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C16_stockout_rate_warehouse",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "warehouse",
+        "element": "osaka",
+        "root_cause_type": "stockout",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "stockout",
+        "dimension": "warehouse",
+        "element": "osaka",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C16_stockout_rate_warehouse",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "warehouse",
+            "element": "osaka",
+            "root_cause_type": "stockout"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C17_complaint_rate_quality",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": "category",
+        "element": "electronics",
+        "filters": {
+          "category": "electronics"
+        },
+        "metric_id": "complaint_rate",
+        "question_family": "complaint_rate_increase",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "complaint_rate"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C17_complaint_rate_quality",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=explicit_single",
+          "scope={'category': 'electronics'}"
+        ],
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 5
+      },
+      "detail": "step count within tolerance (predicted=5, actual=5)"
+    },
+    {
+      "case_id": "C17_complaint_rate_quality",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_category",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C17_complaint_rate_quality",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C17_complaint_rate_quality",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "category",
+        "element": "electronics",
+        "root_cause_type": "complaint_or_quality_issue",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "complaint_or_quality_issue",
+        "dimension": "category",
+        "element": "electronics",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C17_complaint_rate_quality",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "category",
+            "element": "electronics",
+            "root_cause_type": "complaint_or_quality_issue"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C18_cvr_channel_landing",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": "channel",
+        "element": "affiliate",
+        "filters": {
+          "channel": "affiliate"
+        },
+        "metric_id": "pay_cvr",
+        "question_family": "pay_cvr_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "pay_cvr"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C18_cvr_channel_landing",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=explicit_single",
+          "scope={'channel': 'affiliate'}"
+        ],
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 5
+      },
+      "detail": "step count within tolerance (predicted=5, actual=5)"
+    },
+    {
+      "case_id": "C18_cvr_channel_landing",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C18_cvr_channel_landing",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C18_cvr_channel_landing",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "affiliate",
+        "root_cause_type": "conversion_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "conversion_drop",
+        "dimension": "channel",
+        "element": "affiliate",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C18_cvr_channel_landing",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "affiliate",
+            "root_cause_type": "conversion_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C19_gmv_seasonal_false_positive",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C19_gmv_seasonal_false_positive",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=no_anomaly",
+          "scope=unscoped"
+        ],
+        "forbidden_tools": [
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ],
+        "status": "no_anomaly",
+        "step_count": 1,
+        "tool_sequence": [
+          "detect_anomaly"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 1
+      },
+      "detail": "step count within tolerance (predicted=1, actual=1)"
+    },
+    {
+      "case_id": "C19_gmv_seasonal_false_positive",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C19_gmv_seasonal_false_positive",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C19_gmv_seasonal_false_positive",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": null,
+        "element": null,
+        "root_cause_type": null,
+        "status": "no_anomaly",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": null,
+        "dimension": null,
+        "element": null,
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C19_gmv_seasonal_false_positive",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 0,
+        "root_causes": [],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C20_cvr_no_anomaly_noise",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "pay_cvr",
+        "question_family": "pay_cvr_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "pay_cvr"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C20_cvr_no_anomaly_noise",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=no_anomaly",
+          "scope=unscoped"
+        ],
+        "forbidden_tools": [
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ],
+        "status": "no_anomaly",
+        "step_count": 1,
+        "tool_sequence": [
+          "detect_anomaly"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 1
+      },
+      "detail": "step count within tolerance (predicted=1, actual=1)"
+    },
+    {
+      "case_id": "C20_cvr_no_anomaly_noise",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C20_cvr_no_anomaly_noise",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C20_cvr_no_anomaly_noise",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": null,
+        "element": null,
+        "root_cause_type": null,
+        "status": "no_anomaly",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": null,
+        "dimension": null,
+        "element": null,
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C20_cvr_no_anomaly_noise",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 0,
+        "root_causes": [],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C21_cvr_discovery",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "pay_cvr",
+        "question_family": "pay_cvr_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "pay_cvr"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C21_cvr_discovery",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_pay_cvr_channel_device",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 11,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 11
+      },
+      "detail": "step count within tolerance (predicted=11, actual=11)"
+    },
+    {
+      "case_id": "C21_cvr_discovery",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_device",
+          "E_select_channel",
+          "E3_ch",
+          "E4_channel",
+          "E_select_device",
+          "E3_dev",
+          "E4_device",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C21_cvr_discovery",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C21_cvr_discovery",
+      "aspect": "outcome",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "dynamic_channel",
+        "root_cause_type": "conversion_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "conversion_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "top1_ok": false,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "predicted top1 pass but actual fail"
+    },
+    {
+      "case_id": "C21_cvr_discovery",
+      "aspect": "multi_cause_outcome",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "dynamic_channel",
+            "root_cause_type": "conversion_drop"
+          },
+          {
+            "dimension": "device",
+            "element": "dynamic_device",
+            "root_cause_type": "conversion_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": false,
+        "top3_contains_all_major_causes": false,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "predicted multi-cause top3 pass but actual fail"
+    },
+    {
+      "case_id": "C22_gmv_borderline",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C22_gmv_borderline",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=no_anomaly",
+          "scope=unscoped"
+        ],
+        "forbidden_tools": [
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ],
+        "status": "no_anomaly",
+        "step_count": 1,
+        "tool_sequence": [
+          "detect_anomaly"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 1
+      },
+      "detail": "step count within tolerance (predicted=1, actual=1)"
+    },
+    {
+      "case_id": "C22_gmv_borderline",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C22_gmv_borderline",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C22_gmv_borderline",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": null,
+        "element": null,
+        "root_cause_type": null,
+        "status": "no_anomaly",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": null,
+        "dimension": null,
+        "element": null,
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C22_gmv_borderline",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 0,
+        "root_causes": [],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C23_uv_organic_drop",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "uv",
+        "question_family": "uv_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "uv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C23_uv_organic_drop",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_uv_channel",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 6,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 6
+      },
+      "detail": "step count within tolerance (predicted=6, actual=6)"
+    },
+    {
+      "case_id": "C23_uv_organic_drop",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E_select_channel",
+          "E3_ch",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C23_uv_organic_drop",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C23_uv_organic_drop",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "organic",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "organic",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C23_uv_organic_drop",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "organic",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C24_gmv_positive_spike",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-06-02"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C24_gmv_positive_spike",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_gmv_positive_anomaly",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 12,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 15
+      },
+      "detail": "more steps than predicted (predicted=12, actual=15, +3)"
+    },
+    {
+      "case_id": "C24_gmv_positive_spike",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E3_ch",
+          "E3_cat",
+          "E3_prod",
+          "E4_channel",
+          "E4_category",
+          "E4_product",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C24_gmv_positive_spike",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C24_gmv_positive_spike",
+      "aspect": "outcome",
+      "divergence": "overfit",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "paid_ads",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": false
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "predicted top1 fail but actual pass"
+    },
+    {
+      "case_id": "C24_gmv_positive_spike",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C25_refund_discovery",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "refund_rate",
+        "question_family": "refund_rate_increase",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "refund_rate"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C25_refund_discovery",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_refund_product",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 6,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 6
+      },
+      "detail": "step count within tolerance (predicted=6, actual=6)"
+    },
+    {
+      "case_id": "C25_refund_discovery",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_product",
+          "E_select_product",
+          "E3_prod",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C25_refund_discovery",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C25_refund_discovery",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "product",
+        "element": "dynamic_product",
+        "root_cause_type": "complaint_or_quality_issue",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "complaint_or_quality_issue",
+        "dimension": "product",
+        "element": "1",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C25_refund_discovery",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "product",
+            "element": "dynamic_product",
+            "root_cause_type": "complaint_or_quality_issue"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C26_ambiguous_intent",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "channel_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C26_ambiguous_intent",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_gmv_channel_first",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 12,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 15
+      },
+      "detail": "more steps than predicted (predicted=12, actual=15, +3)"
+    },
+    {
+      "case_id": "C26_ambiguous_intent",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E3_ch",
+          "E3_cat",
+          "E3_prod",
+          "E4_channel",
+          "E4_category",
+          "E4_product",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C26_ambiguous_intent",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C26_ambiguous_intent",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "dynamic_channel",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C26_ambiguous_intent",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "dynamic_channel",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C27_composite_cause",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "channel_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C27_composite_cause",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_gmv_multi_lane",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 12,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 15
+      },
+      "detail": "more steps than predicted (predicted=12, actual=15, +3)"
+    },
+    {
+      "case_id": "C27_composite_cause",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E3_ch",
+          "E3_cat",
+          "E3_prod",
+          "E4_channel",
+          "E4_category",
+          "E4_product",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C27_composite_cause",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C27_composite_cause",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "dynamic_channel",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C27_composite_cause",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "dynamic_channel",
+            "root_cause_type": "campaign_traffic_drop"
+          },
+          {
+            "dimension": "category",
+            "element": "dynamic_category",
+            "root_cause_type": "stockout"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "C28_multi_day_drift",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "signal_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-06-05"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "C28_multi_day_drift",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_gmv_signal_first",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 13,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 15
+      },
+      "detail": "more steps than predicted (predicted=13, actual=15, +2)"
+    },
+    {
+      "case_id": "C28_multi_day_drift",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E_select_channel",
+          "E3_ch",
+          "E4_channel",
+          "E3_cat",
+          "E4_category",
+          "E3_prod",
+          "E4_product",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "C28_multi_day_drift",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "C28_multi_day_drift",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "social",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "organic",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "C28_multi_day_drift",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "social",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "MC01_gmv_multi_cause_overall",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "channel_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-05-29"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "MC01_gmv_multi_cause_overall",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_gmv_multi_cause",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 12,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 15
+      },
+      "detail": "more steps than predicted (predicted=12, actual=15, +3)"
+    },
+    {
+      "case_id": "MC01_gmv_multi_cause_overall",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E3_ch",
+          "E3_cat",
+          "E3_prod",
+          "E4_channel",
+          "E4_category",
+          "E4_product",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "MC01_gmv_multi_cause_overall",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "MC01_gmv_multi_cause_overall",
+      "aspect": "outcome",
+      "divergence": "design_flaw",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "dynamic_channel",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "stockout",
+        "dimension": "category",
+        "element": "electronics",
+        "top1_ok": false,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "wrong root cause type: predicted campaign_traffic_drop, got stockout"
+    },
+    {
+      "case_id": "MC01_gmv_multi_cause_overall",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "dynamic_channel",
+            "root_cause_type": "campaign_traffic_drop"
+          },
+          {
+            "dimension": "category",
+            "element": "dynamic_category",
+            "root_cause_type": "stockout"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "MC02_uv_multi_channel_drop",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "uv",
+        "question_family": "uv_drop",
+        "target_date": "2026-06-01"
+      },
+      "actual": {
+        "metric_id": "uv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "MC02_uv_multi_channel_drop",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_uv_channel",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 6,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 6
+      },
+      "detail": "step count within tolerance (predicted=6, actual=6)"
+    },
+    {
+      "case_id": "MC02_uv_multi_channel_drop",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E_select_channel",
+          "E3_ch",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "MC02_uv_multi_channel_drop",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "MC02_uv_multi_channel_drop",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "social",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "social",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "MC02_uv_multi_channel_drop",
+      "aspect": "multi_cause_outcome",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "social",
+            "root_cause_type": "campaign_traffic_drop"
+          },
+          {
+            "dimension": "channel",
+            "element": "organic",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 0.666667,
+        "weighted_explanation_coverage": 0.85
+      },
+      "detail": "predicted complete multi-cause set but actual recall or weighted coverage is below threshold (recall=0.666667, weighted=0.85)"
+    },
+    {
+      "case_id": "MC03_cvr_multi_signal_drop",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "pay_cvr",
+        "question_family": "pay_cvr_drop",
+        "target_date": "2026-05-28"
+      },
+      "actual": {
+        "metric_id": "pay_cvr"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "MC03_cvr_multi_signal_drop",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_pay_cvr_channel_device",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 11,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 11
+      },
+      "detail": "step count within tolerance (predicted=11, actual=11)"
+    },
+    {
+      "case_id": "MC03_cvr_multi_signal_drop",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_device",
+          "E_select_channel",
+          "E3_ch",
+          "E4_channel",
+          "E_select_device",
+          "E3_dev",
+          "E4_device",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "MC03_cvr_multi_signal_drop",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "MC03_cvr_multi_signal_drop",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "dynamic_channel",
+        "root_cause_type": "conversion_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "conversion_drop",
+        "dimension": "channel",
+        "element": "social",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "MC03_cvr_multi_signal_drop",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "dynamic_channel",
+            "root_cause_type": "conversion_drop"
+          },
+          {
+            "dimension": "device",
+            "element": "dynamic_device",
+            "root_cause_type": "conversion_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "MC04_gmv_weak_set",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "channel_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-05-29"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "MC04_gmv_weak_set",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_gmv_weak_signal",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 12,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 15
+      },
+      "detail": "more steps than predicted (predicted=12, actual=15, +3)"
+    },
+    {
+      "case_id": "MC04_gmv_weak_set",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E3_ch",
+          "E3_cat",
+          "E3_prod",
+          "E4_channel",
+          "E4_category",
+          "E4_product",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": "secondary-cause coverage may be weak",
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "MC04_gmv_weak_set",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "MC04_gmv_weak_set",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "weak_channel",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": false
+      },
+      "actual": {
+        "root_cause_type": "stockout",
+        "dimension": "category",
+        "element": "electronics",
+        "top1_ok": false,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "MC04_gmv_weak_set",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "partial",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "weak_channel",
+            "root_cause_type": "campaign_traffic_drop"
+          },
+          {
+            "dimension": "category",
+            "element": "weak_category",
+            "root_cause_type": "stockout"
+          }
+        ],
+        "top3_ok": false
+      },
+      "actual": {
+        "top3_ok": false,
+        "top3_contains_all_major_causes": false,
+        "root_cause_set_recall": 0.5,
+        "weighted_explanation_coverage": 0.55
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "MC05_gmv_lag_stockout_mix",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "signal_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-06-01"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "MC05_gmv_lag_stockout_mix",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_gmv_lagged_multi_lane",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 13,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 15
+      },
+      "detail": "more steps than predicted (predicted=13, actual=15, +2)"
+    },
+    {
+      "case_id": "MC05_gmv_lag_stockout_mix",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E_select_channel",
+          "E3_ch",
+          "E4_channel",
+          "E3_cat",
+          "E4_category",
+          "E3_prod",
+          "E4_product",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "MC05_gmv_lag_stockout_mix",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "MC05_gmv_lag_stockout_mix",
+      "aspect": "outcome",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "category",
+        "element": "dynamic_category",
+        "root_cause_type": "stockout",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "stockout",
+        "dimension": "category",
+        "element": "electronics",
+        "top1_ok": false,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "predicted top1 pass but actual fail"
+    },
+    {
+      "case_id": "MC05_gmv_lag_stockout_mix",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "category",
+            "element": "dynamic_category",
+            "root_cause_type": "stockout"
+          },
+          {
+            "dimension": "channel",
+            "element": "social",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "MC06_net_gmv_multi_driver",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "filters": {
+          "channel": "paid_ads"
+        },
+        "metric_id": "net_gmv",
+        "question_family": "net_gmv_drop",
+        "target_date": "2026-05-29"
+      },
+      "actual": {
+        "metric_id": "net_gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "MC06_net_gmv_multi_driver",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=explicit_multi_driver_net_gmv",
+          "scope={'channel': 'paid_ads'}",
+          "978947e: campaign channel lane produces/requires E3_ch_campaign",
+          "978947e: dynamic category inventory lane keeps E3_cat and E_select_category",
+          "978947e: conversion channel lane produces/requires E3_ch_conversion, avoiding the round-03 A9 collision"
+        ],
+        "status": "succeeded",
+        "step_count": 12,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 12
+      },
+      "detail": "step count within tolerance (predicted=12, actual=12)"
+    },
+    {
+      "case_id": "MC06_net_gmv_multi_driver",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E3_ch_campaign",
+          "E4_channel",
+          "E_select_category",
+          "E3_cat",
+          "E4_category",
+          "E3_ch_conversion",
+          "E4_channel_conversion",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed",
+        "lane_alias_fix_expected": true
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "MC06_net_gmv_multi_driver",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "MC06_net_gmv_multi_driver",
+      "aspect": "outcome",
+      "divergence": "design_flaw",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "paid_ads",
+        "lane_alias_fix_expected": true,
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "stockout",
+        "dimension": "category",
+        "element": "electronics",
+        "top1_ok": false,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "wrong root cause type: predicted campaign_traffic_drop, got stockout"
+    },
+    {
+      "case_id": "MC06_net_gmv_multi_driver",
+      "aspect": "multi_cause_outcome",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "expected_recall_band": "high_after_lane_alias_fix",
+        "lane_alias_fix_expected": true,
+        "multi_cause_candidate_count": 3,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_cause_type": "campaign_traffic_drop"
+          },
+          {
+            "dimension": "category",
+            "element": "dynamic_category",
+            "root_cause_type": "stockout"
+          },
+          {
+            "dimension": "channel",
+            "element": "paid_ads",
+            "root_cause_type": "conversion_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": false,
+        "top3_contains_all_major_causes": false,
+        "root_cause_set_recall": 0.666667,
+        "weighted_explanation_coverage": 0.8
+      },
+      "detail": "predicted multi-cause top3 pass but actual fail"
+    },
+    {
+      "case_id": "MC07_uv_weak_multi_driver",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "uv",
+        "question_family": "uv_drop",
+        "target_date": "2026-06-01"
+      },
+      "actual": {
+        "metric_id": "uv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "MC07_uv_weak_multi_driver",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_uv_weak_channel",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 6,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 11
+      },
+      "detail": "more steps than predicted (predicted=6, actual=11, +5)"
+    },
+    {
+      "case_id": "MC07_uv_weak_multi_driver",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E_select_channel",
+          "E3_ch",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": "secondary-cause coverage may be weak",
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "MC07_uv_weak_multi_driver",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "MC07_uv_weak_multi_driver",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "weak_channel",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": false
+      },
+      "actual": {
+        "root_cause_type": "interaction_channel_category",
+        "dimension": "channel",
+        "element": "social",
+        "top1_ok": false,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "MC07_uv_weak_multi_driver",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "partial",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "weak_channel",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "top3_ok": false
+      },
+      "actual": {
+        "top3_ok": false,
+        "top3_contains_all_major_causes": false,
+        "root_cause_set_recall": 0.666667,
+        "weighted_explanation_coverage": 0.7
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "MC08_gmv_channel_category_mix",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "channel_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-05-29"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "MC08_gmv_channel_category_mix",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_gmv_channel_category_mix",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 12,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 15
+      },
+      "detail": "more steps than predicted (predicted=12, actual=15, +3)"
+    },
+    {
+      "case_id": "MC08_gmv_channel_category_mix",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E3_ch",
+          "E3_cat",
+          "E3_prod",
+          "E4_channel",
+          "E4_category",
+          "E4_product",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "MC08_gmv_channel_category_mix",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "MC08_gmv_channel_category_mix",
+      "aspect": "outcome",
+      "divergence": "design_flaw",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "dynamic_channel",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "stockout",
+        "dimension": "category",
+        "element": "electronics",
+        "top1_ok": false,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "wrong root cause type: predicted campaign_traffic_drop, got stockout"
+    },
+    {
+      "case_id": "MC08_gmv_channel_category_mix",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "dynamic_channel",
+            "root_cause_type": "campaign_traffic_drop"
+          },
+          {
+            "dimension": "category",
+            "element": "dynamic_category",
+            "root_cause_type": "stockout"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "IX01_gmv_channel_category_interaction",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "interaction_gmv_anomaly",
+        "target_date": "2026-05-31"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "IX01_gmv_channel_category_interaction",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=interaction_gmv_discovery",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 10,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 11
+      },
+      "detail": "step count within tolerance (predicted=10, actual=11)"
+    },
+    {
+      "case_id": "IX01_gmv_channel_category_interaction",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E_select_channel",
+          "E3_ch",
+          "E4_channel",
+          "E3_cat",
+          "E4_category",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "IX01_gmv_channel_category_interaction",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "IX01_gmv_channel_category_interaction",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel_category",
+        "element": "dynamic_pair",
+        "root_cause_type": "interaction_channel_category",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "interaction_channel_category",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "IX01_gmv_channel_category_interaction",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "channel_category",
+            "element": "dynamic_pair",
+            "root_cause_type": "interaction_channel_category"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "IX02_gmv_interaction_discovery",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "channel_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-05-31"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "IX02_gmv_interaction_discovery",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_gmv_with_interaction_promotion",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 12,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 15
+      },
+      "detail": "more steps than predicted (predicted=12, actual=15, +3)"
+    },
+    {
+      "case_id": "IX02_gmv_interaction_discovery",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E3_ch",
+          "E3_cat",
+          "E3_prod",
+          "E4_channel",
+          "E4_category",
+          "E4_product",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "IX02_gmv_interaction_discovery",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "IX02_gmv_interaction_discovery",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel_category",
+        "element": "dynamic_pair",
+        "root_cause_type": "interaction_channel_category",
+        "status": "succeeded",
+        "top1_ok": false
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "top1_ok": false,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "IX02_gmv_interaction_discovery",
+      "aspect": "multi_cause_outcome",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "channel_category",
+            "element": "dynamic_pair",
+            "root_cause_type": "interaction_channel_category"
+          },
+          {
+            "dimension": "channel",
+            "element": "dynamic_channel",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": false,
+        "top3_contains_all_major_causes": false,
+        "root_cause_set_recall": 0.0,
+        "weighted_explanation_coverage": 0.0
+      },
+      "detail": "predicted multi-cause top3 pass but actual fail"
+    },
+    {
+      "case_id": "IX03_uv_interaction_cell",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "uv",
+        "question_family": "interaction_uv_anomaly",
+        "target_date": "2026-05-31"
+      },
+      "actual": {
+        "metric_id": "uv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "IX03_uv_interaction_cell",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=interaction_uv_discovery",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 10,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 11
+      },
+      "detail": "step count within tolerance (predicted=10, actual=11)"
+    },
+    {
+      "case_id": "IX03_uv_interaction_cell",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E_select_channel",
+          "E3_ch",
+          "E4_channel",
+          "E3_cat",
+          "E4_category",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "IX03_uv_interaction_cell",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "IX03_uv_interaction_cell",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel_category",
+        "element": "focused_segment",
+        "root_cause_type": "interaction_channel_category",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "interaction_channel_category",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "IX03_uv_interaction_cell",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "channel_category",
+            "element": "focused_segment",
+            "root_cause_type": "interaction_channel_category"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "IX04_gmv_interaction_no_single_driver",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "interaction_gmv_anomaly",
+        "target_date": "2026-05-31"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "IX04_gmv_interaction_no_single_driver",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=interaction_gmv_discovery",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 10,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 11
+      },
+      "detail": "step count within tolerance (predicted=10, actual=11)"
+    },
+    {
+      "case_id": "IX04_gmv_interaction_no_single_driver",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E_select_channel",
+          "E3_ch",
+          "E4_channel",
+          "E3_cat",
+          "E4_category",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "IX04_gmv_interaction_no_single_driver",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "IX04_gmv_interaction_no_single_driver",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel_category",
+        "element": "dynamic_pair",
+        "root_cause_type": "interaction_channel_category",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "interaction_channel_category",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "IX04_gmv_interaction_no_single_driver",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "channel_category",
+            "element": "dynamic_pair",
+            "root_cause_type": "interaction_channel_category"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "LG01_gmv_lagged_social",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": "channel",
+        "element": "social",
+        "filters": {
+          "channel": "social"
+        },
+        "metric_id": "gmv",
+        "question_family": "channel_gmv_anomaly",
+        "target_date": "2026-06-01"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "LG01_gmv_lagged_social",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=explicit_single",
+          "scope={'channel': 'social'}"
+        ],
+        "status": "succeeded",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 5
+      },
+      "detail": "step count within tolerance (predicted=5, actual=5)"
+    },
+    {
+      "case_id": "LG01_gmv_lagged_social",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E3",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "LG01_gmv_lagged_social",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "LG01_gmv_lagged_social",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "social",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "social",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "LG01_gmv_lagged_social",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "social",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "LG02_uv_lagged_social_discovery",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "uv",
+        "question_family": "uv_drop",
+        "target_date": "2026-06-01"
+      },
+      "actual": {
+        "metric_id": "uv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "LG02_uv_lagged_social_discovery",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_uv_lagged_channel",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 6,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 11
+      },
+      "detail": "more steps than predicted (predicted=6, actual=11, +5)"
+    },
+    {
+      "case_id": "LG02_uv_lagged_social_discovery",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E_select_channel",
+          "E3_ch",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "LG02_uv_lagged_social_discovery",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "LG02_uv_lagged_social_discovery",
+      "aspect": "outcome",
+      "divergence": "design_flaw",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "social",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "interaction_channel_category",
+        "dimension": "channel",
+        "element": "social",
+        "top1_ok": false,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "wrong root cause type: predicted campaign_traffic_drop, got interaction_channel_category"
+    },
+    {
+      "case_id": "LG02_uv_lagged_social_discovery",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 1,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "social",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "WK01_gmv_weak_affiliate_boundary",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": "channel",
+        "element": "affiliate",
+        "filters": {
+          "channel": "affiliate"
+        },
+        "metric_id": "gmv",
+        "question_family": "channel_gmv_anomaly",
+        "target_date": "2026-05-29"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "WK01_gmv_weak_affiliate_boundary",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=no_anomaly",
+          "scope={'channel': 'affiliate'}"
+        ],
+        "forbidden_tools": [
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ],
+        "status": "no_anomaly",
+        "step_count": 1,
+        "tool_sequence": [
+          "detect_anomaly"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 5
+      },
+      "detail": "more steps than predicted (predicted=1, actual=5, +4)"
+    },
+    {
+      "case_id": "WK01_gmv_weak_affiliate_boundary",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "WK01_gmv_weak_affiliate_boundary",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "WK01_gmv_weak_affiliate_boundary",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": null,
+        "element": null,
+        "root_cause_type": null,
+        "status": "no_anomaly",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "affiliate",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "WK01_gmv_weak_affiliate_boundary",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 0,
+        "root_causes": [],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "WK02_gmv_no_anomaly_weak",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "standard",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-06-04"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "WK02_gmv_no_anomaly_weak",
+      "aspect": "execution",
+      "divergence": "correct",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=no_anomaly",
+          "scope=unscoped"
+        ],
+        "forbidden_tools": [
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ],
+        "status": "no_anomaly",
+        "step_count": 1,
+        "tool_sequence": [
+          "detect_anomaly"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 1
+      },
+      "detail": "step count within tolerance (predicted=1, actual=1)"
+    },
+    {
+      "case_id": "WK02_gmv_no_anomaly_weak",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1"
+        ],
+        "current_run_only": true,
+        "expected_gap": null,
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "WK02_gmv_no_anomaly_weak",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "WK02_gmv_no_anomaly_weak",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": null,
+        "element": null,
+        "root_cause_type": null,
+        "status": "no_anomaly",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": null,
+        "dimension": null,
+        "element": null,
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "WK02_gmv_no_anomaly_weak",
+      "aspect": "multi_cause_outcome",
+      "divergence": "correct",
+      "predicted": {
+        "expected_recall_band": "high",
+        "multi_cause_candidate_count": 0,
+        "root_causes": [],
+        "top3_ok": true
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "multi-cause outcome matches prediction"
+    },
+    {
+      "case_id": "RS01_gmv_residual_dual_mechanism",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "channel_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-05-27"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "RS01_gmv_residual_dual_mechanism",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_gmv_residual",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 12,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 15
+      },
+      "detail": "more steps than predicted (predicted=12, actual=15, +3)"
+    },
+    {
+      "case_id": "RS01_gmv_residual_dual_mechanism",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E3_ch",
+          "E3_cat",
+          "E3_prod",
+          "E4_channel",
+          "E4_category",
+          "E4_product",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": "secondary-cause coverage may be weak",
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "RS01_gmv_residual_dual_mechanism",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "RS01_gmv_residual_dual_mechanism",
+      "aspect": "outcome",
+      "divergence": "correct",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "channel",
+        "element": "dynamic_channel",
+        "root_cause_type": "campaign_traffic_drop",
+        "status": "succeeded",
+        "top1_ok": true
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "outcome matches prediction"
+    },
+    {
+      "case_id": "RS01_gmv_residual_dual_mechanism",
+      "aspect": "multi_cause_outcome",
+      "divergence": "overfit",
+      "predicted": {
+        "expected_recall_band": "partial",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "channel",
+            "element": "dynamic_channel",
+            "root_cause_type": "campaign_traffic_drop"
+          },
+          {
+            "dimension": "category",
+            "element": "dynamic_category",
+            "root_cause_type": "stockout"
+          }
+        ],
+        "top3_ok": false
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "predicted multi-cause top3 fail but actual pass"
+    },
+    {
+      "case_id": "RS02_gmv_residual_discovery",
+      "aspect": "intent",
+      "divergence": "correct",
+      "predicted": {
+        "analysis_strategy": "channel_first",
+        "dimension": null,
+        "element": null,
+        "filters": {},
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "target_date": "2026-05-27"
+      },
+      "actual": {
+        "metric_id": "gmv"
+      },
+      "detail": "intent prediction matches"
+    },
+    {
+      "case_id": "RS02_gmv_residual_discovery",
+      "aspect": "execution",
+      "divergence": "complexity_gap",
+      "predicted": {
+        "critical_decisions": [
+          "plan_path=broad_gmv_residual",
+          "scope=unscoped"
+        ],
+        "status": "succeeded",
+        "step_count": 12,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "merge_contribution_sets",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "trace_step_count": 15
+      },
+      "detail": "more steps than predicted (predicted=12, actual=15, +3)"
+    },
+    {
+      "case_id": "RS02_gmv_residual_discovery",
+      "aspect": "evidence",
+      "divergence": "correct",
+      "predicted": {
+        "chain": [
+          "E1",
+          "E2_channel",
+          "E2_category",
+          "E2_product",
+          "E3_ch",
+          "E3_cat",
+          "E3_prod",
+          "E4_channel",
+          "E4_category",
+          "E4_product",
+          "E4",
+          "E_rank"
+        ],
+        "current_run_only": true,
+        "expected_gap": "secondary-cause coverage may be weak",
+        "guard_status": "passed"
+      },
+      "actual": {
+        "evidence_coverage": 1.0
+      },
+      "detail": "evidence chain matches prediction"
+    },
+    {
+      "case_id": "RS02_gmv_residual_discovery",
+      "aspect": "memory",
+      "divergence": "correct",
+      "predicted": {
+        "final_conclusion_from_memory": false,
+        "influence": "planning_priority_only",
+        "memory_read_expected": true,
+        "memory_write_expected": "verified_success_or_typed_failure"
+      },
+      "actual": {
+        "memory_pollution_ok": true
+      },
+      "detail": "memory behavior matches prediction"
+    },
+    {
+      "case_id": "RS02_gmv_residual_discovery",
+      "aspect": "outcome",
+      "divergence": "overfit",
+      "predicted": {
+        "anomaly_ok": true,
+        "dimension": "category",
+        "element": "dynamic_category",
+        "root_cause_type": "stockout",
+        "status": "succeeded",
+        "top1_ok": false
+      },
+      "actual": {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "top1_ok": true,
+        "anomaly_ok": true,
+        "intent_ok": true
+      },
+      "detail": "predicted top1 fail but actual pass"
+    },
+    {
+      "case_id": "RS02_gmv_residual_discovery",
+      "aspect": "multi_cause_outcome",
+      "divergence": "overfit",
+      "predicted": {
+        "expected_recall_band": "partial",
+        "multi_cause_candidate_count": 2,
+        "root_causes": [
+          {
+            "dimension": "category",
+            "element": "dynamic_category",
+            "root_cause_type": "stockout"
+          },
+          {
+            "dimension": "channel",
+            "element": "dynamic_channel",
+            "root_cause_type": "campaign_traffic_drop"
+          }
+        ],
+        "top3_ok": false
+      },
+      "actual": {
+        "top3_ok": true,
+        "top3_contains_all_major_causes": true,
+        "root_cause_set_recall": 1.0,
+        "weighted_explanation_coverage": 1.0
+      },
+      "detail": "predicted multi-cause top3 fail but actual pass"
+    }
+  ],
+  "summary": {
+    "total": 276,
+    "by_divergence": {
+      "correct": 242,
+      "complexity_gap": 24,
+      "overfit": 6,
+      "design_flaw": 4
+    },
+    "by_aspect": {
+      "intent": {
+        "correct": 46
+      },
+      "execution": {
+        "correct": 28,
+        "complexity_gap": 18
+      },
+      "evidence": {
+        "correct": 46
+      },
+      "memory": {
+        "correct": 46
+      },
+      "outcome": {
+        "correct": 36,
+        "overfit": 4,
+        "complexity_gap": 2,
+        "design_flaw": 4
+      },
+      "multi_cause_outcome": {
+        "correct": 40,
+        "complexity_gap": 4,
+        "overfit": 2
+      }
+    },
+    "accuracy": 0.8768,
+    "design_flaw_count": 4,
+    "complexity_gap_count": 24
+  }
+}

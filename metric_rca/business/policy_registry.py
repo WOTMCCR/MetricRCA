@@ -19,6 +19,7 @@ FactorGraphType = Literal["uv_pay_cvr_aov", "net_gmv_chain", "dimension_delta"]
 DiscoveryScopeMode = Literal["unscoped", "explicit_single", "explicit_multi_driver"]
 LaneElementBinding = Literal["dynamic", "explicit_scope", "policy"]
 LaneSignalFilterMode = Literal["inherit", "none"]
+LaneExplicitScopePolicy = Literal["strict", "global_explanatory"]
 AllowedDimensionsValidator = Callable[[str, tuple[str, ...]], None]
 MetricDefinitionProvider = Callable[[str], Any]
 
@@ -53,7 +54,10 @@ class DiscoveryLane:
     element: str | None = None
     element_selection: ElementSelection = "top_candidate"
     evidence_alias: str | None = None
+    selection_alias: str | None = None
+    signal_evidence_alias: str | None = None
     signal_filter_mode: LaneSignalFilterMode = "inherit"
+    explicit_scope_policy: LaneExplicitScopePolicy = "strict"
 
 
 @dataclass(frozen=True)
@@ -291,6 +295,12 @@ DEFAULT_SIGNAL_POLICIES: tuple[MetricSignalPolicy, ...] = (
         signal_type="campaign",
     ),
     MetricSignalPolicy(
+        root_cause_type=RootCauseType.CONVERSION_DROP.value,
+        metric_id=MetricId.GMV.value,
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="conversion",
+    ),
+    MetricSignalPolicy(
         root_cause_type=RootCauseType.CAMPAIGN_TRAFFIC_DROP.value,
         metric_id=MetricId.NET_GMV.value,
         dimension=DimensionId.CHANNEL.value,
@@ -400,6 +410,61 @@ DEFAULT_SIGNAL_POLICIES: tuple[MetricSignalPolicy, ...] = (
     ),
 )
 
+GMV_STANDARD_DISCOVERY_LANES: tuple[DiscoveryLane, ...] = (
+    DiscoveryLane(
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="campaign",
+        evidence_alias="E4_channel",
+    ),
+    DiscoveryLane(
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="conversion",
+        element_selection="signal_anomaly",
+        evidence_alias="E4_channel_conversion",
+        selection_alias="E_select_ch_conversion",
+        signal_evidence_alias="E3_ch_conversion",
+        signal_filter_mode="none",
+    ),
+    DiscoveryLane(
+        dimension=DimensionId.CATEGORY.value,
+        signal_type="inventory",
+        evidence_alias="E4_category",
+    ),
+    DiscoveryLane(
+        dimension=DimensionId.PRODUCT.value,
+        signal_type="inventory",
+        evidence_alias="E4_product",
+    ),
+    DiscoveryLane(
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="interaction",
+        element_selection="signal_anomaly",
+        evidence_alias="E4_channel_interaction",
+        selection_alias="E_select_ch_interaction",
+        signal_evidence_alias="E3_ch_interaction",
+        signal_filter_mode="none",
+    ),
+    DiscoveryLane(
+        dimension=DimensionId.CATEGORY.value,
+        signal_type="interaction",
+        element_selection="signal_anomaly",
+        evidence_alias="E4_category_interaction",
+        selection_alias="E_select_cat_interaction",
+        signal_evidence_alias="E3_cat_interaction",
+        signal_filter_mode="none",
+    ),
+)
+
+GMV_SIGNAL_FIRST_DISCOVERY_LANES: tuple[DiscoveryLane, ...] = (
+    DiscoveryLane(
+        dimension=DimensionId.CHANNEL.value,
+        signal_type="campaign",
+        element_selection="signal_anomaly",
+        evidence_alias="E4_channel",
+    ),
+    *GMV_STANDARD_DISCOVERY_LANES[1:],
+)
+
 DEFAULT_DISCOVERY_POLICY_RULES: tuple[DiscoveryPolicyRule, ...] = (
     DiscoveryPolicyRule(
         metric_id=MetricId.UV.value,
@@ -445,8 +510,13 @@ DEFAULT_DISCOVERY_POLICY_RULES: tuple[DiscoveryPolicyRule, ...] = (
             DiscoveryLane(
                 dimension=DimensionId.CHANNEL.value,
                 signal_type="conversion",
-                element_binding="explicit_scope",
+                element_binding="dynamic",
+                element_selection="signal_anomaly",
                 evidence_alias="E4_channel_conversion",
+                selection_alias="E_select_ch_conversion",
+                signal_evidence_alias="E3_ch_conversion",
+                signal_filter_mode="none",
+                explicit_scope_policy="global_explanatory",
             ),
         ),
     ),
@@ -467,6 +537,7 @@ DEFAULT_DISCOVERY_POLICY_RULES: tuple[DiscoveryPolicyRule, ...] = (
         first_signal_dimension=DimensionId.CHANNEL.value,
         first_signal_type="campaign",
         enforce_first_signal_top_candidate=True,
+        lanes=GMV_STANDARD_DISCOVERY_LANES,
     ),
     DiscoveryPolicyRule(
         metric_id=MetricId.GMV.value,
@@ -476,6 +547,7 @@ DEFAULT_DISCOVERY_POLICY_RULES: tuple[DiscoveryPolicyRule, ...] = (
         first_signal_dimension=DimensionId.CHANNEL.value,
         first_signal_type="campaign",
         enforce_first_signal_top_candidate=True,
+        lanes=GMV_STANDARD_DISCOVERY_LANES,
     ),
     DiscoveryPolicyRule(
         metric_id=MetricId.GMV.value,
@@ -485,6 +557,7 @@ DEFAULT_DISCOVERY_POLICY_RULES: tuple[DiscoveryPolicyRule, ...] = (
         first_signal_dimension=DimensionId.CHANNEL.value,
         first_signal_type="campaign",
         element_selection="signal_anomaly",
+        lanes=GMV_SIGNAL_FIRST_DISCOVERY_LANES,
     ),
     DiscoveryPolicyRule(
         metric_id=MetricId.GMV.value,
@@ -627,6 +700,12 @@ DEFAULT_ROOT_CAUSE_POLICIES: tuple[RootCausePolicy, ...] = (
         metric_id=MetricId.GMV.value,
         dimension=DimensionId.CHANNEL.value,
         root_cause_type=RootCauseType.CAMPAIGN_TRAFFIC_DROP.value,
+    ),
+    RootCausePolicy(
+        metric_id=MetricId.GMV.value,
+        dimension=DimensionId.CHANNEL.value,
+        root_cause_type=RootCauseType.CONVERSION_DROP.value,
+        signal_type="conversion",
     ),
     RootCausePolicy(
         metric_id=MetricId.GMV.value,

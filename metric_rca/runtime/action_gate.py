@@ -118,6 +118,8 @@ def _explicit_multi_driver_scope_error(
             f"contradicts explicit question scope {dimension}={element}"
         )
     action_dimension = action.args.get("dimension")
+    if _global_explanatory_scope_allowed(action, scoped_dimension=dimension):
+        return None
     if (
         action_dimension != dimension
         and action.kind in {"drilldown_dimension", "calculate_contribution"}
@@ -131,6 +133,14 @@ def _explicit_multi_driver_scope_error(
         if action_element != element:
             return f"explicit multi-driver lane for {dimension} must bind element={element} directly"
     return None
+
+
+def _global_explanatory_scope_allowed(action: RcaAction, *, scoped_dimension: str) -> bool:
+    if action.args.get("explicit_scope_policy") != "global_explanatory":
+        return False
+    if action.args.get("dimension") != scoped_dimension:
+        return False
+    return action.kind in {"select_signal_element", "fetch_related_signal", "calculate_contribution"}
 
 
 def _no_anomaly_downstream_error(ctx: RunContext, action: RcaAction) -> str | None:
