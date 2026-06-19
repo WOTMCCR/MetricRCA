@@ -89,6 +89,48 @@ def test_merge_contribution_sets_persists_representative_candidate_projection() 
     assert persisted["result_summary"]["candidate_composition_strategy"] == "representative_source_merge_v1"
 
 
+def test_merge_contribution_sets_resolves_selected_runner_source_summary() -> None:
+    paid_ads = _candidate("conversion_drop", "channel", "paid_ads", 0.30, eng_confidence=0.20)
+    social_runner = _candidate("conversion_drop", "channel", "social", 0.60, eng_confidence=0.90)
+    mobile = _candidate("conversion_drop", "device", "mobile", 0.40, eng_confidence=0.40)
+    repo = _Repo(
+        {
+            "run-1:E4_channel": _e4_row(
+                "run-1:E4_channel",
+                paid_ads,
+                candidates=[paid_ads, social_runner],
+                decomposition={"selected_source": "channel"},
+            ),
+            "run-1:E4_device": _e4_row(
+                "run-1:E4_device",
+                mobile,
+                candidates=[mobile],
+                decomposition={"selected_source": "device"},
+            ),
+        }
+    )
+
+    result = merge_contribution_sets(
+        MergeContributionSetsArgs(
+            run_id="run-1",
+            metric_id="pay_cvr",
+            target_date=date(2026, 6, 1),
+            source_evidence_aliases=["E4_channel", "E4_device"],
+        ),
+        repository=repo,
+    )
+
+    assert result.observation.ok is True
+    persisted = repo.persisted["run-1:E4"]
+    contribution_set = persisted["result_summary"]["contribution_set"]
+    assert (
+        contribution_set["selected_candidate"]["root_cause_type"],
+        contribution_set["selected_candidate"]["dimension"],
+        contribution_set["selected_candidate"]["element"],
+    ) == ("conversion_drop", "channel", "social")
+    assert persisted["result_summary"]["decomposition"] == {"selected_source": "channel"}
+
+
 class _Repo:
     def __init__(self, persisted: dict[str, dict[str, Any]]) -> None:
         self.persisted = persisted
@@ -138,7 +180,14 @@ def _e4_row(
     }
 
 
-def _candidate(root_cause_type: str, dimension: str, element: str, contribution_pct: float) -> RootCauseCandidate:
+def _candidate(
+    root_cause_type: str,
+    dimension: str,
+    element: str,
+    contribution_pct: float,
+    *,
+    eng_confidence: float | None = None,
+) -> RootCauseCandidate:
     return RootCauseCandidate(
         root_cause_type=root_cause_type,
         dimension=dimension,
@@ -146,7 +195,7 @@ def _candidate(root_cause_type: str, dimension: str, element: str, contribution_
         contribution_pct=contribution_pct,
         signal_severity=1.0,
         evidence_support=1.0,
-        eng_confidence=contribution_pct,
+        eng_confidence=contribution_pct if eng_confidence is None else eng_confidence,
         verdict="likely",
         evidence_ids=[],
     )

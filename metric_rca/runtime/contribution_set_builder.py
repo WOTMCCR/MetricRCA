@@ -107,9 +107,9 @@ def _preferred_candidate_key(
 
 def _candidate_strength_key(candidate: RootCauseCandidate) -> tuple[float, float, float]:
     return (
-        float(candidate.eng_confidence),
         float(candidate.contribution_pct),
         float(candidate.signal_severity),
+        float(candidate.eng_confidence),
     )
 
 

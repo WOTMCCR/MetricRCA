@@ -147,7 +147,8 @@ def _source_summary_for_selected(
 ) -> dict[str, Any] | str:
     selected_key = _candidate_key(selected_candidate)
     for (_, source_set), source_row in zip(source_sets, source_rows, strict=True):
-        if _candidate_key(source_set.selected_candidate) != selected_key:
+        source_candidate_keys = {_candidate_key(candidate) for candidate in source_set.candidates}
+        if selected_key not in source_candidate_keys:
             continue
         summary = source_row.get("result_summary")
         if not isinstance(summary, dict):

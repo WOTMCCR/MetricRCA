@@ -206,6 +206,62 @@ def test_contribution_set_builder_uses_strongest_conversion_candidate_as_selecte
     ]
 
 
+def test_contribution_set_builder_selects_conversion_by_impact_before_confidence() -> None:
+    paid_ads = _candidate(
+        "conversion_drop",
+        "channel",
+        "paid_ads",
+        0.29831006612784716,
+        ["run-1:E4_channel"],
+        signal_severity=0.871244635193133,
+        eng_confidence=0.2599010447379956,
+    )
+    social_confident_tail = _candidate(
+        "conversion_drop",
+        "channel",
+        "social",
+        0.2795738427626745,
+        ["run-1:E4_channel"],
+        signal_severity=0.8323004010207802,
+        eng_confidence=0.8953000619172852,
+    )
+    mobile = _candidate(
+        "conversion_drop",
+        "device",
+        "mobile",
+        0.5117150890346767,
+        ["run-1:E4_device"],
+        signal_severity=0.8504672897196263,
+        eng_confidence=0.4351969448799587,
+    )
+    desktop_confident_tail = _candidate(
+        "conversion_drop",
+        "device",
+        "desktop",
+        0.4882849109653233,
+        ["run-1:E4_device"],
+        signal_severity=0.7031039136302294,
+        eng_confidence=0.7888727986383366,
+    )
+
+    merged = ContributionSetBuilder().merge(
+        run_id="run-1",
+        source_sets=[
+            ("run-1:E4_channel", _set(paid_ads, [paid_ads, social_confident_tail], "run-1:E4_channel")),
+            ("run-1:E4_device", _set(mobile, [mobile, desktop_confident_tail], "run-1:E4_device")),
+        ],
+    )
+
+    assert (merged.selected_candidate.root_cause_type, merged.selected_candidate.dimension, merged.selected_candidate.element) == (
+        "conversion_drop",
+        "device",
+        "mobile",
+    )
+    assert [(c.root_cause_type, c.dimension, c.element) for c in merged.candidates] == [
+        ("conversion_drop", "device", "mobile"),
+    ]
+
+
 def test_contribution_set_builder_keeps_material_channel_conversion_runners_for_channel_selected_case() -> None:
     social = _candidate(
         "conversion_drop",
