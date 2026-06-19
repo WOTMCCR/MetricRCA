@@ -165,6 +165,80 @@ def test_contribution_set_builder_drops_non_representative_source_tails() -> Non
     ]
 
 
+def test_contribution_set_builder_collapses_high_confidence_single_driver_merge_tail() -> None:
+    paid_ads = _candidate(
+        "campaign_traffic_drop",
+        "channel",
+        "paid_ads",
+        1.0,
+        ["run-1:E4_channel"],
+        signal_severity=0.97,
+        eng_confidence=0.97,
+    )
+    paid_ads_conversion = _candidate(
+        "conversion_drop",
+        "channel",
+        "paid_ads",
+        1.0,
+        ["run-1:E4_channel_conversion"],
+        signal_severity=0.97,
+        eng_confidence=0.97,
+    )
+    product_two = _candidate(
+        "aov_drop",
+        "product",
+        "2",
+        1.0,
+        ["run-1:E4_product"],
+        signal_severity=1.0,
+        eng_confidence=1.0,
+    )
+    fashion = _candidate(
+        "aov_drop",
+        "category",
+        "fashion",
+        1.0,
+        ["run-1:E4_category_interaction"],
+        signal_severity=1.0,
+        eng_confidence=0.99,
+    )
+    social = _candidate(
+        "campaign_traffic_drop",
+        "channel",
+        "social",
+        1.0,
+        ["run-1:E4_channel"],
+        signal_severity=0.96,
+        eng_confidence=0.96,
+    )
+
+    merged = ContributionSetBuilder().merge(
+        run_id="run-1",
+        source_sets=[
+            ("run-1:E4_channel", _set(paid_ads, [paid_ads, social], "run-1:E4_channel")),
+            (
+                "run-1:E4_channel_conversion",
+                _set(paid_ads_conversion, [paid_ads_conversion], "run-1:E4_channel_conversion"),
+            ),
+            ("run-1:E4_product", _set(product_two, [product_two], "run-1:E4_product")),
+            (
+                "run-1:E4_category_interaction",
+                _set(fashion, [fashion], "run-1:E4_category_interaction"),
+            ),
+        ],
+    )
+
+    assert [(c.root_cause_type, c.dimension, c.element) for c in merged.candidates] == [
+        ("campaign_traffic_drop", "channel", "paid_ads"),
+    ]
+    assert merged.factor_graph["chain_evidence_ids"] == [
+        "run-1:E4_channel",
+        "run-1:E4_channel_conversion",
+        "run-1:E4_product",
+        "run-1:E4_category_interaction",
+    ]
+
+
 def test_contribution_set_builder_uses_strongest_conversion_candidate_as_selected() -> None:
     paid_ads = _candidate("conversion_drop", "channel", "paid_ads", 0.29, ["run-1:E4_channel"])
     social_runner = _candidate("conversion_drop", "channel", "social", 0.28, ["run-1:E4_channel"])
@@ -352,6 +426,87 @@ def test_contribution_set_builder_keeps_cross_dimension_interaction_representati
         ("campaign_traffic_drop", "channel", "paid_ads"),
         ("stockout", "category", "electronics"),
         ("interaction_channel_category", "channel", "paid_ads"),
+        ("interaction_channel_category", "category", "electronics"),
+    ]
+
+
+def test_contribution_set_builder_keeps_interaction_representatives_when_selected_is_high_confidence() -> None:
+    paid_ads = _candidate(
+        "campaign_traffic_drop",
+        "channel",
+        "paid_ads",
+        1.0,
+        ["run-1:E4_channel"],
+        eng_confidence=1.0,
+    )
+    conversion = _candidate(
+        "conversion_drop",
+        "channel",
+        "paid_ads",
+        1.0,
+        ["run-1:E4_channel_conversion"],
+        eng_confidence=1.0,
+    )
+    channel_interaction = _candidate(
+        "interaction_channel_category",
+        "channel",
+        "paid_ads",
+        1.0,
+        ["run-1:E4_channel_interaction"],
+        eng_confidence=1.0,
+    )
+    product = _candidate(
+        "stockout",
+        "product",
+        "2",
+        0.64,
+        ["run-1:E4_product"],
+        eng_confidence=0.64,
+    )
+    category = _candidate(
+        "stockout",
+        "category",
+        "electronics",
+        0.64,
+        ["run-1:E4_category"],
+        eng_confidence=0.64,
+    )
+    category_interaction = _candidate(
+        "interaction_channel_category",
+        "category",
+        "electronics",
+        0.64,
+        ["run-1:E4_category_interaction"],
+        eng_confidence=0.64,
+    )
+
+    merged = ContributionSetBuilder().merge(
+        run_id="run-1",
+        source_sets=[
+            ("run-1:E4_channel", _set(paid_ads, [paid_ads], "run-1:E4_channel")),
+            (
+                "run-1:E4_channel_conversion",
+                _set(conversion, [conversion], "run-1:E4_channel_conversion"),
+            ),
+            (
+                "run-1:E4_channel_interaction",
+                _set(channel_interaction, [channel_interaction], "run-1:E4_channel_interaction"),
+            ),
+            ("run-1:E4_product", _set(product, [product], "run-1:E4_product")),
+            ("run-1:E4_category", _set(category, [category], "run-1:E4_category")),
+            (
+                "run-1:E4_category_interaction",
+                _set(category_interaction, [category_interaction], "run-1:E4_category_interaction"),
+            ),
+        ],
+    )
+
+    assert [(c.root_cause_type, c.dimension, c.element) for c in merged.candidates] == [
+        ("campaign_traffic_drop", "channel", "paid_ads"),
+        ("conversion_drop", "channel", "paid_ads"),
+        ("interaction_channel_category", "channel", "paid_ads"),
+        ("stockout", "product", "2"),
+        ("stockout", "category", "electronics"),
         ("interaction_channel_category", "category", "electronics"),
     ]
 

@@ -13,6 +13,9 @@ COMPOSITION_STRATEGY = "representative_source_merge_v1"
 _CHANNEL_RUNNER_FLOOR = 0.20
 _CONVERSION_CHANNEL_RUNNER_FLOOR = 0.20
 _INTERACTION_REPRESENTATIVE_FLOOR = 0.60
+_SINGLE_DRIVER_COLLAPSE_MIN_REPRESENTATIVES = 5
+_SINGLE_DRIVER_CONFIDENCE_FLOOR = 0.90
+_SINGLE_DRIVER_CONTRIBUTION_FLOOR = 0.90
 
 
 class ContributionSetBuilder:
@@ -61,6 +64,11 @@ class ContributionSetBuilder:
         if selected_candidate is None:
             raise ValueError("CONTRIBUTION_SET_SELECTED_MISSING")
         representative_keys = _compose_representative_keys(
+            preferred_key=preferred_key,
+            representative_keys=representative_keys,
+            candidates_by_key=candidates_by_key,
+        )
+        representative_keys = _collapse_high_confidence_single_driver_keys(
             preferred_key=preferred_key,
             representative_keys=representative_keys,
             candidates_by_key=candidates_by_key,
@@ -203,6 +211,39 @@ def _compose_representative_keys(
     if not composed:
         raise ValueError("CONTRIBUTION_SET_MISSING")
     return composed
+
+
+def _collapse_high_confidence_single_driver_keys(
+    *,
+    preferred_key: tuple[str, str | None, str | None],
+    representative_keys: list[tuple[str, str | None, str | None]],
+    candidates_by_key: dict[tuple[str, str | None, str | None], RootCauseCandidate],
+) -> list[tuple[str, str | None, str | None]]:
+    if len(representative_keys) < _SINGLE_DRIVER_COLLAPSE_MIN_REPRESENTATIVES:
+        return representative_keys
+    selected = candidates_by_key.get(preferred_key)
+    if selected is None:
+        raise ValueError("CONTRIBUTION_SET_SELECTED_MISSING")
+    if selected.root_cause_type == RootCauseType.INTERACTION_CHANNEL_CATEGORY.value:
+        return representative_keys
+    if float(selected.eng_confidence) < _SINGLE_DRIVER_CONFIDENCE_FLOOR:
+        return representative_keys
+    if float(selected.contribution_pct) < _SINGLE_DRIVER_CONTRIBUTION_FLOOR:
+        return representative_keys
+    if any(_is_interaction_key(key, candidates_by_key) for key in representative_keys):
+        return representative_keys
+    return [preferred_key]
+
+
+def _is_interaction_key(
+    key: tuple[str, str | None, str | None],
+    candidates_by_key: dict[tuple[str, str | None, str | None], RootCauseCandidate],
+) -> bool:
+    candidate = candidates_by_key.get(key)
+    return (
+        candidate is not None
+        and candidate.root_cause_type == RootCauseType.INTERACTION_CHANNEL_CATEGORY.value
+    )
 
 
 def _embed_material_campaign_channel_runners(
