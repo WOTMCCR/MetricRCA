@@ -144,6 +144,9 @@ def test_contribution_set_builder_keeps_representatives_and_prunes_duplicate_int
         ("stockout", "category", "electronics"),
         ("stockout", "product", "2"),
     ]
+    assert ("channel", "paid_ads") in merged.candidates[0].dimension_elements
+    assert ("channel", "affiliate") in merged.candidates[0].dimension_elements
+    assert ("channel", "social") not in merged.candidates[0].dimension_elements
 
 
 def test_contribution_set_builder_drops_non_representative_source_tails() -> None:

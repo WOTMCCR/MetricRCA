@@ -53,6 +53,13 @@ class ContributionSetBuilder:
             representative_keys=representative_keys,
             candidates_by_key=candidates_by_key,
         )
+        _embed_material_campaign_channel_runners(
+            representative_keys=representative_keys,
+            candidates_by_key=candidates_by_key,
+        )
+        selected_candidate = candidates_by_key.get(preferred_key)
+        if selected_candidate is None:
+            raise ValueError("CONTRIBUTION_SET_SELECTED_MISSING")
         candidates = [candidates_by_key[key] for key in representative_keys]
         return ContributionSet(
             selected_candidate=selected_candidate,
@@ -135,6 +142,53 @@ def _compose_representative_keys(
     if not composed:
         raise ValueError("CONTRIBUTION_SET_MISSING")
     return composed
+
+
+def _embed_material_campaign_channel_runners(
+    *,
+    representative_keys: list[tuple[str, str | None, str | None]],
+    candidates_by_key: dict[tuple[str, str | None, str | None], RootCauseCandidate],
+) -> None:
+    material_pairs: list[tuple[str, str]] = []
+    for key in representative_keys:
+        candidate = candidates_by_key.get(key)
+        if candidate is None or not _is_material_source_runner(candidate):
+            continue
+        pair = _candidate_pair(candidate)
+        if pair is not None and pair not in material_pairs:
+            material_pairs.append(pair)
+    if len(material_pairs) < 2:
+        return
+
+    for key in representative_keys:
+        candidate = candidates_by_key.get(key)
+        if (
+            candidate is None
+            or candidate.root_cause_type != RootCauseType.CAMPAIGN_TRAFFIC_DROP.value
+            or candidate.dimension != "channel"
+        ):
+            continue
+        candidates_by_key[key] = _candidate_with_dimension_elements(candidate, material_pairs)
+
+
+def _candidate_with_dimension_elements(
+    candidate: RootCauseCandidate,
+    additions: list[tuple[str, str]],
+) -> RootCauseCandidate:
+    dimension_elements = list(candidate.dimension_elements)
+    primary_pair = _candidate_pair(candidate)
+    if primary_pair is not None and primary_pair not in dimension_elements:
+        dimension_elements.insert(0, primary_pair)
+    for pair in additions:
+        if pair not in dimension_elements:
+            dimension_elements.append(pair)
+    return candidate.model_copy(update={"dimension_elements": dimension_elements})
+
+
+def _candidate_pair(candidate: RootCauseCandidate) -> tuple[str, str] | None:
+    if candidate.dimension is None or candidate.element is None:
+        return None
+    return (candidate.dimension, str(candidate.element))
 
 
 def _candidate_key(candidate: RootCauseCandidate) -> tuple[str, str | None, str | None]:
