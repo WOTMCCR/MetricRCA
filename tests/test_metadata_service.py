@@ -611,6 +611,39 @@ def test_metric_service_stabilizes_broad_store_expectation_query_as_channel_firs
 
     assert parsed.analysis_strategy == "channel_first"
 
+    parsed = service.parse_question(
+        "Was yesterday's GMV meaningfully below its normal seasonal range?",
+        business_today=date(2026, 6, 6),
+    )
+
+    assert parsed.analysis_strategy == "channel_first"
+
+
+def test_metric_service_keeps_bare_abnormal_gmv_questions_standard() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv", dimensions=["channel", "category", "product"])]),
+        settings=_settings_without_llm_key(),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            question_family="gmv_drop",
+            analysis_strategy="standard",
+        )
+    )
+
+    parsed = service.parse_question("Was yesterday's GMV actually abnormal?", business_today=date(2026, 6, 6))
+
+    assert parsed.analysis_strategy == "standard"
+    assert parsed.dimension is None
+    assert parsed.element is None
+    assert parsed.filters == {}
+
+    parsed = service.parse_question("Was GMV abnormal two days ago?", business_today=date(2026, 6, 6))
+
+    assert parsed.analysis_strategy == "standard"
+
 
 def test_metric_service_keeps_stable_merchandising_priority_over_broad_store_alias() -> None:
     service = MetricService(

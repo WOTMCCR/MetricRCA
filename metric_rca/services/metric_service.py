@@ -191,14 +191,17 @@ def _has_stable_merchandising_context(normalized_question: str) -> bool:
 
 def _has_broad_store_expectation_context(normalized_question: str) -> bool:
     words = _question_words(normalized_question)
-    expectation_context = (
-        any(word.startswith("expect") for word in words)
-        or any(word.startswith("season") for word in words)
-        or bool(words & {"abnormal", "normal", "off", "wrong"})
+    has_expectation = any(word.startswith("expect") for word in words)
+    has_seasonality = any(word.startswith("season") for word in words)
+    has_broad_scope = bool(words & {"store", "sales", "overall"})
+    has_below_normal = "below" in words and ("normal" in words or has_seasonality)
+    has_off_broad_scope = bool(words & {"off", "wrong"}) and has_broad_scope
+    return (
+        ("below" in words and has_expectation)
+        or (has_broad_scope and has_expectation)
+        or has_below_normal
+        or has_off_broad_scope
     )
-    if not expectation_context:
-        return False
-    return bool(words & {"store", "sales", "overall", "gmv"})
 
 
 def _question_words(normalized_question: str) -> set[str]:
