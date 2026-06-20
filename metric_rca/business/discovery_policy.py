@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
+from metric_rca.agent.evidence_aliases import allocate_discovery_lane_aliases
 from metric_rca.business.policy_registry import (
     DEFAULT_POLICY_REGISTRY,
     GMV_DISCOVERY_REQUIRED_DRILLDOWNS,
@@ -14,16 +17,23 @@ from metric_rca.business.policy_registry import (
 from metric_rca.services.metric_contracts import ParsedIntent
 
 
+
 def discovery_policy_from_intent(
     parsed_intent: ParsedIntent,
     *,
     registry: MetricPolicyRegistry = DEFAULT_POLICY_REGISTRY,
     validate_dimensions: AllowedDimensionsValidator | None = None,
 ) -> DiscoveryPolicy:
-    return _discovery_policy_from_intent(
+    policy = _discovery_policy_from_intent(
         parsed_intent,
         registry=registry,
         validate_dimensions=validate_dimensions,
+    )
+    if not policy.lanes:
+        return policy
+    return replace(
+        policy,
+        lanes=allocate_discovery_lane_aliases(policy.lanes),
     )
 
 
