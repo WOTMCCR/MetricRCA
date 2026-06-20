@@ -115,7 +115,6 @@ def tool_error(action: str, code: str, message: str, *, sql_count: int = 0) -> T
     return ToolResult(
         observation=Observation(action_name=action, ok=False, error_code=code, message=message),
         sql_count=sql_count,
-        sql_audit_delta=sql_count,
     )
 
 
