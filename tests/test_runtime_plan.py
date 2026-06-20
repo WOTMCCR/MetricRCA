@@ -226,24 +226,24 @@ def test_plan_compiler_builds_broad_gmv_multisignal_discovery_lanes() -> None:
     assert len({action.produces[0] for action in signal_actions}) == len(signal_actions)
 
 
-def test_plan_compiler_keeps_multisignal_aliases_within_evidence_id_limit() -> None:
+def test_plan_compiler_keeps_multisignal_aliases_within_identity_contract() -> None:
     parsed = ParsedIntent(
         metric_id="gmv",
         target_date=date(2026, 6, 2),
         question_family="gmv_drop",
         analysis_strategy="standard",
     )
-    run_id = "r" * 42
+    run_id = "r" * 64
 
     plan = _compiler().compile(run_id=run_id, parsed_intent=parsed)
 
     produced_aliases = [alias for action in plan.actions for alias in action.produces]
-    assert all(len(f"{run_id}:{alias}") <= 64 for alias in produced_aliases)
+    assert all(len(f"{run_id}:{alias}") <= 192 for alias in produced_aliases)
     assert "E_select_channel_int" in produced_aliases
     assert "E_select_category_int" in produced_aliases
 
 
-def test_plan_compiler_fails_fast_when_evidence_alias_exceeds_id_limit() -> None:
+def test_plan_compiler_fails_fast_when_run_id_exceeds_identity_limit() -> None:
     parsed = ParsedIntent(
         metric_id="gmv",
         target_date=date(2026, 6, 2),
@@ -252,9 +252,9 @@ def test_plan_compiler_fails_fast_when_evidence_alias_exceeds_id_limit() -> None
     )
 
     with pytest.raises(PlanCompilerError) as excinfo:
-        _compiler().compile(run_id="r" * 43, parsed_intent=parsed)
+        _compiler().compile(run_id="r" * 65, parsed_intent=parsed)
 
-    assert excinfo.value.code == "EVIDENCE_ID_TOO_LONG"
+    assert excinfo.value.code == "RUN_ID_TOO_LONG"
 
 
 def test_plan_compiler_sizes_multisignal_gmv_budget_from_action_costs() -> None:

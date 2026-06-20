@@ -1,3 +1,35 @@
+## ADL-0054: decouple evidence identity and formalize runtime accounting
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-20 |
+| 状态 | accepted |
+| 关联迭代 | Phase D evidence/runtime structural refactor |
+| 影响范围 | evidence schema, repository, plan compiler, policy registry, executor |
+
+### 决策
+
+Use a surrogate `evidence_pk` as the physical primary key and store `run_id` and
+`alias` as first-class columns with `UNIQUE(run_id, alias)`. Keep
+`run_id:alias` only as a compatibility reference. Generate production lane
+aliases through one allocator, validate the complete plan before execution,
+and treat repository SQL-audit delta as authoritative. Tool results declare
+only expected SQL count.
+
+### 理由
+
+The old `VARCHAR(64)` concatenated identity could not represent the schema's
+own maximum run id together with a meaningful alias. Explicit plan validation
+prevents alias drift and forward dependencies. An explicit execution-resolution
+contract prevents typed tool failures from being masked by accounting
+mismatches.
+
+### 非目标
+
+This change does not add agent-generated Python or a host-shell sandbox. The
+RCA production path remains deterministic. A separate analysis sandbox may be
+introduced later only as a proposal-producing, non-authoritative channel.
+
 ## ADL-0053: GMV interaction discovery aliases must fit persisted evidence ids
 
 | 字段 | 值 |

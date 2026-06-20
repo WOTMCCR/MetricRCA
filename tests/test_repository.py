@@ -23,6 +23,7 @@ from metric_rca.guardrails.query_spec import build_query_spec
 from metric_rca.guardrails.renderer import SQLRenderer
 from metric_rca.guardrails.sql_guard import guard_sql
 from metric_rca.repositories.metric_repository import MetricRepository
+from metric_rca.runtime.evidence_identity import compose_evidence_id
 
 
 def test_repository_executes_only_guarded_plan_and_writes_audit() -> None:
@@ -128,7 +129,7 @@ def test_repository_persists_documented_system_tables() -> None:
     suffix = uuid4().hex
     run_id = f"repo_system_run_{suffix}"
     step_id = f"repo_system_step_{suffix}"
-    evidence_id = f"repo_system_evidence_{suffix}"
+    evidence_id = compose_evidence_id(run_id, "E_repo_system")
     task_id = f"repo_system_task_{suffix}"
     memory_id = f"repo_system_memory_{suffix}"
     eval_id = f"repo_system_eval_{suffix}"
@@ -600,8 +601,18 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
             text(
                 """
                 CREATE TABLE evidence (
-                  evidence_id TEXT PRIMARY KEY, run_id TEXT, query_spec TEXT, sql_text TEXT,
-                  sql_hash TEXT, guard_status TEXT, result_summary TEXT, data_source TEXT, created_at TEXT
+                  evidence_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+                  evidence_id TEXT NOT NULL UNIQUE,
+                  run_id TEXT NOT NULL,
+                  alias TEXT NOT NULL,
+                  query_spec TEXT,
+                  sql_text TEXT,
+                  sql_hash TEXT,
+                  guard_status TEXT,
+                  result_summary TEXT,
+                  data_source TEXT,
+                  created_at TEXT,
+                  UNIQUE(run_id, alias)
                 )
                 """
             )
@@ -691,9 +702,12 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
         conn.execute(
             text(
                 """
-                INSERT INTO evidence
+                INSERT INTO evidence (
+                  evidence_id, run_id, alias, query_spec, sql_text, sql_hash,
+                  guard_status, result_summary, data_source, created_at
+                )
                 VALUES (
-                  'run-1:E4', 'run-1', '{"metric_id": "gmv"}', 'SELECT 1', :hash,
+                  'run-1:E4', 'run-1', 'E4', '{"metric_id": "gmv"}', 'SELECT 1', :hash,
                   'passed', '{"selected_candidate": {"dimension": "channel"}}', 'fact_order', :now
                 )
                 """
@@ -764,6 +778,7 @@ def test_repository_read_helpers_return_decoded_persisted_artifacts_ordered() ->
     assert repo.get_trace_steps("run-1")[0]["input_summary"] == {"a": 1}
     assert repo.get_trace_steps("run-1")[1]["token_usage"] == {"total_tokens": 5}
     assert repo.get_evidences("run-1")[0]["result_summary"]["selected_candidate"]["dimension"] == "channel"
+    assert repo.get_evidence_by_alias(run_id="run-1", alias="E4")["evidence_id"] == "run-1:E4"
     assert repo.get_sql_audit_rows("run-1")[0]["guard_errors"] == []
     assert repo.get_operation_tasks("run-1")[0]["payload"] == {"owner": "ops"}
     assert repo.get_eval_run("eval-1")["summary"] == {"case_total": 1}

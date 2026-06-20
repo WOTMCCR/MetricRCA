@@ -314,7 +314,8 @@ def _wait_for_mysql(engine) -> None:
 
 
 def _ensure_p6_schema(conn) -> None:
-    """Apply the P6 trace token usage column to existing local databases."""
+    """Apply additive local schema upgrades before deterministic seeding."""
+    _ensure_evidence_identity_schema(conn)
     _ensure_column(
         conn,
         table="trace_step",
@@ -463,6 +464,62 @@ def _ensure_p6_schema(conn) -> None:
             "CHECK (evidence_coverage >= 0 AND evidence_coverage <= 1)"
         ),
     )
+
+
+def _ensure_evidence_identity_schema(conn) -> None:
+    """Upgrade the empty local evidence table used by `make seed`.
+
+    `main()` clears evidence before this function runs. Existing non-empty
+    databases must use the explicit production migration instead.
+    """
+
+    has_evidence_pk = _schema_column_exists(conn, table="evidence", column="evidence_pk")
+    has_alias = _schema_column_exists(conn, table="evidence", column="alias")
+    if has_evidence_pk and has_alias:
+        _ensure_index(
+            conn,
+            table="evidence",
+            index="uq_evidence_id",
+            ddl="ALTER TABLE evidence ADD UNIQUE KEY uq_evidence_id (evidence_id)",
+        )
+        _ensure_index(
+            conn,
+            table="evidence",
+            index="uq_evidence_run_alias",
+            ddl="ALTER TABLE evidence ADD UNIQUE KEY uq_evidence_run_alias (run_id, alias)",
+        )
+        return
+    if has_evidence_pk != has_alias:
+        raise RuntimeError("EVIDENCE_SCHEMA_PARTIAL")
+
+    conn.execute(
+        text(
+            "ALTER TABLE evidence "
+            "MODIFY COLUMN evidence_id VARCHAR(192) NOT NULL, "
+            "DROP PRIMARY KEY, "
+            "ADD COLUMN evidence_pk BIGINT UNSIGNED NOT NULL AUTO_INCREMENT FIRST, "
+            "ADD COLUMN alias VARCHAR(96) NOT NULL AFTER run_id, "
+            "ADD PRIMARY KEY (evidence_pk), "
+            "ADD UNIQUE KEY uq_evidence_id (evidence_id), "
+            "ADD UNIQUE KEY uq_evidence_run_alias (run_id, alias)"
+        )
+    )
+
+
+def _schema_column_exists(conn, *, table: str, column: str) -> bool:
+    exists = conn.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table
+              AND COLUMN_NAME = :column
+            """
+        ),
+        {"table": table, "column": column},
+    ).scalar_one()
+    return int(exists) != 0
 
 
 def _ensure_column(conn, *, table: str, column: str, ddl: str) -> None:

@@ -53,6 +53,9 @@ class DiscoveryLane:
     element_binding: LaneElementBinding = "dynamic"
     element: str | None = None
     element_selection: ElementSelection = "top_candidate"
+    alias_discriminator: str | None = None
+    # Deprecated compatibility overrides. Production policies must use
+    # alias_discriminator so alias construction has one source of truth.
     evidence_alias: str | None = None
     selection_alias: str | None = None
     signal_evidence_alias: str | None = None
@@ -414,43 +417,34 @@ GMV_STANDARD_DISCOVERY_LANES: tuple[DiscoveryLane, ...] = (
     DiscoveryLane(
         dimension=DimensionId.CHANNEL.value,
         signal_type="campaign",
-        evidence_alias="E4_channel",
     ),
     DiscoveryLane(
         dimension=DimensionId.CHANNEL.value,
         signal_type="conversion",
         element_selection="signal_anomaly",
-        evidence_alias="E4_channel_conversion",
-        selection_alias="E_select_channel_conv",
-        signal_evidence_alias="E3_ch_conversion",
+        alias_discriminator="conversion",
         signal_filter_mode="none",
     ),
     DiscoveryLane(
         dimension=DimensionId.CATEGORY.value,
         signal_type="inventory",
-        evidence_alias="E4_category",
     ),
     DiscoveryLane(
         dimension=DimensionId.PRODUCT.value,
         signal_type="inventory",
-        evidence_alias="E4_product",
     ),
     DiscoveryLane(
         dimension=DimensionId.CHANNEL.value,
         signal_type="interaction",
         element_selection="signal_anomaly",
-        evidence_alias="E4_channel_int",
-        selection_alias="E_select_channel_int",
-        signal_evidence_alias="E3_ch_int",
+        alias_discriminator="interaction",
         signal_filter_mode="none",
     ),
     DiscoveryLane(
         dimension=DimensionId.CATEGORY.value,
         signal_type="interaction",
         element_selection="signal_anomaly",
-        evidence_alias="E4_category_int",
-        selection_alias="E_select_category_int",
-        signal_evidence_alias="E3_cat_int",
+        alias_discriminator="interaction",
         signal_filter_mode="none",
     ),
 )
@@ -460,7 +454,6 @@ GMV_SIGNAL_FIRST_DISCOVERY_LANES: tuple[DiscoveryLane, ...] = (
         dimension=DimensionId.CHANNEL.value,
         signal_type="campaign",
         element_selection="signal_anomaly",
-        evidence_alias="E4_channel",
     ),
     *GMV_STANDARD_DISCOVERY_LANES[1:],
 )
@@ -470,20 +463,16 @@ UV_INTERACTION_DISCOVERY_LANES: tuple[DiscoveryLane, ...] = (
         dimension=DimensionId.CHANNEL.value,
         signal_type="interaction",
         element_selection="signal_anomaly",
-        evidence_alias="E4_channel",
     ),
     DiscoveryLane(
         dimension=DimensionId.CHANNEL.value,
         signal_type="campaign",
-        evidence_alias="E4_channel_campaign",
-        selection_alias="E_select_ch_campaign",
-        signal_evidence_alias="E3_ch_campaign",
+        alias_discriminator="campaign",
         signal_filter_mode="none",
     ),
     DiscoveryLane(
         dimension=DimensionId.CATEGORY.value,
         signal_type="interaction",
-        evidence_alias="E4_category",
     ),
 )
 
@@ -491,12 +480,10 @@ PAY_CVR_DISCOVERY_LANES: tuple[DiscoveryLane, ...] = (
     DiscoveryLane(
         dimension=DimensionId.CHANNEL.value,
         signal_type="conversion",
-        evidence_alias="E4_channel",
     ),
     DiscoveryLane(
         dimension=DimensionId.DEVICE.value,
         signal_type="conversion",
-        evidence_alias="E4_device",
     ),
 )
 
@@ -534,13 +521,11 @@ DEFAULT_DISCOVERY_POLICY_RULES: tuple[DiscoveryPolicyRule, ...] = (
                 dimension=DimensionId.CHANNEL.value,
                 signal_type="campaign",
                 element_binding="explicit_scope",
-                evidence_alias="E4_channel",
             ),
             DiscoveryLane(
                 dimension=DimensionId.CATEGORY.value,
                 signal_type="inventory",
                 element_binding="dynamic",
-                evidence_alias="E4_category",
                 signal_filter_mode="none",
             ),
             DiscoveryLane(
@@ -548,9 +533,7 @@ DEFAULT_DISCOVERY_POLICY_RULES: tuple[DiscoveryPolicyRule, ...] = (
                 signal_type="conversion",
                 element_binding="dynamic",
                 element_selection="signal_anomaly",
-                evidence_alias="E4_channel_conversion",
-                selection_alias="E_select_channel_conv",
-                signal_evidence_alias="E3_ch_conversion",
+                alias_discriminator="conversion",
                 signal_filter_mode="none",
                 explicit_scope_policy="global_explanatory",
             ),

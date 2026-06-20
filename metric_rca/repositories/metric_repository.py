@@ -36,6 +36,11 @@ from metric_rca.config.settings import Settings
 from metric_rca.domain.models import SQLPlan
 from metric_rca.guardrails.renderer import is_renderer_signed
 from metric_rca.guardrails.sql_guard import guard_sql, is_guard_signed
+from metric_rca.runtime.evidence_identity import (
+    EvidenceIdentityError,
+    split_evidence_id,
+    validate_evidence_alias,
+)
 
 REPOSITORY_POOL_SIZE = 1
 REPOSITORY_MAX_OVERFLOW = 1
@@ -47,7 +52,7 @@ MYSQL_DUPLICATE_ENTRY_ERRNO = 1062
 _IDEMPOTENT_TABLE_PREDICATES = {
     "agent_run": frozenset({"run_id"}),
     "trace_step": frozenset({"step_id"}),
-    "evidence": frozenset({"evidence_id"}),
+    "evidence": frozenset({"run_id", "alias"}),
     "sql_audit": frozenset({"audit_key"}),
     "operation_task": frozenset({"task_id"}),
     "memory_record": frozenset({"memory_id"}),
@@ -230,7 +235,7 @@ class MetricRepository:
                     conn.execute(
                         text(
                             """
-                            SELECT evidence_id, run_id, query_spec, sql_text, sql_hash, guard_status,
+                            SELECT evidence_pk, evidence_id, run_id, alias, query_spec, sql_text, sql_hash, guard_status,
                                    result_summary, data_source, created_at
                             FROM evidence
                             WHERE run_id = :run_id AND evidence_id = :evidence_id
@@ -243,6 +248,39 @@ class MetricRepository:
                     .first()
                 )
         except SQLAlchemyError as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
+        if row is None:
+            return None
+        try:
+            return {
+                **dict(row),
+                "query_spec": _decode_json_column(row["query_spec"]),
+                "result_summary": _decode_json_column(row["result_summary"]),
+            }
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
+
+    def get_evidence_by_alias(self, *, run_id: str, alias: str) -> dict[str, Any] | None:
+        try:
+            valid_alias = validate_evidence_alias(alias)
+            with self._audit_engine.connect() as conn:
+                row = (
+                    conn.execute(
+                        text(
+                            """
+                            SELECT evidence_pk, evidence_id, run_id, alias, query_spec, sql_text, sql_hash,
+                                   guard_status, result_summary, data_source, created_at
+                            FROM evidence
+                            WHERE run_id = :run_id AND alias = :alias
+                            LIMIT 1
+                            """
+                        ),
+                        {"run_id": run_id, "alias": valid_alias},
+                    )
+                    .mappings()
+                    .first()
+                )
+        except (EvidenceIdentityError, SQLAlchemyError) as exc:
             raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
         if row is None:
             return None
@@ -293,7 +331,7 @@ class MetricRepository:
                     conn.execute(
                         text(
                             """
-                            SELECT evidence_id, run_id, query_spec, sql_text, sql_hash,
+                            SELECT evidence_pk, evidence_id, run_id, alias, query_spec, sql_text, sql_hash,
                                    guard_status, result_summary, data_source, created_at
                             FROM evidence
                             WHERE run_id = :run_id
@@ -674,26 +712,36 @@ class MetricRepository:
         )
 
     def create_evidence(self, row: dict[str, Any]) -> None:
+        try:
+            identity = split_evidence_id(str(row["evidence_id"]))
+            run_id = str(row["run_id"])
+            alias = validate_evidence_alias(str(row.get("alias") or identity.alias))
+        except (KeyError, EvidenceIdentityError) as exc:
+            raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED") from exc
+        if identity.run_id != run_id or identity.alias != alias:
+            raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED")
         payload = {
             **row,
+            "run_id": run_id,
+            "alias": alias,
             "query_spec": json.dumps(row["query_spec"]),
             "result_summary": json.dumps(row["result_summary"]),
         }
         self._insert(
             """
             INSERT INTO evidence (
-              evidence_id, run_id, query_spec, sql_text, sql_hash, guard_status,
+              evidence_id, run_id, alias, query_spec, sql_text, sql_hash, guard_status,
               result_summary, data_source, created_at
             )
             VALUES (
-              :evidence_id, :run_id, :query_spec, :sql_text, :sql_hash, :guard_status,
+              :evidence_id, :run_id, :alias, :query_spec, :sql_text, :sql_hash, :guard_status,
               :result_summary, :data_source, :created_at
             )
             """,
             payload,
             idempotency=_idempotency(
                 table="evidence",
-                predicates={"evidence_id": payload["evidence_id"]},
+                predicates={"run_id": payload["run_id"], "alias": payload["alias"]},
                 expected=payload,
                 json_fields={"query_spec", "result_summary"},
             ),

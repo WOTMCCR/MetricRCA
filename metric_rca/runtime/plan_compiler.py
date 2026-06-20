@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from metric_rca.agent.evidence_aliases import (
-    MAX_EVIDENCE_ID_LENGTH,
-    e3_alias_for_dimension,
+from metric_rca.runtime.evidence_identity import (
     e3_alias_for_signal_lane,
-    evidence_alias_fits,
+    lane_evidence_aliases,
 )
+from metric_rca.runtime.plan_validator import PlanValidationError, validate_plan_actions
 from metric_rca.business.discovery_policy import DiscoveryLane, DiscoveryPolicy, discovery_policy_from_intent
 from metric_rca.business.policy_registry import allowed_dimensions_validator_from_metric_definition
 from metric_rca.runtime.plan_models import CasePrior, RcaAction, RcaPlan
@@ -99,7 +98,7 @@ class RcaPlanCompiler:
                     validate_dimensions=validate_dimensions,
                 )
             )
-        _validate_evidence_alias_budget(run_id=run_id, actions=actions)
+        _validate_evidence_identifiers(run_id=run_id, actions=actions)
         return RcaPlan(
             run_id=run_id,
             metric_id=parsed_intent.metric_id,
@@ -191,17 +190,11 @@ def _explicit_actions(
     ]
 
 
-def _validate_evidence_alias_budget(*, run_id: str, actions: list[RcaAction]) -> None:
-    for action in actions:
-        for alias in action.produces:
-            if not evidence_alias_fits(run_id, alias):
-                raise PlanCompilerError(
-                    "EVIDENCE_ID_TOO_LONG",
-                    (
-                        f"evidence alias {alias} with run_id length {len(run_id)} exceeds "
-                        f"{MAX_EVIDENCE_ID_LENGTH} character evidence_id limit"
-                    ),
-                )
+def _validate_evidence_identifiers(*, run_id: str, actions: list[RcaAction]) -> None:
+    try:
+        validate_plan_actions(run_id=run_id, actions=actions)
+    except PlanValidationError as exc:
+        raise PlanCompilerError(exc.code, str(exc)) from exc
 
 
 def _discovery_policy_for_intent(parsed_intent: ParsedIntent, *, validate_dimensions: Any) -> DiscoveryPolicy:
@@ -439,13 +432,18 @@ def _parallel_broad_contribution_chains(
         signal_filters = _signal_filters_for_lane(lane, contribution_filters)
         scoped_element = scoped_elements.get(dimension) if scoped_elements else None
         first_signal_element = _lane_element(lane, scoped_element=scoped_element, explicit_scope=explicit_scope)
-        selection_alias = lane.selection_alias or f"E_select_{dimension}"
-        e3_alias = lane.signal_evidence_alias or e3_alias_for_signal_lane(
-            dimension,
-            lane.signal_type,
-            element_known=first_signal_element is not None,
+        allocated_aliases = lane_evidence_aliases(dimension, lane.alias_discriminator)
+        selection_alias = lane.selection_alias or allocated_aliases.selection
+        e3_alias = lane.signal_evidence_alias or (
+            allocated_aliases.signal
+            if lane.alias_discriminator is not None
+            else e3_alias_for_signal_lane(
+                dimension,
+                lane.signal_type,
+                element_known=first_signal_element is not None,
+            )
         )
-        e4_alias = lane.evidence_alias or f"E4_{dimension}"
+        e4_alias = lane.evidence_alias or allocated_aliases.contribution
         if e4_alias in e4_alias_set:
             raise PlanCompilerError("DISCOVERY_LANE_ALIAS_CONFLICT", f"duplicate E4 alias {e4_alias}")
         if e3_alias in e3_alias_set:
@@ -593,7 +591,6 @@ def _discovery_lanes(
                     element_binding="policy",
                     element=policy.first_signal_element,
                     element_selection=policy.element_selection,
-                    evidence_alias=f"E4_{dimension}",
                 )
             )
             continue
@@ -609,7 +606,6 @@ def _discovery_lanes(
                         validate_dimensions=validate_dimensions,
                     )
                 ),
-                evidence_alias=f"E4_{dimension}",
             )
         )
     return lanes

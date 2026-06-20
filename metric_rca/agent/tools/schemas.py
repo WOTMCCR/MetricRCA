@@ -73,5 +73,5 @@ class ToolResult(StrictModel):
     evidences: list[Evidence] = Field(default_factory=list)
     evidence_alias: str | None = None
     candidates: list[RootCauseCandidate] = Field(default_factory=list)
+    # Declared by the tool; repository sql_audit delta is authoritative.
     sql_count: int = 0
-    sql_audit_delta: int = 0

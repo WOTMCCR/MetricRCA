@@ -20,6 +20,7 @@ from metric_rca.business.signal_policy import (
 from metric_rca.domain.enums import RootCauseType
 from metric_rca.domain.models import MetricDefinition
 from metric_rca.services.metric_contracts import ParsedIntent
+from metric_rca.runtime.evidence_identity import lane_evidence_aliases
 
 
 def test_root_cause_type_enum_includes_cross_dimension_interaction() -> None:
@@ -261,7 +262,14 @@ def test_uv_interaction_discovery_policy_keeps_campaign_lane_for_non_interaction
 
     policy = discovery_policy_from_intent(parsed)
 
-    assert [(lane.dimension, lane.signal_type, lane.evidence_alias) for lane in policy.lanes] == [
+    assert [
+        (
+            lane.dimension,
+            lane.signal_type,
+            lane_evidence_aliases(lane.dimension, lane.alias_discriminator).contribution,
+        )
+        for lane in policy.lanes
+    ] == [
         ("channel", "interaction", "E4_channel"),
         ("channel", "campaign", "E4_channel_campaign"),
         ("category", "interaction", "E4_category"),
@@ -281,7 +289,14 @@ def test_pay_cvr_discovery_policy_declares_channel_and_device_conversion_lanes()
     assert policy.required_drilldowns == ("channel", "device")
     assert policy.first_signal_dimension == "channel"
     assert policy.first_signal_type == "conversion"
-    assert [(lane.dimension, lane.signal_type, lane.evidence_alias) for lane in policy.lanes] == [
+    assert [
+        (
+            lane.dimension,
+            lane.signal_type,
+            lane_evidence_aliases(lane.dimension, lane.alias_discriminator).contribution,
+        )
+        for lane in policy.lanes
+    ] == [
         ("channel", "conversion", "E4_channel"),
         ("device", "conversion", "E4_device"),
     ]
@@ -307,24 +322,20 @@ def test_net_gmv_explicit_channel_policy_declares_multi_driver_lanes() -> None:
             lane.signal_type,
             lane.element_binding,
             lane.element_selection,
-            lane.evidence_alias,
-            lane.selection_alias,
-            lane.signal_evidence_alias,
+            lane.alias_discriminator,
             lane.signal_filter_mode,
             lane.explicit_scope_policy,
         )
         for lane in policy.lanes
         ] == [
-            ("channel", "campaign", "explicit_scope", "top_candidate", "E4_channel", None, None, "inherit", "strict"),
-            ("category", "inventory", "dynamic", "top_candidate", "E4_category", None, None, "none", "strict"),
+            ("channel", "campaign", "explicit_scope", "top_candidate", None, "inherit", "strict"),
+            ("category", "inventory", "dynamic", "top_candidate", None, "none", "strict"),
             (
                 "channel",
                 "conversion",
                 "dynamic",
                 "signal_anomaly",
-                "E4_channel_conversion",
-                "E_select_channel_conv",
-                "E3_ch_conversion",
+                "conversion",
                 "none",
                 "global_explanatory",
             ),

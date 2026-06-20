@@ -8,7 +8,7 @@ from json import JSONDecodeError
 import math
 from typing import Any
 
-from metric_rca.agent.evidence_aliases import E2_ALIAS_BY_DIMENSION, e2_alias_for_e3_id
+from metric_rca.runtime.evidence_identity import E2_ALIAS_BY_DIMENSION, e2_alias_for_e3_id
 from metric_rca.agent.tools.registry import select_signal_type
 from metric_rca.business.policy_registry import root_cause_type_for_metric_dimension
 from metric_rca.domain.enums import RootCauseType

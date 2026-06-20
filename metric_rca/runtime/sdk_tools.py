@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from metric_rca.domain.models import Observation, StrictModel
 from metric_rca.runtime.dependencies import RuntimeDependencies
 from metric_rca.runtime.evidence_graph import EvidenceGraph
+from metric_rca.runtime.evidence_identity import compose_evidence_id
 from metric_rca.runtime.plan_models import RcaAction
 from metric_rca.runtime.ranking import rank_from_persisted_e4
 from metric_rca.runtime.run_context import RunContext
@@ -215,18 +216,24 @@ def _selection_evidence_element(ctx: RunContext, dimension: str, required_aliase
     if not aliases:
         return None
     for alias in aliases:
-        for evidence_id in (f"{ctx.run_id}:{alias}",):
-            row = ctx.repository.get_evidence(run_id=ctx.run_id, evidence_id=evidence_id)
-            if not isinstance(row, dict) or row.get("guard_status") != "passed":
-                continue
-            summary = row.get("result_summary")
-            if not isinstance(summary, dict):
-                continue
-            if summary.get("dimension") != dimension:
-                continue
-            selected = summary.get("selected_element")
-            if selected is not None:
-                return str(selected)
+        get_by_alias = getattr(ctx.repository, "get_evidence_by_alias", None)
+        if callable(get_by_alias):
+            row = get_by_alias(run_id=ctx.run_id, alias=alias)
+        else:
+            row = ctx.repository.get_evidence(
+                run_id=ctx.run_id,
+                evidence_id=compose_evidence_id(ctx.run_id, alias),
+            )
+        if not isinstance(row, dict) or row.get("guard_status") != "passed":
+            continue
+        summary = row.get("result_summary")
+        if not isinstance(summary, dict):
+            continue
+        if summary.get("dimension") != dimension:
+            continue
+        selected = summary.get("selected_element")
+        if selected is not None:
+            return str(selected)
     return None
 
 
@@ -246,7 +253,6 @@ def _coerce_tool_result(result: Any) -> ToolExecutionResult:
         evidence_ids=evidence_ids,
         candidates=list(getattr(result, "candidates", []) or []),
         sql_count=int(getattr(result, "sql_count", 0) or 0),
-        sql_audit_delta=int(getattr(result, "sql_audit_delta", getattr(result, "sql_count", 0)) or 0),
     )
 
 

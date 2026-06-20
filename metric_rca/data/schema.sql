@@ -157,8 +157,10 @@ CREATE TABLE trace_step (
 
 -- 证据：每次取数的结构化快照（数值来源），结论必须绑定当前 run 的证据。
 CREATE TABLE evidence (
-  evidence_id   VARCHAR(64) PRIMARY KEY,
+  evidence_pk   BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  evidence_id   VARCHAR(192) NOT NULL,
   run_id        VARCHAR(64) NOT NULL,
+  alias         VARCHAR(96) NOT NULL,
   query_spec    JSON NOT NULL,
   sql_text      TEXT NOT NULL,
   sql_hash      CHAR(64) NOT NULL,
@@ -166,6 +168,8 @@ CREATE TABLE evidence (
   result_summary JSON NOT NULL,
   data_source   VARCHAR(128) NOT NULL,
   created_at    DATETIME NOT NULL,
+  UNIQUE KEY uq_evidence_id (evidence_id),
+  UNIQUE KEY uq_evidence_run_alias (run_id, alias),
   KEY idx_run (run_id),
   KEY idx_hash (sql_hash)
 ) ENGINE=InnoDB;

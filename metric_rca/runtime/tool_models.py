@@ -6,6 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import Field
+
 from metric_rca.domain.models import Observation, RootCauseCandidate, StrictModel
 from metric_rca.runtime.dependencies import RuntimeDependencies
 
@@ -18,7 +20,7 @@ class MetricRCAToolHandler:
 
 class ToolExecutionResult(StrictModel):
     observation: Observation
-    evidence_ids: list[str] = []
-    candidates: list[RootCauseCandidate] = []
+    evidence_ids: list[str] = Field(default_factory=list)
+    candidates: list[RootCauseCandidate] = Field(default_factory=list)
+    # Declared by the tool; repository sql_audit delta is authoritative.
     sql_count: int = 0
-    sql_audit_delta: int = 0

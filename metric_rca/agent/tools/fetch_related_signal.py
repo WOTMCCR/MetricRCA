@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import hashlib
 from typing import Any
 
-from metric_rca.agent.evidence_aliases import e3_alias_for_dimension
+from metric_rca.runtime.evidence_identity import e3_alias_for_dimension
 from metric_rca.agent.tools.runtime import (
     ToolRuntimeError,
     current_run_guarded_evidence,

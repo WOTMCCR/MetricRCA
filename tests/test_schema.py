@@ -139,8 +139,10 @@ EXPECTED_COLUMNS = {
         "created_at": "datetime",
     },
     "evidence": {
+        "evidence_pk": "bigint",
         "evidence_id": "varchar",
         "run_id": "varchar",
+        "alias": "varchar",
         "query_spec": "json",
         "sql_text": "text",
         "sql_hash": "char",
@@ -287,6 +289,8 @@ def test_schema_has_exact_phase1_tables_columns_and_indexes() -> None:
             assert ("fact_customer_ticket", "idx_date_product") in indexes
             assert ("memory_record", "idx_layer_key") in indexes
             assert ("sql_audit", "uq_audit_key") in indexes
+            assert ("evidence", "uq_evidence_id") in indexes
+            assert ("evidence", "uq_evidence_run_alias") in indexes
             assert ("eval_case_result", "idx_eval") in indexes
             assert ("eval_case_result", "uq_eval_case") in indexes
 
@@ -326,6 +330,23 @@ def test_seed_schema_migration_adds_root_causes_column_when_missing() -> None:
         "ALTER TABLE anomaly_ground_truth ADD COLUMN root_causes JSON NULL AFTER element"
         in conn.ddl_statements
     )
+
+
+def test_seed_schema_migration_upgrades_empty_legacy_evidence_table() -> None:
+    conn = _MigrationConn(
+        missing_columns={("evidence", "evidence_pk"), ("evidence", "alias")}
+    )
+
+    _ensure_p6_schema(conn)
+
+    migration = next(
+        statement
+        for statement in conn.ddl_statements
+        if "ADD COLUMN evidence_pk BIGINT UNSIGNED" in statement
+    )
+    assert "MODIFY COLUMN evidence_id VARCHAR(192) NOT NULL" in migration
+    assert "ADD COLUMN alias VARCHAR(96) NOT NULL AFTER run_id" in migration
+    assert "ADD UNIQUE KEY uq_evidence_run_alias (run_id, alias)" in migration
 
 
 class _ScalarResult:

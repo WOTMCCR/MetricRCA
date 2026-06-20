@@ -149,6 +149,7 @@ def rank_from_persisted_e4(
         {
             "evidence_id": evidence.evidence_id,
             "run_id": run_id,
+            "alias": "E_rank",
             "query_spec": evidence.query_spec.model_dump(mode="json"),
             "sql_text": evidence.sql,
             "sql_hash": evidence.sql_hash,
