@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from metric_rca.agent.evidence_aliases import allocate_discovery_lane_aliases
 from metric_rca.business.policy_registry import (
     DEFAULT_POLICY_REGISTRY,
@@ -17,7 +15,6 @@ from metric_rca.business.policy_registry import (
 from metric_rca.services.metric_contracts import ParsedIntent
 
 
-
 def discovery_policy_from_intent(
     parsed_intent: ParsedIntent,
     *,
@@ -29,12 +26,13 @@ def discovery_policy_from_intent(
         registry=registry,
         validate_dimensions=validate_dimensions,
     )
-    if not policy.lanes:
-        return policy
-    return replace(
-        policy,
-        lanes=allocate_discovery_lane_aliases(policy.lanes),
-    )
+    if policy.lanes:
+        # Validate every explicitly declared alias against the central allocator.
+        # Keep the returned policy unchanged so existing callers still observe
+        # None for aliases that are intentionally resolved by the compiler's
+        # generic fallback.
+        allocate_discovery_lane_aliases(policy.lanes)
+    return policy
 
 
 __all__ = [
