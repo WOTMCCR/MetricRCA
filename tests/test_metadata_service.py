@@ -580,6 +580,31 @@ def test_metric_service_stabilizes_plain_gmv_decline_as_standard_strategy() -> N
     assert parsed.filters == {}
 
 
+def test_metric_service_stabilizes_broad_store_expectation_query_as_channel_first() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv", dimensions=["channel", "category", "product"])]),
+        settings=_settings_without_llm_key(),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            question_family="gmv_drop",
+            analysis_strategy="signal_first",
+        )
+    )
+
+    parsed = service.parse_question(
+        "Why was yesterday's GMV below expectation across the store?",
+        business_today=date(2026, 6, 6),
+    )
+
+    assert parsed.analysis_strategy == "channel_first"
+    assert parsed.dimension is None
+    assert parsed.element is None
+    assert parsed.filters == {}
+
+
 def test_stable_merchandising_intent_alias_does_not_override_explicit_slice() -> None:
     service = MetricService(
         FakeMetadataRepository([_metric("gmv", dimensions=["channel", "category", "product"])]),

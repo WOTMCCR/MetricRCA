@@ -152,6 +152,13 @@ def _apply_intent_alias_constraints(*, question: str, parsed: ParsedIntent) -> P
         "merchandising was stable",
         "merchandising is stable",
     )
+    broad_store_channel_first_aliases = (
+        "below expectation across the store",
+        "below its normal seasonal range",
+        "below normal seasonal range",
+        "something seems off with sales",
+        "sales seems off",
+    )
     ordinary_gmv_standard_questions = {
         "why did yesterday's gmv decline",
         "why did yesterday's gmv decline?",
@@ -167,6 +174,15 @@ def _apply_intent_alias_constraints(*, question: str, parsed: ParsedIntent) -> P
         and normalized_question in ordinary_gmv_standard_questions
     ):
         return parsed.model_copy(update={"analysis_strategy": "standard"})
+    if (
+        parsed.metric_id == "gmv"
+        and parsed.question_family == "gmv_drop"
+        and parsed.dimension is None
+        and parsed.element is None
+        and not parsed.filters
+        and any(alias in normalized_question for alias in broad_store_channel_first_aliases)
+    ):
+        return parsed.model_copy(update={"analysis_strategy": "channel_first"})
     if (
         parsed.metric_id == "gmv"
         and parsed.question_family == "gmv_drop"
