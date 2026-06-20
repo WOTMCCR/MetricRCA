@@ -215,18 +215,18 @@ def _selection_evidence_element(ctx: RunContext, dimension: str, required_aliase
     if not aliases:
         return None
     for alias in aliases:
-        for evidence_id in (f"{ctx.run_id}:{alias}",):
-            row = ctx.repository.get_evidence(run_id=ctx.run_id, evidence_id=evidence_id)
-            if not isinstance(row, dict) or row.get("guard_status") != "passed":
-                continue
-            summary = row.get("result_summary")
-            if not isinstance(summary, dict):
-                continue
-            if summary.get("dimension") != dimension:
-                continue
-            selected = summary.get("selected_element")
-            if selected is not None:
-                return str(selected)
+        evidence_id = f"{ctx.run_id}:{alias}"
+        row = ctx.repository.get_evidence(run_id=ctx.run_id, evidence_id=evidence_id)
+        if not isinstance(row, dict) or row.get("guard_status") != "passed":
+            continue
+        summary = row.get("result_summary")
+        if not isinstance(summary, dict):
+            continue
+        if summary.get("dimension") != dimension:
+            continue
+        selected = summary.get("selected_element")
+        if selected is not None:
+            return str(selected)
     return None
 
 
@@ -246,7 +246,6 @@ def _coerce_tool_result(result: Any) -> ToolExecutionResult:
         evidence_ids=evidence_ids,
         candidates=list(getattr(result, "candidates", []) or []),
         sql_count=int(getattr(result, "sql_count", 0) or 0),
-        sql_audit_delta=int(getattr(result, "sql_audit_delta", getattr(result, "sql_count", 0)) or 0),
     )
 
 
