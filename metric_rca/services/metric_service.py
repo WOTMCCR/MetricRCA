@@ -146,19 +146,6 @@ def parse_question(
 
 def _apply_intent_alias_constraints(*, question: str, parsed: ParsedIntent) -> ParsedIntent:
     normalized_question = " ".join(question.casefold().split())
-    stable_merchandising_aliases = (
-        "despite stable merchandising",
-        "stable merchandising",
-        "merchandising was stable",
-        "merchandising is stable",
-    )
-    broad_store_channel_first_aliases = (
-        "below expectation across the store",
-        "below its normal seasonal range",
-        "below normal seasonal range",
-        "something seems off with sales",
-        "sales seems off",
-    )
     ordinary_gmv_standard_questions = {
         "why did yesterday's gmv decline",
         "why did yesterday's gmv decline?",
@@ -175,24 +162,47 @@ def _apply_intent_alias_constraints(*, question: str, parsed: ParsedIntent) -> P
     ):
         return parsed.model_copy(update={"analysis_strategy": "standard"})
     if (
-        parsed.metric_id == "gmv"
-        and parsed.question_family == "gmv_drop"
-        and parsed.dimension is None
-        and parsed.element is None
-        and not parsed.filters
-        and any(alias in normalized_question for alias in broad_store_channel_first_aliases)
-    ):
-        return parsed.model_copy(update={"analysis_strategy": "channel_first"})
-    if (
-        parsed.metric_id == "gmv"
-        and parsed.question_family == "gmv_drop"
-        and parsed.dimension is None
-        and parsed.element is None
-        and not parsed.filters
-        and any(alias in normalized_question for alias in stable_merchandising_aliases)
+        _is_unscoped_gmv_drop(parsed)
+        and _has_stable_merchandising_context(normalized_question)
     ):
         return parsed.model_copy(update={"analysis_strategy": "signal_first"})
+    if (
+        _is_unscoped_gmv_drop(parsed)
+        and _has_broad_store_expectation_context(normalized_question)
+    ):
+        return parsed.model_copy(update={"analysis_strategy": "channel_first"})
     return parsed
+
+
+def _is_unscoped_gmv_drop(parsed: ParsedIntent) -> bool:
+    return (
+        parsed.metric_id == "gmv"
+        and parsed.question_family == "gmv_drop"
+        and parsed.dimension is None
+        and parsed.element is None
+        and not parsed.filters
+    )
+
+
+def _has_stable_merchandising_context(normalized_question: str) -> bool:
+    words = _question_words(normalized_question)
+    return "stable" in words and "merchandising" in words
+
+
+def _has_broad_store_expectation_context(normalized_question: str) -> bool:
+    words = _question_words(normalized_question)
+    expectation_context = (
+        any(word.startswith("expect") for word in words)
+        or any(word.startswith("season") for word in words)
+        or bool(words & {"abnormal", "normal", "off", "wrong"})
+    )
+    if not expectation_context:
+        return False
+    return bool(words & {"store", "sales", "overall", "gmv"})
+
+
+def _question_words(normalized_question: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9_']+", normalized_question))
 
 
 def _apply_run_target_date_contract(
