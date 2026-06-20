@@ -1,0 +1,16 @@
+{
+  "cycle_id": "cycle-20260618-2358",
+  "round": 21,
+  "branch": "codex/c-complex-causal",
+  "base_commit": "871ec735ea490bc2a0eae7fcf5fb35a20a8d27c2",
+  "started_at": "2026-06-20T15:54:51+08:00",
+  "total_cases": 46,
+  "project_binding": "metricrca",
+  "status": "in_progress",
+  "fix_under_test": {
+    "commit": "871ec735ea490bc2a0eae7fcf5fb35a20a8d27c2",
+    "message": "fix(phase-c/ptv-21): FIX-T decouple evidence identity",
+    "category": "FIX-T",
+    "layer": "tool"
+  }
+}
