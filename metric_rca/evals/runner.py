@@ -534,6 +534,12 @@ def main() -> int:
         default=False,
         help="fail before eval if predictions.jsonl is missing",
     )
+    parser.add_argument(
+        "--allow-threshold-failure",
+        action="store_true",
+        default=False,
+        help="return success when persisted eval artifacts exist but thresholds are not met",
+    )
     args = parser.parse_args()
 
     def _stream_callback(score: dict[str, Any]) -> None:
@@ -548,6 +554,8 @@ def main() -> int:
         )
     except EvalRuntimeError as exc:
         print(json.dumps({"error_code": exc.code, "message": str(exc)}, ensure_ascii=False))
+        if args.allow_threshold_failure and exc.code == "EVAL_THRESHOLD_NOT_MET":
+            return 0
         return 1
     if not args.stream:
         print(json.dumps(output["summary"], ensure_ascii=False, sort_keys=True))

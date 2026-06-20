@@ -149,6 +149,33 @@ def test_eval_cli_can_still_require_predictions_explicitly(monkeypatch: pytest.M
     assert captured["require_predictions"] is True
 
 
+def test_eval_cli_allow_threshold_failure_only_for_ptv_diagnosis(monkeypatch: pytest.MonkeyPatch) -> None:
+    from metric_rca.evals import runner as runner_module
+
+    def fake_threshold_failure(**kwargs: Any) -> dict[str, Any]:
+        raise EvalRuntimeError("EVAL_THRESHOLD_NOT_MET", "eval-red")
+
+    monkeypatch.setattr(runner_module, "run_eval", fake_threshold_failure)
+    monkeypatch.setattr("sys.argv", ["runner", "--stream", "--eval-id", "ptv-round-01"])
+    assert runner_module.main() == 1
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["runner", "--stream", "--allow-threshold-failure", "--eval-id", "ptv-round-01"],
+    )
+    assert runner_module.main() == 0
+
+    def fake_infra_failure(**kwargs: Any) -> dict[str, Any]:
+        raise EvalRuntimeError("LLM_REQUIRED_UNAVAILABLE", "missing key")
+
+    monkeypatch.setattr(runner_module, "run_eval", fake_infra_failure)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["runner", "--stream", "--allow-threshold-failure", "--eval-id", "ptv-round-01"],
+    )
+    assert runner_module.main() == 1
+
+
 def test_eval_loader_defaults_to_public_regression_cases_without_expected_fields() -> None:
     cases = load_cases()
     public_rows = _read_jsonl(PUBLIC_CASES_PATH)

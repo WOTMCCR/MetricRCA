@@ -1,0 +1,549 @@
+{
+  "schema_version": "metricrca-dimension-catalog-v1",
+  "catalog_id": "metricrca-commerce-full-v1",
+  "dimensions": {
+    "channel": [
+      {
+        "id": "paid_ads",
+        "weight": 1.2,
+        "attributes": {
+          "traffic_factor": 1.35,
+          "cvr_factor": 0.96,
+          "spend_per_uv": 0.42
+        }
+      },
+      {
+        "id": "organic",
+        "weight": 1.3,
+        "attributes": {
+          "traffic_factor": 1.25,
+          "cvr_factor": 1.06,
+          "spend_per_uv": 0.02
+        }
+      },
+      {
+        "id": "social",
+        "weight": 0.9,
+        "attributes": {
+          "traffic_factor": 0.92,
+          "cvr_factor": 0.84,
+          "spend_per_uv": 0.2
+        }
+      },
+      {
+        "id": "affiliate",
+        "weight": 0.7,
+        "attributes": {
+          "traffic_factor": 0.68,
+          "cvr_factor": 0.91,
+          "spend_per_uv": 0.16
+        }
+      },
+      {
+        "id": "email",
+        "weight": 0.8,
+        "attributes": {
+          "traffic_factor": 0.72,
+          "cvr_factor": 1.18,
+          "spend_per_uv": 0.04
+        }
+      }
+    ],
+    "campaign": [
+      {
+        "id": "search_brand",
+        "weight": 1.0,
+        "attributes": {
+          "channel": "paid_ads",
+          "quality_factor": 1.16,
+          "spend_factor": 1.12,
+          "impressions_per_uv": 7.0,
+          "clicks_per_uv": 1.25
+        }
+      },
+      {
+        "id": "search_generic",
+        "weight": 1.2,
+        "attributes": {
+          "channel": "paid_ads",
+          "quality_factor": 0.92,
+          "spend_factor": 1.28,
+          "impressions_per_uv": 9.0,
+          "clicks_per_uv": 1.35
+        }
+      },
+      {
+        "id": "seo_always_on",
+        "weight": 1.0,
+        "attributes": {
+          "channel": "organic",
+          "quality_factor": 1.1,
+          "spend_factor": 0.15,
+          "impressions_per_uv": 5.0,
+          "clicks_per_uv": 1.05
+        }
+      },
+      {
+        "id": "social_launch",
+        "weight": 1.0,
+        "attributes": {
+          "channel": "social",
+          "quality_factor": 0.86,
+          "spend_factor": 1.05,
+          "impressions_per_uv": 11.0,
+          "clicks_per_uv": 1.45
+        }
+      },
+      {
+        "id": "affiliate_network",
+        "weight": 1.0,
+        "attributes": {
+          "channel": "affiliate",
+          "quality_factor": 0.9,
+          "spend_factor": 0.88,
+          "impressions_per_uv": 6.0,
+          "clicks_per_uv": 1.2
+        }
+      },
+      {
+        "id": "retention_email",
+        "weight": 1.0,
+        "attributes": {
+          "channel": "email",
+          "quality_factor": 1.22,
+          "spend_factor": 0.25,
+          "impressions_per_uv": 3.0,
+          "clicks_per_uv": 1.02
+        }
+      }
+    ],
+    "category": [
+      {
+        "id": "electronics",
+        "weight": 1.0,
+        "attributes": {
+          "demand_factor": 1.12,
+          "refund_rate": 0.055,
+          "stockout_factor": 1.35
+        }
+      },
+      {
+        "id": "fashion",
+        "weight": 1.1,
+        "attributes": {
+          "demand_factor": 1.05,
+          "refund_rate": 0.085,
+          "stockout_factor": 0.92
+        }
+      },
+      {
+        "id": "home",
+        "weight": 0.9,
+        "attributes": {
+          "demand_factor": 0.94,
+          "refund_rate": 0.035,
+          "stockout_factor": 1.08
+        }
+      },
+      {
+        "id": "beauty",
+        "weight": 0.8,
+        "attributes": {
+          "demand_factor": 0.9,
+          "refund_rate": 0.045,
+          "stockout_factor": 0.75
+        }
+      }
+    ],
+    "product": [
+      {
+        "id": "sku_phone",
+        "weight": 1.0,
+        "attributes": {
+          "category": "electronics",
+          "brand": "atlas",
+          "price_band": "premium",
+          "base_price": 820.0,
+          "demand_factor": 1.1,
+          "complaint_rate": 0.008
+        }
+      },
+      {
+        "id": "sku_headphones",
+        "weight": 1.2,
+        "attributes": {
+          "category": "electronics",
+          "brand": "nova",
+          "price_band": "mid",
+          "base_price": 145.0,
+          "demand_factor": 1.18,
+          "complaint_rate": 0.01
+        }
+      },
+      {
+        "id": "sku_dress",
+        "weight": 1.1,
+        "attributes": {
+          "category": "fashion",
+          "brand": "lumen",
+          "price_band": "mid",
+          "base_price": 110.0,
+          "demand_factor": 1.06,
+          "complaint_rate": 0.014
+        }
+      },
+      {
+        "id": "sku_sneakers",
+        "weight": 1.2,
+        "attributes": {
+          "category": "fashion",
+          "brand": "orbit",
+          "price_band": "premium",
+          "base_price": 180.0,
+          "demand_factor": 1.14,
+          "complaint_rate": 0.012
+        }
+      },
+      {
+        "id": "sku_blender",
+        "weight": 0.9,
+        "attributes": {
+          "category": "home",
+          "brand": "atlas",
+          "price_band": "mid",
+          "base_price": 95.0,
+          "demand_factor": 0.92,
+          "complaint_rate": 0.007
+        }
+      },
+      {
+        "id": "sku_lamp",
+        "weight": 1.0,
+        "attributes": {
+          "category": "home",
+          "brand": "nova",
+          "price_band": "budget",
+          "base_price": 42.0,
+          "demand_factor": 1.0,
+          "complaint_rate": 0.006
+        }
+      },
+      {
+        "id": "sku_serum",
+        "weight": 0.9,
+        "attributes": {
+          "category": "beauty",
+          "brand": "lumen",
+          "price_band": "premium",
+          "base_price": 78.0,
+          "demand_factor": 0.96,
+          "complaint_rate": 0.009
+        }
+      },
+      {
+        "id": "sku_cleanser",
+        "weight": 1.1,
+        "attributes": {
+          "category": "beauty",
+          "brand": "orbit",
+          "price_band": "budget",
+          "base_price": 28.0,
+          "demand_factor": 1.08,
+          "complaint_rate": 0.005
+        }
+      }
+    ],
+    "device": [
+      {
+        "id": "mobile",
+        "weight": 1.8,
+        "attributes": {
+          "cvr_factor": 0.88
+        }
+      },
+      {
+        "id": "desktop",
+        "weight": 1.0,
+        "attributes": {
+          "cvr_factor": 1.15
+        }
+      },
+      {
+        "id": "tablet",
+        "weight": 0.5,
+        "attributes": {
+          "cvr_factor": 0.95
+        }
+      }
+    ],
+    "geo": [
+      {
+        "id": "tokyo",
+        "weight": 1.5,
+        "attributes": {
+          "demand_factor": 1.18,
+          "delivery_factor": 0.85
+        }
+      },
+      {
+        "id": "osaka",
+        "weight": 1.1,
+        "attributes": {
+          "demand_factor": 1.05,
+          "delivery_factor": 0.95
+        }
+      },
+      {
+        "id": "nagoya",
+        "weight": 0.8,
+        "attributes": {
+          "demand_factor": 0.92,
+          "delivery_factor": 1.05
+        }
+      },
+      {
+        "id": "fukuoka",
+        "weight": 0.7,
+        "attributes": {
+          "demand_factor": 0.88,
+          "delivery_factor": 1.18
+        }
+      }
+    ],
+    "shop": [
+      {
+        "id": "flagship",
+        "weight": 1.2,
+        "attributes": {
+          "demand_factor": 1.12
+        }
+      },
+      {
+        "id": "marketplace",
+        "weight": 1.5,
+        "attributes": {
+          "demand_factor": 1.0
+        }
+      },
+      {
+        "id": "outlet",
+        "weight": 0.7,
+        "attributes": {
+          "demand_factor": 0.78
+        }
+      }
+    ],
+    "brand": [
+      {
+        "id": "atlas",
+        "weight": 1.0,
+        "attributes": {}
+      },
+      {
+        "id": "nova",
+        "weight": 1.0,
+        "attributes": {}
+      },
+      {
+        "id": "lumen",
+        "weight": 1.0,
+        "attributes": {}
+      },
+      {
+        "id": "orbit",
+        "weight": 1.0,
+        "attributes": {}
+      }
+    ],
+    "warehouse": [
+      {
+        "id": "east",
+        "weight": 1.2,
+        "attributes": {
+          "stockout_factor": 0.85
+        }
+      },
+      {
+        "id": "west",
+        "weight": 1.0,
+        "attributes": {
+          "stockout_factor": 1.0
+        }
+      },
+      {
+        "id": "central",
+        "weight": 0.8,
+        "attributes": {
+          "stockout_factor": 1.18
+        }
+      }
+    ],
+    "logistics_provider": [
+      {
+        "id": "yamato",
+        "weight": 1.2,
+        "attributes": {
+          "delay_hours": 6.0,
+          "refund_factor": 0.92
+        }
+      },
+      {
+        "id": "sagawa",
+        "weight": 1.0,
+        "attributes": {
+          "delay_hours": 8.0,
+          "refund_factor": 1.0
+        }
+      },
+      {
+        "id": "jp_post",
+        "weight": 0.7,
+        "attributes": {
+          "delay_hours": 11.0,
+          "refund_factor": 1.12
+        }
+      }
+    ],
+    "payment_type": [
+      {
+        "id": "card",
+        "weight": 1.6,
+        "attributes": {
+          "cvr_factor": 1.05,
+          "refund_factor": 1.0
+        }
+      },
+      {
+        "id": "wallet",
+        "weight": 1.2,
+        "attributes": {
+          "cvr_factor": 1.12,
+          "refund_factor": 0.95
+        }
+      },
+      {
+        "id": "bank_transfer",
+        "weight": 0.6,
+        "attributes": {
+          "cvr_factor": 0.82,
+          "refund_factor": 0.88
+        }
+      },
+      {
+        "id": "cod",
+        "weight": 0.4,
+        "attributes": {
+          "cvr_factor": 0.74,
+          "refund_factor": 1.18
+        }
+      }
+    ],
+    "membership_segment": [
+      {
+        "id": "new",
+        "weight": 1.0,
+        "attributes": {
+          "demand_factor": 0.92,
+          "cvr_factor": 0.82
+        }
+      },
+      {
+        "id": "standard",
+        "weight": 1.5,
+        "attributes": {
+          "demand_factor": 1.0,
+          "cvr_factor": 1.0
+        }
+      },
+      {
+        "id": "vip",
+        "weight": 0.6,
+        "attributes": {
+          "demand_factor": 1.28,
+          "cvr_factor": 1.22
+        }
+      }
+    ],
+    "price_band": [
+      {
+        "id": "budget",
+        "weight": 1.2,
+        "attributes": {}
+      },
+      {
+        "id": "mid",
+        "weight": 1.4,
+        "attributes": {}
+      },
+      {
+        "id": "premium",
+        "weight": 0.8,
+        "attributes": {}
+      }
+    ],
+    "promotion_type": [
+      {
+        "id": "none",
+        "weight": 1.6,
+        "attributes": {
+          "discount_rate": 0.0,
+          "demand_factor": 1.0
+        }
+      },
+      {
+        "id": "coupon",
+        "weight": 1.0,
+        "attributes": {
+          "discount_rate": 0.1,
+          "demand_factor": 1.12
+        }
+      },
+      {
+        "id": "flash_sale",
+        "weight": 0.5,
+        "attributes": {
+          "discount_rate": 0.22,
+          "demand_factor": 1.38
+        }
+      },
+      {
+        "id": "bundle",
+        "weight": 0.7,
+        "attributes": {
+          "discount_rate": 0.08,
+          "demand_factor": 1.18
+        }
+      }
+    ],
+    "landing_page": [
+      {
+        "id": "home",
+        "weight": 1.0,
+        "attributes": {
+          "cvr_factor": 0.92
+        }
+      },
+      {
+        "id": "product",
+        "weight": 1.4,
+        "attributes": {
+          "cvr_factor": 1.1
+        }
+      },
+      {
+        "id": "campaign",
+        "weight": 0.9,
+        "attributes": {
+          "cvr_factor": 1.02
+        }
+      },
+      {
+        "id": "search",
+        "weight": 1.1,
+        "attributes": {
+          "cvr_factor": 1.06
+        }
+      }
+    ]
+  }
+}

@@ -10,6 +10,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _compact_make_output(stdout: str) -> str:
+    return " ".join(token for token in stdout.split() if token != "\\")
+
+
 def test_pyproject_declares_current_phase_dependencies() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
     assert pyproject["project"]["name"] == "metric_rca"
@@ -54,10 +58,6 @@ def test_pyproject_declares_current_phase_dependencies() -> None:
 def test_makefile_targets_match_documented_commands() -> None:
     expected = {
         "up": "docker compose up -d mysql",
-        "seed": (
-            "METRIC_RCA_DATA_SEED=20260606 METRIC_RCA_SEED_PROFILE=regression "
-            "METRIC_RCA_ALLOW_DESTRUCTIVE_SEED=false python -m metric_rca.data.seed_data"
-        ),
         "api": "uvicorn metric_rca.api.main:app --reload",
         "ui": "npm run dev --prefix frontend",
         "eval": "python -m metric_rca.evals.runner",
@@ -77,6 +77,21 @@ def test_makefile_targets_match_documented_commands() -> None:
             if line and not line.startswith("export ") and not line.startswith("make[")
         ]
         assert lines[-1] == command
+    seed_result = subprocess.run(
+        ["make", "-n", "seed"],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    seed_output = _compact_make_output(seed_result.stdout)
+    assert (
+        "METRIC_RCA_DATA_SEED=20260606 METRIC_RCA_SEED_PROFILE=regression "
+        "METRIC_RCA_ALLOW_DESTRUCTIVE_SEED=false python -m metric_rca.data.seed_data"
+    ) in seed_output
+    assert "python -m metric_rca.data.scenario_seed" in seed_output
+    assert "--catalog metric_rca/data/scenarios/catalog.yaml" in seed_output
+    assert "--scenario-set metric_rca/data/scenarios/phase_c_full.yaml" in seed_output
     makefile = (ROOT / "Makefile").read_text()
     assert "streamlit" not in makefile
 
@@ -89,9 +104,10 @@ def test_makefile_seed_profile_and_destructive_flags_are_explicit() -> None:
         text=True,
         capture_output=True,
     )
+    output = _compact_make_output(result.stdout)
     assert (
         "METRIC_RCA_SEED_PROFILE=acceptance METRIC_RCA_ALLOW_DESTRUCTIVE_SEED=true"
-        in result.stdout
+        in output
     )
 
 
