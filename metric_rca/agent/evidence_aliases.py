@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Protocol, Sequence, TypeVar
+from typing import Any, Protocol, Sequence, TypeVar, cast
 
 
 E3_ALIAS_BY_DIMENSION = {
@@ -86,10 +86,8 @@ class LaneEvidenceAliases:
     contribution: str
 
 
-
 def e3_alias_for_dimension(dimension: str) -> str | None:
     return E3_ALIAS_BY_DIMENSION.get(dimension)
-
 
 
 def e3_alias_for_signal_lane(dimension: str, signal_type: str, *, element_known: bool) -> str:
@@ -97,7 +95,6 @@ def e3_alias_for_signal_lane(dimension: str, signal_type: str, *, element_known:
     if not element_known:
         return dimension_alias
     return f"{dimension_alias}_{signal_type}"
-
 
 
 def allocate_lane_aliases(
@@ -149,7 +146,6 @@ def allocate_lane_aliases(
     )
 
 
-
 def allocate_discovery_lane_aliases(lanes: Sequence[LaneT]) -> tuple[LaneT, ...]:
     """Return lanes with centrally allocated aliases and detect policy drift.
 
@@ -177,16 +173,18 @@ def allocate_discovery_lane_aliases(lanes: Sequence[LaneT]) -> tuple[LaneT, ...]
         _validate_declared_alias("signal_evidence_alias", lane.signal_evidence_alias, aliases.signal)
         _validate_declared_alias("evidence_alias", lane.evidence_alias, aliases.contribution)
         allocated_lanes.append(
-            replace(
-                lane,
-                selection_alias=aliases.selection,
-                signal_evidence_alias=aliases.signal,
-                evidence_alias=aliases.contribution,
+            cast(
+                LaneT,
+                replace(
+                    cast(Any, lane),
+                    selection_alias=aliases.selection,
+                    signal_evidence_alias=aliases.signal,
+                    evidence_alias=aliases.contribution,
+                ),
             )
         )
 
     return tuple(allocated_lanes)
-
 
 
 def e2_alias_for_e3_id(e3_id: str, *, run_id: str) -> str | None:
@@ -197,10 +195,8 @@ def e2_alias_for_e3_id(e3_id: str, *, run_id: str) -> str | None:
     return None
 
 
-
 def evidence_alias_fits(run_id: str, alias: str) -> bool:
     return len(f"{run_id}:{alias}") <= MAX_EVIDENCE_ID_LENGTH
-
 
 
 def _validate_declared_alias(field: str, declared: str | None, allocated: str) -> None:
