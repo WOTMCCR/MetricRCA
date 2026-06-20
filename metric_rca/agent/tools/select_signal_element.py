@@ -39,8 +39,21 @@ def select_signal_element(
     if run_error:
         return tool_error(action, run_error, "run_id is not an active matching run")
     required_e2_alias = f"E2_{args.dimension}"
-    if not current_run_guarded_evidence(repository, args.run_id, args.evidence_ids, {"E1", required_e2_alias}):
-        evidence_hint = current_run_guarded_evidence_hint(repository, args.run_id, ["E1", required_e2_alias])
+    try:
+        has_required_evidence = current_run_guarded_evidence(
+            repository,
+            args.run_id,
+            args.evidence_ids,
+            {"E1", required_e2_alias},
+        )
+        evidence_hint = (
+            []
+            if has_required_evidence
+            else current_run_guarded_evidence_hint(repository, args.run_id, ["E1", required_e2_alias])
+        )
+    except ToolRuntimeError as exc:
+        return runtime_error(action, exc)
+    if not has_required_evidence:
         retry_hint = evidence_hint or [f"{args.run_id}:E1", f"{args.run_id}:{required_e2_alias}"]
         return tool_error(
             action,

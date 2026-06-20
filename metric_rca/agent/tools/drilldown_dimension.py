@@ -36,7 +36,11 @@ def drilldown_dimension(
     run_error = run_context_error(repository, args.run_id, args.metric_id, args.target_date)
     if run_error:
         return tool_error(action, run_error, "run_id is not an active matching run")
-    if not current_run_guarded_evidence(repository, args.run_id, args.evidence_ids, {"E1"}):
+    try:
+        has_required_evidence = current_run_guarded_evidence(repository, args.run_id, args.evidence_ids, {"E1"})
+    except ToolRuntimeError as exc:
+        return runtime_error(action, exc)
+    if not has_required_evidence:
         return tool_error(
             action,
             "EVIDENCE_MISSING",

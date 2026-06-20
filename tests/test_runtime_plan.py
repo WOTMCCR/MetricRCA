@@ -6,6 +6,7 @@ import pytest
 
 from metric_rca.domain.models import MetricDefinition
 from metric_rca.runtime.evidence_graph import EvidenceGraph
+from metric_rca.runtime.evidence_identity import EvidenceIdentityError
 from metric_rca.runtime.plan_compiler import PlanCompilerError, RcaPlanCompiler
 from metric_rca.runtime.plan_models import CasePrior
 from metric_rca.services.metric_contracts import ParsedIntent
@@ -642,3 +643,28 @@ def test_evidence_graph_rejects_foreign_run_evidence() -> None:
 
     with pytest.raises(ValueError, match="EVIDENCE_SCOPE_INVALID"):
         graph.add_ids(["other-run:E1"])
+
+
+def test_evidence_graph_fails_fast_on_corrupt_existing_evidence_id() -> None:
+    graph = EvidenceGraph.model_construct(run_id="run-1", evidence_ids=["not-canonical"])
+
+    with pytest.raises(EvidenceIdentityError) as excinfo:
+        graph.aliases()
+
+    assert excinfo.value.code == "EVIDENCE_ID_INVALID"
+
+
+def test_evidence_graph_constructor_fails_fast_on_corrupt_evidence_id() -> None:
+    with pytest.raises(EvidenceIdentityError) as excinfo:
+        EvidenceGraph(run_id="run-1", evidence_ids=["not-canonical"])
+
+    assert excinfo.value.code == "EVIDENCE_ID_INVALID"
+
+
+def test_evidence_graph_add_ids_fails_fast_on_corrupt_evidence_id() -> None:
+    graph = EvidenceGraph(run_id="run-1")
+
+    with pytest.raises(EvidenceIdentityError) as excinfo:
+        graph.add_ids(["not-canonical"])
+
+    assert excinfo.value.code == "EVIDENCE_ID_INVALID"

@@ -44,8 +44,21 @@ def calculate_contribution(
     run_error = run_context_error(repository, args.run_id, args.metric_id, args.target_date)
     if run_error:
         return tool_error(action, run_error, "run_id is not an active matching run")
-    if not current_run_guarded_evidence(repository, args.run_id, args.evidence_ids, {"E1", "E2", "E3"}):
-        evidence_hint = current_run_guarded_evidence_hint(repository, args.run_id, ["E1", "E2", "E3"])
+    try:
+        has_required_evidence = current_run_guarded_evidence(
+            repository,
+            args.run_id,
+            args.evidence_ids,
+            {"E1", "E2", "E3"},
+        )
+        evidence_hint = (
+            []
+            if has_required_evidence
+            else current_run_guarded_evidence_hint(repository, args.run_id, ["E1", "E2", "E3"])
+        )
+    except ToolRuntimeError as exc:
+        return runtime_error(action, exc)
+    if not has_required_evidence:
         retry_hint = evidence_hint or [f"{args.run_id}:E1", f"{args.run_id}:E2", f"{args.run_id}:E3"]
         return tool_error(
             action,

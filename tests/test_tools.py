@@ -570,7 +570,7 @@ def test_drilldown_tool_rejects_missing_or_unpersisted_current_run_evidence() ->
             metric_id="gmv",
             target_date=date(2026, 6, 5),
             dimension="channel",
-            evidence_ids=["run-1:fake"],
+            evidence_ids=["run-1:E_fake"],
         ),
         repository=repo,
         metric_service=StaticMetricService(),
@@ -1103,6 +1103,62 @@ def test_fetch_related_signal_accepts_e2_family_alias_and_hints_missing_e1() -> 
     assert result.evidences[0].result_summary["input_evidence_ids"] == ["run-1:E1", "run-1:E2_channel"]
 
 
+def test_fetch_related_signal_fails_fast_on_invalid_input_evidence_id() -> None:
+    repo = SpyRepository()
+
+    result = fetch_related_signal(
+        FetchRelatedSignalArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            signal_type="campaign",
+            dimension="channel",
+            element="paid_ads",
+            evidence_ids=["not-canonical"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == "EVIDENCE_ID_INVALID"
+    assert repo.executed == []
+
+
+def test_fetch_related_signal_fails_fast_on_invalid_stored_hint_evidence_id() -> None:
+    repo = SpyRepository()
+    repo.persisted_evidence.pop("run-1:E1")
+    repo.persisted_evidence.pop("run-1:E2")
+    repo.persisted_evidence["broken"] = {
+        "evidence_id": "not-canonical",
+        "run_id": "run-1",
+        "guard_status": "passed",
+    }
+    repo.persisted_evidence["run-1:E2_channel"] = {
+        "evidence_id": "run-1:E2_channel",
+        "run_id": "run-1",
+        "guard_status": "passed",
+    }
+
+    result = fetch_related_signal(
+        FetchRelatedSignalArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            signal_type="campaign",
+            dimension="channel",
+            element="paid_ads",
+            evidence_ids=["run-1:E2_channel"],
+        ),
+        repository=repo,
+        metric_service=StaticMetricService(),
+    )
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == "EVIDENCE_ID_INVALID"
+    assert repo.executed == []
+
+
 def test_fetch_related_signal_requires_e2_family_matching_requested_dimension() -> None:
     repo = SpyRepository()
     repo.persisted_evidence.pop("run-1:E2")
@@ -1622,7 +1678,7 @@ def test_calculate_contribution_rejects_unpersisted_current_run_evidence() -> No
             target_date=date(2026, 6, 5),
             dimension="channel",
             element="paid_ads",
-            evidence_ids=["run-1:fake"],
+            evidence_ids=["run-1:E_fake"],
         ),
         repository=SpyRepository(),
         metric_service=StaticMetricService(),

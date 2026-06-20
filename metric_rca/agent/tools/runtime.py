@@ -54,17 +54,17 @@ def current_run_guarded_evidence(
     for evidence_id in evidence_ids:
         try:
             identity = split_evidence_id(evidence_id)
-        except EvidenceIdentityError:
-            return False
+        except EvidenceIdentityError as exc:
+            raise ToolRuntimeError(exc.code, str(exc)) from exc
         if identity.run_id != run_id:
-            return False
+            raise ToolRuntimeError("EVIDENCE_SCOPE_INVALID", "evidence_id does not belong to run_id")
         row = repository.get_evidence(run_id=run_id, evidence_id=evidence_id)
         if row is None or row.get("guard_status") != "passed":
             return False
         try:
             aliases.add(alias_from_row(row))
-        except EvidenceIdentityError:
-            return False
+        except EvidenceIdentityError as exc:
+            raise ToolRuntimeError(exc.code, str(exc)) from exc
 
     return all(
         any(alias_matches(actual_alias, required_alias) for actual_alias in aliases)
@@ -107,10 +107,10 @@ def _first_guarded_alias_evidence_id(
         try:
             identity = split_evidence_id(evidence_id)
             actual_alias = alias_from_row(row)
-        except EvidenceIdentityError:
-            continue
+        except EvidenceIdentityError as exc:
+            raise ToolRuntimeError(exc.code, str(exc)) from exc
         if identity.run_id != run_id:
-            continue
+            raise ToolRuntimeError("EVIDENCE_SCOPE_INVALID", "stored evidence_id does not belong to run_id")
         if actual_alias == required_alias:
             exact = evidence_id
             break
