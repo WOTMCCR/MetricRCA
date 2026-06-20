@@ -64,22 +64,27 @@ time to write predictions than to run eval, the predictions are too
 shallow. Good predictions require reading the code path for each case
 and reasoning about what will happen.
 
-## PTV and GRPO Training Data
+## PTV Data as Multi-layer Asset
 
-PTV naturally produces three-valued training signals:
+PTV naturally produces three-valued signals that serve three layers
+of consumption (see `05-grpo-bridge.md` for full definition):
 
-| Prediction | Actual | GRPO Reward | Training Value |
-|-----------|--------|-------------|----------------|
-| pass | pass | 1.0 | Standard positive |
-| fail (correct reasoning) | fail | 0.0 (task failed) but **trajectory has high reasoning quality** | Teaches system modeling |
-| pass | fail | 0.0 | Teaches failure recognition |
-| fail | pass | 1.0 | System was better than expected — recalibrate |
+| Prediction | Actual | Signal Value | Consumption |
+|-----------|--------|-------------|-------------|
+| pass | pass | Confirmed understanding | Layer 1: low priority; Layer 2/3: positive trajectory |
+| fail (correct reasoning) | fail | Calibrated limitation | Layer 1: **highest value** — drives precise fix; Layer 2: system modeling signal |
+| pass | fail | Blind spot revealed | Layer 1: must update mental model before fixing; Layer 2/3: failure recognition |
+| fail | pass | Unexpected success | Layer 1: recalibrate; Layer 2/3: positive trajectory |
 
-The prediction reasoning, combined with the actual trajectory and
-diagnosis, creates a richer training signal than raw (prompt, response,
-reward) tuples. The model learns not just "what's the right answer"
-but "how to reason about whether the system can produce the right
-answer."
+The **immediate** consumer is the agent system optimization loop
+(Layer 1): Codex uses PTV products as structured context to decide
+what to change in the multi-agent system's prompts, tools, and
+policies. No model training needed — the "learning" happens in the
+agent system's programmable configuration layer.
+
+The **deferred** consumers are GRPO training pipelines (Layer 2/3):
+the same data can train sub-agent models within the multi-agent
+system, or future coding models, once enough cycles have accumulated.
 
 ## Universality
 

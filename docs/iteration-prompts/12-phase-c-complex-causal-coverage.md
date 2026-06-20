@@ -380,13 +380,25 @@ REQUIRED READING before executing this iteration:
      mkdir -p eval_out/ptv/cycle-$(date +%Y%m%d-%H%M)
 
 2. Follow the loop in docs/ptv/02-workflow.md:
-     - Use 3-agent parallel dispatch (Prediction Agent, Eval Agent,
-       PTV Analyst Agent) as described in "Codex Subagent Dispatch Pattern"
+     - Use parallel dispatch: Prediction Agent + Eval Agent 并行,
+       Analyst Agent 等两者都完成后 dispatch
      - All artifacts go into eval_out/ptv/cycle-{id}/round-{N}/
      - Every round writes: predictions.jsonl, eval-result.json,
        gap_report.json, diagnosis.jsonl, ptv_trajectory.jsonl
 
-3. MetricRCA exit conditions (from bindings/metricrca.md):
+3. Layer 1 optimization (每轮必须):
+     After Analyst produces diagnosis + trajectory, Controller must:
+     a) 从 gap_report + diagnosis 中提取 failure patterns (cross-case 聚类)
+     b) 写 optimization_summary.json 到 round 目录
+        (schema 见 docs/ptv/05-grpo-bridge.md Layer 1)
+     c) 基于 summary 决定优化哪一层配置:
+        - prompt → agent/prompts/ 修改
+        - tool → agent/tools/*.py 参数/阈值
+        - policy → plan_compiler.py / contribution_set_builder.py 策略
+        - pipeline → evidence chain 拓扑或触发逻辑
+     d) fix 实现后, optimization_summary.json 作为下一轮的 context 输入
+
+4. MetricRCA exit conditions (from bindings/metricrca.md):
      a) Original 28 single-cause: 28/28 green
      b) Multi-cause family: top3_rate >= 0.85
      c) root_cause_set_recall_avg >= 0.85
@@ -397,7 +409,7 @@ REQUIRED READING before executing this iteration:
      h) No regression in any per-family gate
      i) Confirmed by 2 consecutive green runs
 
-4. Escalation after 6 rounds with STRUCTURAL diagnosis:
+5. Escalation after 6 rounds with STRUCTURAL diagnosis:
      → Write eval_out/ptv/cycle-{id}/escalation.json
      → Record ADL in docs/reference/decisions.md
      → Do not implement Phase D sandbox in this session
@@ -450,39 +462,60 @@ Gate:
   - Original 28/28 unaffected
 
 ────────────────────────────────────────────────────────
-ITERATION 6: FINAL GRPO TRAJECTORY EXPORT & CI GATE
+ITERATION 6: PTV DATA EXPORT, CI GATE & THREE-LAYER READINESS
 ────────────────────────────────────────────────────────
+
+PTV 产物服务三层消费者 (详见 docs/ptv/05-grpo-bridge.md):
+  Layer 1: Agent system optimization context (已在 Iter 4 中消费)
+  Layer 2: Sub-agent GRPO training data
+  Layer 3: Coding model GRPO training data
 
   1. Run make eval-regression with full case set (28 + new cases).
      Record GRPO trajectories including multi-cause training data.
 
-  2. Verify GRPO trajectory quality:
-     - Multi-cause cases with reward=1.0 have root_causes in ground_truth
-     - judge.failed_gates is empty for reward=1.0 trajectories
-     - weighted_explanation_coverage subreward reflects coverage
+  2. Layer 1 验证 — optimization summary 完整性:
+     - 每个 PTV round 目录下有 optimization_summary.json
+     - summary 包含 failure_patterns, effective_fixes_history,
+       remaining_gaps, next_optimization_target
+     - fix 决策可追溯到 summary 中的 pattern (不是随意修改)
+
+  3. Layer 2 验证 — sub-agent GRPO trajectory 质量:
+     - Signal A: multi-cause cases with reward=1.0 have root_causes
+     - Signal A: judge.failed_gates is empty for reward=1.0 trajectories
+     - Signal B: prediction trajectories extractable from predictions +
+       actuals, prediction_correct 字段有值
      - All trajectories have valid schema_version
 
-  3. Add CI integration:
+  4. Layer 3 验证 — coding model GRPO trajectory 质量:
+     - Signal C: diagnosis entries have fix_category, fix_commit,
+       root_cause_analysis
+     - Signal C: fix_effective 和 fix_minimal 字段可从跨 round 数据
+       计算 (case 状态 before/after fix)
+
+  5. Add CI integration:
      - make test-e2e runs 3-case E2E smoke (requires MySQL)
      - Makefile target: eval-ci that runs eval-regression and asserts
        thresholds_met=true
      - Document in README: CI requires make up + make seed before
        make eval-ci
 
-  4. Write final eval report to eval_out/reviews/phase-c-final.json:
+  6. Write final eval report to eval_out/reviews/phase-c-final.json:
      - Per-case scores for all cases (original + new)
      - Per-family breakdown
-     - GRPO manifest
+     - GRPO manifest (per-layer breakdown: Signal A/B/C counts)
      - Sandbox usage (if Phase D was triggered)
      - Comparison vs Phase B baseline
+     - Layer 1 optimization history (fix ROI across rounds)
 
 Gate:
   - make test passes
   - make test-e2e passes
   - make eval-regression: thresholds_met=true on 2 consecutive runs
-  - GRPO trajectories export with correct schema
+  - Layer 2: GRPO trajectories export with correct schema
   - All new cases have reward >= 0.0 (no schema crash)
   - Multi-cause cases: at least 85% have reward=1.0
+  - Layer 1: optimization_summary.json exists for every PTV round
+  - Layer 3: diagnosis entries have complete fix metadata
   - README documents new eval scope
 
 ════════════════════════════════════════════════════════

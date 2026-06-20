@@ -59,6 +59,25 @@ Fix category 由项目绑定层定义具体列表。通用协议规定：
 2. GRPO 训练时，linked cases 的轨迹可以作为一组来评估
 3. 审查时，检查 linked cases 是否真的都被修复了
 
+## Stall Detection (round > 1)
+
+诊断中必须包含自锁循环检测。每条 diagnosis entry 需要额外字段：
+
+```json
+{
+  "stall_risk": "none | low | high",
+  "stall_reason": "FIX-A applied 2 consecutive rounds, this case failed both times"
+}
+```
+
+**stall_risk 判定规则**：
+- `high`：该 case 已连续 ≥2 轮以同一 fix_category 失败
+- `low`：该 case 上一轮以同一 fix_category 失败（首次重复）
+- `none`：该 case 首次失败，或当前轮的 fix_category 与上一轮不同
+
+Analyst Agent 在 ptv_trajectory.jsonl 中汇总 stall_analysis（见
+02-workflow.md Subagent Prompt 模板），Controller 据此做决策。
+
 ## Escalation Triggers
 
 以下条件触发升级：
@@ -70,8 +89,16 @@ IF round > MAX_ROUNDS AND remaining_failures > 0:
   ELSE:
     → CONTINUE: increase MAX_ROUNDS or re-evaluate fix strategy
 
-IF same case_id fails with same fix_category for 3 consecutive rounds:
-    → ESCALATE: the fix approach is not working
+IF same case_id fails with same fix_category for 2 consecutive rounds:
+    → Controller MUST switch category (see RULE-C1 in 02-workflow.md)
+    → If no alternative category exists → ESCALATE
+
+IF same fix_category applied 2 consecutive rounds with net metric regression:
+    → MANDATORY category switch + revert assessment (RULE-C1 + RULE-C4)
+
+IF a fix_category has been deferred for ≥2 consecutive rounds:
+    → MANDATORY promotion (RULE-C2 in 02-workflow.md)
+    → If promotion is blocked by RULE-C1, escalate the deferred target
 ```
 
 升级输出（项目无关的通用格式）：

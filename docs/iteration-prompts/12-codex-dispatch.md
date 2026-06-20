@@ -64,11 +64,14 @@ Commit after each iteration.
 Read the following documents in order:
   1. docs/ptv/README.md                    — PTV overview and directory layout
   2. docs/ptv/01-philosophy.md             — what PTV is and is not
-  3. docs/ptv/02-workflow.md               — loop structure, artifact isolation, subagent dispatch
+  3. docs/ptv/02-workflow.md               — loop structure, artifact isolation,
+     subagent dispatch, AND Controller Decision Rules (RULE-C section)
   4. docs/ptv/03-prediction-protocol.md    — prediction rules R1-R5
-  5. docs/ptv/04-diagnosis-protocol.md     — diagnosis schema, fix taxonomy
+  5. docs/ptv/04-diagnosis-protocol.md     — diagnosis schema, fix taxonomy,
+     stall detection, escalation triggers
   6. docs/ptv/06-enforcement.md            — anti-cheat detection (you will be audited)
-  7. docs/ptv/bindings/metricrca.md        — MetricRCA-specific aspects, commands, exit conditions
+  7. docs/ptv/bindings/metricrca.md        — MetricRCA-specific aspects, commands,
+     exit conditions, Controller Decision Rules binding, fix priority matrix
   8. docs/iteration-prompts/12-phase-c-complex-causal-coverage.md (ITERATION 4 section only)
 
 Execute Iteration 4: PTV optimization loop.
@@ -83,34 +86,63 @@ EXECUTION INSTRUCTIONS:
      mkdir -p eval_out/ptv/cycle-${CYCLE_ID}
    Write meta.json with branch, base_commit, total_cases.
 
-2. Use the 3-AGENT SUBAGENT DISPATCH pattern from docs/ptv/02-workflow.md:
+2. Use PARALLEL DISPATCH pattern from docs/ptv/02-workflow.md:
    For each PTV round:
-     a. DISPATCH Prediction Agent → reads code, writes predictions.jsonl
-        to eval_out/ptv/cycle-{id}/round-{N}/
-     b. DISPATCH Eval Agent → runs make eval-stream, writes eval-result.json
-        and per-case artifacts to same round directory
+     a. PARALLEL DISPATCH:
+        - Prediction Agent → reads code + previous gap_report,
+          writes predictions.jsonl to eval_out/ptv/cycle-{id}/round-{N}/
+        - Eval Agent → runs make eval-stream, writes eval-result.json
+          and per-case artifacts to same round directory
+        (These two have NO dependency — dispatch simultaneously)
+     b. BARRIER: wait for BOTH (a) to complete
      c. DISPATCH PTV Analyst Agent → runs gap analyzer, reads predictions +
         eval results, writes gap_report.json + diagnosis.jsonl +
-        ptv_trajectory.jsonl to same round directory
-     d. Controller reads diagnosis, decides fix or escalate
-     e. If fix: implement, test, commit, write fix_commit.txt
+        ptv_trajectory.jsonl to same round directory.
+        ANALYST MUST include stall_analysis in ptv_trajectory.jsonl
+        (see 04-diagnosis-protocol.md and 02-workflow.md Analyst prompt).
+     d. Controller reads diagnosis + trajectory + stall_analysis,
+        produces optimization_summary.json (Layer 1 — see 05-grpo-bridge.md).
+        CONTROLLER MUST follow RULE-C1 through RULE-C5 (see 02-workflow.md).
+     e. If fix: based on optimization_summary AND RULE-C constraints,
+        choose fix_category. Write rule_c* fields to optimization_summary.
+        Implement, test, commit, write fix_commit.txt.
      f. Increment round, go to step (a)
 
    If your runtime does not support subagents, run steps (a)-(c)
-   sequentially but NEVER skip diagnosis.
+   sequentially but NEVER skip diagnosis, stall_analysis, or
+   optimization_summary. Controller Decision Rules still apply.
 
-3. All PTV artifacts MUST go into eval_out/ptv/cycle-{id}/round-{N}/.
+3. CONTROLLER DECISION RULES (MANDATORY — read 02-workflow.md §RULE-C):
+   - RULE-C1: If fix_category X caused metric regression, round N+1
+     CANNOT use X. Write rule_c1_blocked_categories to summary.
+   - RULE-C2: If a category has been deferred ≥2 rounds, it MUST be
+     selected next. Cannot defer indefinitely.
+   - RULE-C3: FIX-D (discovery) takes priority over FIX-A (ranking)
+     when both are present. Ranking fixes are useless if correct
+     candidates are never discovered.
+   - RULE-C4: If ≥2 aggregate metrics regressed, write revert_assessment.
+     Decide revert or keep with justification.
+   - RULE-C5: Same fix_category cannot run >2 consecutive rounds.
+
+   ANTI-STALL PROTOCOL: If the Analyst's stall_analysis shows
+   category_streak ≥2 for any category, you MUST switch categories.
+   The "stabilize X first before doing Y" rationale is INVALID after
+   2 rounds of X without net improvement.
+
+4. All PTV artifacts MUST go into eval_out/ptv/cycle-{id}/round-{N}/.
    Do NOT scatter artifacts across eval_out/{eval_id}/ directories.
 
-4. After the session, your artifacts will be reviewed against the
+5. After the session, your artifacts will be reviewed against the
    anti-cheat checklist in docs/ptv/06-enforcement.md. Specifically:
      - DETECT-1: predictions must NOT match ground truth
      - DETECT-2: predictions must differ between rounds
      - DETECT-3: every round must have a fix commit
      - DETECT-4: diagnosis.jsonl must exist for every round with failures
      - DETECT-5: reasoning must be case-specific, not templated
+     - DETECT-6: optimization_summary must contain rule_c* fields (round > 1)
+     - DETECT-7: same fix_category must not appear >2 consecutive rounds
 
-5. EXIT when MetricRCA gates pass (see bindings/metricrca.md).
+6. EXIT when MetricRCA gates pass (see bindings/metricrca.md).
    ESCALATE after 6 rounds with STRUCTURAL diagnosis.
 ```
 
@@ -141,17 +173,24 @@ promotion through PromotionValidator + SQLGuard + Repository.
 
 ```text
 Read docs/iteration-prompts/12-phase-c-complex-causal-coverage.md
-in full. Execute Iteration 6: final GRPO export and CI gate.
+in full. Execute Iteration 6: PTV data export, CI gate, three-layer
+readiness verification.
+
+Read docs/ptv/05-grpo-bridge.md for the three-layer consumption model.
 
 You are on branch codex/c-complex-causal with all prior iterations
 complete and eval passing.
 
   1. Run make eval-regression, verify GRPO trajectories
-  2. Verify multi-cause trajectory quality
-  3. Add CI targets (make test-e2e, make eval-ci)
-  4. Write final eval report
-  5. Update docs (COMPLIANCE_MATRIX, MetricRCA.md)
-  6. Create final commit
+  2. Layer 1: verify optimization_summary.json in every PTV round,
+     check fix traceability (each fix links to a summary pattern)
+  3. Layer 2: verify sub-agent GRPO trajectory quality (Signal A + B)
+  4. Layer 3: verify coding model trajectory quality (Signal C —
+     diagnosis entries have fix metadata)
+  5. Add CI targets (make test-e2e, make eval-ci)
+  6. Write final eval report with per-layer breakdown
+  7. Update docs (COMPLIANCE_MATRIX, MetricRCA.md)
+  8. Create final commit
 
 After completion, run the full validation:
   make test && make test-e2e && make eval-regression
@@ -200,12 +239,32 @@ PTV INTEGRITY (Session 3 — run docs/ptv/06-enforcement.md checklist):
   □ DETECT-3: fix commit exists between every pair of rounds
   □ DETECT-4: diagnosis.jsonl present for every round with failures
   □ DETECT-5: unique reasoning count >= 50% of case count
+  □ DETECT-6: optimization_summary has controller_rules_applied (round > 1)
+  □ DETECT-7: no fix_category appears ≥3 consecutive rounds
 □ SUBAGENT DISPATCH:
   □ Prediction Agent wrote predictions (not Controller copy-paste)
-  □ PTV Analyst wrote diagnosis (not Controller skip)
+  □ PTV Analyst wrote diagnosis AND stall_analysis (not Controller skip)
   □ Eval Agent ran independently (not mixed with diagnosis)
-□ GRPO READINESS:
+  □ Analyst stall_analysis has recommended_next_category (round > 1)
+□ CONTROLLER DECISION RULES (round > 1):
+  □ RULE-C1: regressed categories listed in rule_c1_blocked_categories
+  □ RULE-C2: categories deferred ≥2 rounds were promoted or escalated
+  □ RULE-C3: FIX-D selected before FIX-A when both present
+  □ RULE-C4: revert_assessment written when ≥2 metrics regressed
+  □ RULE-C5: no category applied >2 consecutive rounds
+  □ No "stabilize X first" justification used after 2 rounds of X with regression
+  □ Controller's selected_fix_category matches Analyst recommendation
+    OR justification explains why it diverged (referencing RULE-C)
+□ LAYER 1 (AGENT OPTIMIZATION CONTEXT):
+  □ optimization_summary.json exists for every PTV round
+  □ failure_patterns derived from cross-case gap clustering
+  □ fix decisions traceable to summary patterns (not ad-hoc)
+  □ next_optimization_target specifies layer + files + rationale
+  □ controller_rules_applied section is complete and accurate
+□ LAYER 2/3 (GRPO READINESS):
   □ ptv_trajectory.jsonl records prediction accuracy per round
-  □ Signal B trajectories extractable from predictions + actuals
-  □ Signal C trajectories extractable from diagnosis entries
+  □ ptv_trajectory.jsonl includes stall_analysis (round > 1)
+  □ Signal A: task trajectories have valid reward and gate fields
+  □ Signal B: prediction trajectories extractable from predictions + actuals
+  □ Signal C: diagnosis entries have fix_category + fix_commit + root_cause_analysis
 ```
