@@ -14,8 +14,8 @@
   "controller_decision": "Reject the initial FIX-A rank-selection repair after local tests proved it violates the existing signal-verified selection invariant. Reclassify C07 as an intent/strategy routing bug: the broad store expectation query should compile as channel_first, not signal_first, so the campaign lane uses top_candidate before ranking.",
   "external_review": {
     "reviewer": "claude-cli --model opus --effort high",
-    "blocking_finding": "Initial FIX-I implementation used verbatim public eval question substrings, which was a PTV-integrity blocker.",
-    "resolution": "Replaced verbatim phrase list with semantic token guards for unscoped GMV broad-store expectation/anomaly context, made stable-merchandising precedence explicit, and added a non-eval paraphrase regression test.",
+    "blocking_finding": "Initial FIX-I implementation used verbatim public eval question substrings; follow-up semantic guard over-matched bare abnormal no-anomaly cases.",
+    "resolution": "Removed verbatim phrase list, constrained broad-store routing so bare abnormal GMV questions remain standard, made stable-merchandising precedence explicit, and added non-eval paraphrase plus no-anomaly regression tests.",
     "tmp_design_note": "tmp/insight-agent suggests longer-term LLM/deepagents pipeline boundaries; Round 19 remains a narrow strategy-routing guard rather than a wholesale architecture migration."
   },
   "failure_patterns": [
