@@ -1,0 +1,2 @@
+METRIC_RCA_DATA_SEED=20260606 METRIC_RCA_SEED_PROFILE=regression METRIC_RCA_ALLOW_DESTRUCTIVE_SEED=false python -m metric_rca.data.seed_data
+{"duration_ms": 1117, "entity_counts": {"campaigns": 4, "categories": 3, "channels": 4, "devices": 2, "history_days": 60, "products": 9, "users": 80, "warehouses": 2}, "row_counts": {"dim_product": 9, "dim_user": 80, "fact_campaign": 240, "fact_customer_ticket": 5068, "fact_inventory": 1080, "fact_order": 26639, "fact_traffic": 4320}, "seed": 20260606, "seed_profile": "regression"}

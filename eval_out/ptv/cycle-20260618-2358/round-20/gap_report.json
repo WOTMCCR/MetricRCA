@@ -1,0 +1,96 @@
+{
+  "eval_id": "ptv-cycle-20260618-2358-round-20",
+  "status": "eval_fatal",
+  "analyzer": {
+    "attempted": true,
+    "command": "PATH=.venv/bin:$PATH EVAL_OUTPUT_DIR=eval_out/ptv/cycle-20260618-2358/round-20 make eval-gaps EVAL_ID=ptv-cycle-20260618-2358-round-20",
+    "exit_code": 2,
+    "failure": "predictions not found: eval_out/ptv/cycle-20260618-2358/round-20/ptv-cycle-20260618-2358-round-20/predictions.jsonl",
+    "manual_report_reason": "The normal analyzer did not run against the isolated round layout and the eval itself is partial/fatal with completed_case_total=0, so full aspect comparison is not meaningful."
+  },
+  "summary": {
+    "total": 276,
+    "by_divergence": {
+      "design_flaw": 1
+    },
+    "by_aspect": {
+      "execution": {
+        "design_flaw": 1
+      }
+    },
+    "accuracy": null,
+    "design_flaw_count": 1,
+    "complexity_gap_count": 0,
+    "note": "Full prediction-vs-actual accuracy is not computable because eval completed 0 baseline cases. Diagnosis is based on eval-result failure metadata, eval-stream.log, and persisted trace artifacts for the failed memory-phase run."
+  },
+  "eval_summary": {
+    "configured_case_total": 46,
+    "completed_case_total": 0,
+    "completed_memory_case_total": 23,
+    "complete": false,
+    "thresholds_met": false,
+    "eval_stream_exit_status": 2,
+    "seed_exit_status": 0,
+    "prediction_validation_exit_status": 0,
+    "failure": {
+      "error_code": "TOOL_SQL_COUNT_MISMATCH",
+      "message": "TOOL_SQL_COUNT_MISMATCH: ptv-cycle-20260618-2358-round-4c1db5ea-r2",
+      "failed_run_id": "ptv-cycle-20260618-2358-round-4c1db5ea-r2"
+    }
+  },
+  "gaps": [
+    {
+      "case_id": "C24_gmv_positive_spike",
+      "aspect": "execution",
+      "divergence": "design_flaw",
+      "predicted": {
+        "status": "succeeded",
+        "step_count": 24,
+        "metric_id": "gmv",
+        "question_scope": "Why did GMV spike on the 2nd?",
+        "tool_sequence_prefix": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "drilldown_dimension",
+          "select_signal_element",
+          "fetch_related_signal",
+          "calculate_contribution"
+        ]
+      },
+      "actual": {
+        "eval_status": "eval_aborted",
+        "phase": "memory",
+        "case_order_index": 24,
+        "case_id": "C24_gmv_positive_spike",
+        "question": "Why did GMV spike on the 2nd?",
+        "attempt_1_run_id": "ptv-cycle-20260618-2358-round-4c1db5ea",
+        "attempt_1_error_code": "LLM_REQUIRED_UNAVAILABLE",
+        "failed_run_id": "ptv-cycle-20260618-2358-round-4c1db5ea-r2",
+        "failed_action_seq": 18,
+        "failed_action_id": "A17",
+        "failed_action": "select_signal_element",
+        "failed_signal_type": "interaction",
+        "failed_evidence_alias": "E_select_ch_interaction",
+        "requires": [
+          "E1",
+          "E2_channel"
+        ],
+        "produces": [
+          "E_select_ch_interaction"
+        ],
+        "declared_sql_count": 0,
+        "sql_audit_delta": 2,
+        "trace_step_count_before_abort": 18,
+        "sql_audit_count_before_abort": 50
+      },
+      "detail": "Round 20 eval aborted in the memory prepass on C24_gmv_positive_spike. Persisted trace seq=18 shows select_signal_element for the interaction lane executed two guarded SQL queries but returned a tool error path with declared_sql_count=0, so RcaPlanExecutor raised TOOL_SQL_COUNT_MISMATCH before any baseline cases could be scored. The layer is the deterministic tool/runtime SQL-count contract, not attribution ranking."
+    }
+  ],
+  "partial_observations": {
+    "last_completed_memory_case_id": "C23_uv_organic_drop",
+    "completed_memory_cases_all_scored_green": true,
+    "baseline_cases_scored": 0,
+    "gate_valid": false
+  }
+}
