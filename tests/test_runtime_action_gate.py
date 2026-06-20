@@ -269,11 +269,11 @@ def test_action_gate_allows_policy_marked_global_explanatory_same_dimension_lane
             "filters": {},
             "explicit_scope_policy": "global_explanatory",
         },
-        requires=["E1", "E2_channel", "E_select_ch_conversion"],
+        requires=["E1", "E2_channel", "E_select_channel_conv"],
     )
     graph = EvidenceGraph(
         run_id="run-1",
-        evidence_ids=["run-1:E1", "run-1:E2_channel", "run-1:E_select_ch_conversion"],
+        evidence_ids=["run-1:E1", "run-1:E2_channel", "run-1:E_select_channel_conv"],
     )
 
     decision = ActionGate().validate(ctx, action, graph)

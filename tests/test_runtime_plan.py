@@ -192,38 +192,69 @@ def test_plan_compiler_builds_broad_gmv_multisignal_discovery_lanes() -> None:
 
     assert [(action.args["dimension"], action.args["signal_type"], action.produces[0]) for action in selections] == [
         ("channel", "campaign", "E_select_channel"),
-        ("channel", "conversion", "E_select_ch_conversion"),
+        ("channel", "conversion", "E_select_channel_conv"),
         ("category", "inventory", "E_select_category"),
         ("product", "inventory", "E_select_product"),
-        ("channel", "interaction", "E_select_ch_interaction"),
-        ("category", "interaction", "E_select_cat_interaction"),
+        ("channel", "interaction", "E_select_channel_int"),
+        ("category", "interaction", "E_select_category_int"),
     ]
     assert [(action.args["dimension"], action.args["signal_type"], action.produces[0]) for action in signal_actions] == [
         ("channel", "campaign", "E3_ch"),
         ("channel", "conversion", "E3_ch_conversion"),
         ("category", "inventory", "E3_cat"),
         ("product", "inventory", "E3_prod"),
-        ("channel", "interaction", "E3_ch_interaction"),
-        ("category", "interaction", "E3_cat_interaction"),
+        ("channel", "interaction", "E3_ch_int"),
+        ("category", "interaction", "E3_cat_int"),
     ]
     assert [(action.args["dimension"], action.args["evidence_alias"]) for action in contribution_actions] == [
         ("channel", "E4_channel"),
         ("channel", "E4_channel_conversion"),
         ("category", "E4_category"),
         ("product", "E4_product"),
-        ("channel", "E4_channel_interaction"),
-        ("category", "E4_category_interaction"),
+        ("channel", "E4_channel_int"),
+        ("category", "E4_category_int"),
     ]
     assert merge_action.args["source_evidence_aliases"] == [
         "E4_channel",
         "E4_channel_conversion",
         "E4_category",
         "E4_product",
-        "E4_channel_interaction",
-        "E4_category_interaction",
+        "E4_channel_int",
+        "E4_category_int",
     ]
     assert len({action.produces[0] for action in selections}) == len(selections)
     assert len({action.produces[0] for action in signal_actions}) == len(signal_actions)
+
+
+def test_plan_compiler_keeps_multisignal_aliases_within_evidence_id_limit() -> None:
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date=date(2026, 6, 2),
+        question_family="gmv_drop",
+        analysis_strategy="standard",
+    )
+    run_id = "r" * 42
+
+    plan = _compiler().compile(run_id=run_id, parsed_intent=parsed)
+
+    produced_aliases = [alias for action in plan.actions for alias in action.produces]
+    assert all(len(f"{run_id}:{alias}") <= 64 for alias in produced_aliases)
+    assert "E_select_channel_int" in produced_aliases
+    assert "E_select_category_int" in produced_aliases
+
+
+def test_plan_compiler_fails_fast_when_evidence_alias_exceeds_id_limit() -> None:
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date=date(2026, 6, 2),
+        question_family="gmv_drop",
+        analysis_strategy="standard",
+    )
+
+    with pytest.raises(PlanCompilerError) as excinfo:
+        _compiler().compile(run_id="r" * 43, parsed_intent=parsed)
+
+    assert excinfo.value.code == "EVIDENCE_ID_TOO_LONG"
 
 
 def test_plan_compiler_sizes_multisignal_gmv_budget_from_action_costs() -> None:
@@ -392,7 +423,7 @@ def test_plan_compiler_expands_net_gmv_paid_ads_slice_to_multi_driver_discovery(
     assert [action.args["filters"] for action in drilldowns] == [{}, {"channel": "paid_ads"}]
     assert [(action.args["dimension"], action.args["signal_type"], action.produces[0]) for action in selections] == [
         ("category", "inventory", "E_select_category"),
-        ("channel", "conversion", "E_select_ch_conversion"),
+        ("channel", "conversion", "E_select_channel_conv"),
     ]
     assert [action.args["filters"] for action in selections] == [{}, {}]
     assert [(action.args["dimension"], action.args["signal_type"], action.args["element"]) for action in signal_actions] == [
@@ -513,24 +544,24 @@ def test_plan_compiler_builds_parallel_broad_gmv_contribution_chains() -> None:
         ["E4_channel_conversion"],
         ["E4_category"],
         ["E4_product"],
-        ["E4_channel_interaction"],
-        ["E4_category_interaction"],
+        ["E4_channel_int"],
+        ["E4_category_int"],
     ]
     assert [action.args["evidence_alias"] for action in contribution_actions] == [
         "E4_channel",
         "E4_channel_conversion",
         "E4_category",
         "E4_product",
-        "E4_channel_interaction",
-        "E4_category_interaction",
+        "E4_channel_int",
+        "E4_category_int",
     ]
     assert merge_action.requires == [
         "E4_channel",
         "E4_channel_conversion",
         "E4_category",
         "E4_product",
-        "E4_channel_interaction",
-        "E4_category_interaction",
+        "E4_channel_int",
+        "E4_category_int",
     ]
     assert merge_action.produces == ["E4"]
     assert merge_action.args["source_evidence_aliases"] == [
@@ -538,8 +569,8 @@ def test_plan_compiler_builds_parallel_broad_gmv_contribution_chains() -> None:
         "E4_channel_conversion",
         "E4_category",
         "E4_product",
-        "E4_channel_interaction",
-        "E4_category_interaction",
+        "E4_channel_int",
+        "E4_category_int",
     ]
     assert rank_action.requires[-1] == "E4"
 

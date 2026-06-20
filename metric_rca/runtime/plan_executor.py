@@ -66,6 +66,41 @@ class RcaPlanExecutor:
             if audit_delta == "SQL_AUDIT_UNAVAILABLE":
                 ctx.mark_failed("SQL_AUDIT_UNAVAILABLE")
                 return ExecutionResult(status="failed", error_code="SQL_AUDIT_UNAVAILABLE", produced_evidence_ids=produced)
+            if not result.observation.ok:
+                failed_sql_delta = _failed_action_sql_delta(
+                    before=audit_count_before,
+                    after=audit_count_after,
+                    declared_sql_count=result.sql_count,
+                )
+                if failed_sql_delta == "SQL_AUDIT_UNAVAILABLE":
+                    ctx.mark_failed("SQL_AUDIT_UNAVAILABLE")
+                    return ExecutionResult(status="failed", error_code="SQL_AUDIT_UNAVAILABLE", produced_evidence_ids=produced)
+                sql_delta = int(failed_sql_delta)
+                ctx.record_allowed_action(action.kind, sql_count=sql_delta)
+                error_code = result.observation.error_code or "TOOL_EXECUTION_FAILED"
+                trace_error = self._write_trace_step(
+                    ctx,
+                    action,
+                    output_summary={
+                        "ok": result.observation.ok,
+                        "error_code": result.observation.error_code,
+                        "evidence_ids": result.evidence_ids,
+                        "payload": result.observation.payload,
+                        "declared_sql_count": result.sql_count,
+                        "sql_audit_delta": sql_delta,
+                        "budget": {
+                            "step_count": ctx.step_count,
+                            "query_count": ctx.query_count,
+                            "drilldown_depth": ctx.drilldown_depth,
+                        },
+                    },
+                    error_code=error_code,
+                )
+                if trace_error is not None:
+                    ctx.mark_failed(trace_error)
+                    return ExecutionResult(status="failed", error_code=trace_error, produced_evidence_ids=produced)
+                ctx.mark_failed(error_code)
+                return ExecutionResult(status="failed", error_code=error_code, produced_evidence_ids=produced)
             if audit_delta == "TOOL_SQL_COUNT_MISMATCH":
                 ctx.mark_failed("TOOL_SQL_COUNT_MISMATCH")
                 trace_error = self._write_trace_step(
@@ -111,10 +146,6 @@ class RcaPlanExecutor:
             if trace_error is not None:
                 ctx.mark_failed(trace_error)
                 return ExecutionResult(status="failed", error_code=trace_error, produced_evidence_ids=produced)
-            if not result.observation.ok:
-                error_code = result.observation.error_code or "TOOL_EXECUTION_FAILED"
-                ctx.mark_failed(error_code)
-                return ExecutionResult(status="failed", error_code=error_code, produced_evidence_ids=produced)
             max_query = int(ctx.budget.get("max_query", 0))
             if action.kind in DATA_ACTION_KINDS and (
                 ctx.query_count > max_query
@@ -203,6 +234,19 @@ def _authoritative_sql_delta(
     if delta != int(declared_sql_count):
         return "TOOL_SQL_COUNT_MISMATCH"
     return delta
+
+
+def _failed_action_sql_delta(
+    *,
+    before: int | None,
+    after: int | None,
+    declared_sql_count: int,
+) -> int | str:
+    if before is None or after is None:
+        if int(declared_sql_count) != 0:
+            return "SQL_AUDIT_UNAVAILABLE"
+        return int(declared_sql_count)
+    return after - before
 
 
 def _has_remaining_data_action(actions: list[RcaAction]) -> bool:

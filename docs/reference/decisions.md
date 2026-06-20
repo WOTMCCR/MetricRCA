@@ -1,3 +1,32 @@
+## ADL-0053: GMV interaction discovery aliases must fit persisted evidence ids
+
+| 字段 | 值 |
+|------|------|
+| 日期 | 2026-06-20 |
+| 状态 | accepted |
+| 关联迭代 | Phase C Iteration 4 PTV Round 20 FIX-T |
+| 影响范围 | policy_registry, plan_compiler, plan_executor, select_signal_element, evidence persistence |
+
+### 背景与场景
+
+PTV Round 20 aborted in memory prepass on C24 because `E_select_ch_interaction` made the full persisted evidence id 65 characters, while `evidence.evidence_id` is `VARCHAR(64)`. The tool had already executed two audited SQL queries, then the persistence failure was masked as `TOOL_SQL_COUNT_MISMATCH` because the executor gave SQL-count mismatch priority over the tool's typed failure.
+
+### 决策
+
+Keep the existing evidence id schema contract and shorten GMV multisignal aliases to dimension-preserving names that fit the 64-character full evidence id budget at the eval run-id limit. The plan compiler now fail-fast validates generated aliases before execution. The executor now preserves a failed tool's typed error and records authoritative SQL audit delta, instead of letting a failed action be masked by `TOOL_SQL_COUNT_MISMATCH`.
+
+### 理由
+
+The plan/policy layer owns generated evidence aliases and should not emit ids that cannot be persisted. Keeping dimension prefixes (`E_select_channel_conv`, `E_select_channel_int`, `E_select_category_int`) preserves dynamic element resolution and contribution-set traceability while staying under the schema limit for eval run ids. Central executor handling avoids repeating SQL-count bookkeeping in every tool failure branch.
+
+### 被否决的方案
+
+Widening `evidence.evidence_id` was rejected for this round because the current bug can be fixed at the alias generation boundary without a schema migration. Only patching `select_signal_element.sql_count` was rejected because it would leave sibling tool failures vulnerable to the same masking pattern.
+
+### 后续跟进
+
+Run the next PTV round to confirm C24 completes and then reassess the remaining FIX-A attribution precision backlog with valid aggregate metrics.
+
 ## ADL-0052: PAY_CVR discovery uses explicit lanes and conversion-only merge selection
 
 | 字段 | 值 |

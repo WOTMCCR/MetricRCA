@@ -323,7 +323,7 @@ def test_net_gmv_explicit_channel_policy_declares_multi_driver_lanes() -> None:
                 "dynamic",
                 "signal_anomaly",
                 "E4_channel_conversion",
-                "E_select_ch_conversion",
+                "E_select_channel_conv",
                 "E3_ch_conversion",
                 "none",
                 "global_explanatory",

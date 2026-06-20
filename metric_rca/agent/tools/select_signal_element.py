@@ -97,6 +97,7 @@ def select_signal_element(
         baseline = execute_guarded_plan(repository=repository, plan=baseline_plan, run_id=args.run_id)
     except ToolRuntimeError as exc:
         return runtime_error(action, exc)
+    sql_count = 2
 
     scores = _score_candidates(
         candidate_elements=candidate_elements,
@@ -149,7 +150,7 @@ def select_signal_element(
     try:
         persist_evidence(repository=repository, row=evidence_row(args.run_id, evidence))
     except ToolRuntimeError as exc:
-        return runtime_error(action, exc)
+        return runtime_error(action, exc, sql_count=sql_count)
     return ToolResult(
         observation=Observation(
             action_name=action,
@@ -159,7 +160,7 @@ def select_signal_element(
         ),
         evidences=[evidence],
         evidence_alias=evidence_alias,
-        sql_count=2,
+        sql_count=sql_count,
     )
 
 

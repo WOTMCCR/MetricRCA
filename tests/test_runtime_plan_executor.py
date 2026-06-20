@@ -274,6 +274,41 @@ def test_plan_executor_fails_when_declared_sql_count_differs_from_audit_delta() 
     assert tool.calls == ["A1"]
 
 
+def test_plan_executor_preserves_tool_error_when_failed_action_audit_delta_differs() -> None:
+    action = RcaAction(
+        action_id="A1",
+        kind="select_signal_element",
+        args={"metric_id": "gmv", "target_date": date(2026, 6, 5), "dimension": "channel"},
+        produces=["E_select_channel"],
+    )
+    repository = _AuditRepository([0, 2])
+    tool = _ToolExecutor(
+        {
+            "A1": ToolExecutionResult(
+                observation=Observation(
+                    action_name="select_signal_element",
+                    ok=False,
+                    error_code="SYSTEM_TABLE_WRITE_FAILED",
+                ),
+                sql_count=0,
+            )
+        }
+    )
+    trace_writer = _TraceWriter()
+
+    result = RcaPlanExecutor(action_gate=_Gate(), tool_executor=tool, trace_writer=trace_writer).execute(
+        RunContext(run_id="run-1", metric_id="gmv", target_date=date(2026, 6, 5), repository=repository),
+        _plan([action]),
+    )
+
+    assert result.status == "failed"
+    assert result.error_code == "SYSTEM_TABLE_WRITE_FAILED"
+    assert tool.calls == ["A1"]
+    assert trace_writer.steps[0]["error_code"] == "SYSTEM_TABLE_WRITE_FAILED"
+    assert trace_writer.steps[0]["output_summary"]["declared_sql_count"] == 0
+    assert trace_writer.steps[0]["output_summary"]["sql_audit_delta"] == 2
+
+
 def test_plan_executor_fails_data_action_without_sql_audit_repository() -> None:
     action = RcaAction(
         action_id="A1",

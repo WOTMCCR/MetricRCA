@@ -364,8 +364,8 @@ def test_tool_executor_strips_gate_only_scope_policy_before_tool_schema_validati
     def select_handler(args: SelectSignalElementArgs, dependencies: object) -> ToolExecutionResult:
         captured["select_signal_element"] = args.model_dump(mode="json")
         return ToolExecutionResult(
-            observation=Observation(action_name="select_signal_element", ok=True, evidence_ids=["run-1:E_select_ch_conversion"]),
-            evidence_ids=["run-1:E_select_ch_conversion"],
+            observation=Observation(action_name="select_signal_element", ok=True, evidence_ids=["run-1:E_select_channel_conv"]),
+            evidence_ids=["run-1:E_select_channel_conv"],
         )
 
     def fetch_handler(args: _FetchArgs, dependencies: object) -> ToolExecutionResult:
@@ -412,7 +412,7 @@ def test_tool_executor_strips_gate_only_scope_policy_before_tool_schema_validati
                     **common_args,
                     "signal_type": "conversion",
                     "element_selection": "signal_anomaly",
-                    "evidence_alias": "E_select_ch_conversion",
+                    "evidence_alias": "E_select_channel_conv",
                 },
                 requires=["E1", "E2_channel"],
             ),
@@ -472,7 +472,7 @@ def test_action_gate_rejects_unknown_explicit_scope_policy_before_tool_boundary(
             "signal_type": "conversion",
             "dimension": "channel",
             "element_selection": "signal_anomaly",
-            "evidence_alias": "E_select_ch_conversion",
+            "evidence_alias": "E_select_channel_conv",
             "explicit_scope_policy": "loose",
         },
         requires=["E1", "E2_channel"],
@@ -799,7 +799,7 @@ def test_select_signal_element_persists_policy_alias_for_parallel_same_dimension
             dimension="channel",
             evidence_ids=["run-1:E1", "run-1:E2_channel"],
             element_selection="signal_anomaly",
-            evidence_alias="E_select_ch_conversion",
+            evidence_alias="E_select_channel_conv",
         ),
         repository=repository,
         metric_service=_MetricService(),
@@ -808,11 +808,52 @@ def test_select_signal_element_persists_policy_alias_for_parallel_same_dimension
     )
 
     assert result.observation.ok is True
-    assert result.evidence_alias == "E_select_ch_conversion"
-    assert result.evidences[0].evidence_id == "run-1:E_select_ch_conversion"
-    assert repository.persisted_by_id["run-1:E_select_ch_conversion"]["result_summary"]["signal_type"] == "conversion"
+    assert result.evidence_alias == "E_select_channel_conv"
+    assert result.evidences[0].evidence_id == "run-1:E_select_channel_conv"
+    assert repository.persisted_by_id["run-1:E_select_channel_conv"]["result_summary"]["signal_type"] == "conversion"
     assert repository.persisted_by_id["run-1:E_select_channel"]["result_summary"]["signal_type"] == "campaign"
     assert result.sql_count == 2
+
+
+def test_select_signal_element_preserves_sql_count_when_persistence_fails_after_queries() -> None:
+    repository = _FailingSelectionPersistenceRepository(
+        {
+            "run-1:E1": {
+                "evidence_id": "run-1:E1",
+                "guard_status": "passed",
+                "result_summary": {"is_anomaly": True},
+            },
+            "run-1:E2_channel": {
+                "evidence_id": "run-1:E2_channel",
+                "guard_status": "passed",
+                "result_summary": {
+                    "candidates": [{"element": "paid_ads"}, {"element": "affiliate"}],
+                },
+            },
+        }
+    )
+
+    result = select_signal_element(
+        SelectSignalElementArgs(
+            run_id="run-1",
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            signal_type="interaction",
+            dimension="channel",
+            evidence_ids=["run-1:E1", "run-1:E2_channel"],
+            element_selection="signal_anomaly",
+            evidence_alias="E_select_channel_int",
+        ),
+        repository=repository,
+        metric_service=_MetricService(),
+        renderer=SQLRenderer(),
+        settings=SimpleNamespace(signal_metric_by_type={"interaction": "gmv"}),
+    )
+
+    assert result.observation.ok is False
+    assert result.observation.error_code == "SYSTEM_TABLE_WRITE_FAILED"
+    assert result.sql_count == 2
+    assert repository.executed_signal_queries == 2
 
 
 class _Repository:
@@ -992,3 +1033,8 @@ class _ParallelSelectionRepository(_GroupedSelectionRepository):
             raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED: duplicate evidence")
         self.persisted_by_id[evidence_id] = row
         self.persisted_evidence = row
+
+
+class _FailingSelectionPersistenceRepository(_ParallelSelectionRepository):
+    def create_evidence(self, row: dict[str, Any]) -> None:
+        raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED: injected persistence failure")
