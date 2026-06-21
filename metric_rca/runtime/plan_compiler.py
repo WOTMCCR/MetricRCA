@@ -433,8 +433,12 @@ def _parallel_broad_contribution_chains(
         scoped_element = scoped_elements.get(dimension) if scoped_elements else None
         first_signal_element = _lane_element(lane, scoped_element=scoped_element, explicit_scope=explicit_scope)
         allocated_aliases = lane_evidence_aliases(dimension, lane.alias_discriminator)
-        selection_alias = lane.selection_alias or allocated_aliases.selection
-        e3_alias = lane.signal_evidence_alias or (
+        selection_alias = _compatibility_alias(
+            field="selection_alias",
+            declared=lane.selection_alias,
+            allocated=allocated_aliases.selection,
+        )
+        allocated_signal_alias = (
             allocated_aliases.signal
             if lane.alias_discriminator is not None
             else e3_alias_for_signal_lane(
@@ -443,7 +447,16 @@ def _parallel_broad_contribution_chains(
                 element_known=first_signal_element is not None,
             )
         )
-        e4_alias = lane.evidence_alias or allocated_aliases.contribution
+        e3_alias = _compatibility_alias(
+            field="signal_evidence_alias",
+            declared=lane.signal_evidence_alias,
+            allocated=allocated_signal_alias,
+        )
+        e4_alias = _compatibility_alias(
+            field="evidence_alias",
+            declared=lane.evidence_alias,
+            allocated=allocated_aliases.contribution,
+        )
         if e4_alias in e4_alias_set:
             raise PlanCompilerError("DISCOVERY_LANE_ALIAS_CONFLICT", f"duplicate E4 alias {e4_alias}")
         if e3_alias in e3_alias_set:
@@ -562,6 +575,15 @@ def _parallel_broad_contribution_chains(
         )
     )
     return actions
+
+
+def _compatibility_alias(*, field: str, declared: str | None, allocated: str) -> str:
+    if declared is not None and declared != allocated:
+        raise PlanCompilerError(
+            "EVIDENCE_ALIAS_POLICY_DRIFT",
+            f"{field}={declared} expected={allocated}",
+        )
+    return allocated
 
 
 def _discovery_lanes(

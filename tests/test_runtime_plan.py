@@ -4,10 +4,11 @@ from datetime import date
 
 import pytest
 
+from metric_rca.business.policy_registry import DiscoveryLane, DiscoveryPolicy
 from metric_rca.domain.models import MetricDefinition
 from metric_rca.runtime.evidence_graph import EvidenceGraph
 from metric_rca.runtime.evidence_identity import EvidenceIdentityError
-from metric_rca.runtime.plan_compiler import PlanCompilerError, RcaPlanCompiler
+from metric_rca.runtime.plan_compiler import PlanCompilerError, RcaPlanCompiler, _parallel_broad_contribution_chains
 from metric_rca.runtime.plan_models import CasePrior
 from metric_rca.services.metric_contracts import ParsedIntent
 
@@ -624,6 +625,34 @@ def test_plan_compiler_fails_fast_when_unscoped_metric_has_no_discovery_policy()
         _compiler().compile(run_id="run-1", parsed_intent=parsed)
 
     assert excinfo.value.code == "DISCOVERY_POLICY_MISSING"
+
+
+def test_plan_compiler_rejects_deprecated_lane_alias_drift() -> None:
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date=date(2026, 6, 5),
+        question_family="gmv_drop",
+    )
+    policy = DiscoveryPolicy(
+        required_drilldowns=("channel",),
+        lanes=(
+            DiscoveryLane(
+                dimension="channel",
+                signal_type="campaign",
+                evidence_alias="E4_wrong",
+            ),
+        ),
+    )
+
+    with pytest.raises(PlanCompilerError) as excinfo:
+        _parallel_broad_contribution_chains(
+            parsed_intent=parsed,
+            policy=policy,
+            first_action_index=3,
+            validate_dimensions=lambda _metric_id, _dimensions: None,
+        )
+
+    assert excinfo.value.code == "EVIDENCE_ALIAS_POLICY_DRIFT"
 
 
 def test_evidence_graph_scopes_and_matches_current_run_aliases() -> None:

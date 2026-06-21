@@ -292,6 +292,7 @@ def _run_cases(
         results: list[dict[str, Any] | None] = [None] * len(cases)
         futures: dict[Any, int] = {}
         next_index = 0
+        next_notify_index = 0
 
         def submit_next() -> None:
             nonlocal next_index
@@ -326,7 +327,9 @@ def _run_cases(
                 score = future.result()
                 results[index] = score
                 if on_case_complete is not None:
-                    on_case_complete(score)
+                    while next_notify_index < len(results) and results[next_notify_index] is not None:
+                        on_case_complete(results[next_notify_index])
+                        next_notify_index += 1
                 submit_next()
                 break
         ordered_results: list[dict[str, Any]] = []

@@ -35,6 +35,7 @@ def test_pyproject_declares_current_phase_dependencies() -> None:
         "uvicorn",
         "httpx[socks]",
         "pytest",
+        "pyyaml",
     }
     forbidden_phase_gt1 = {
         "streamlit",
