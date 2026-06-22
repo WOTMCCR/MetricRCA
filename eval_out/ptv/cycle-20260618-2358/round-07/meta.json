@@ -1,0 +1,18 @@
+{
+  "cycle_id": "20260618-2358",
+  "round": 7,
+  "branch": "codex/c-complex-causal",
+  "base_commit": "e5f63e532dc95bb51db07cf4c9c3ff431809b955",
+  "created_at": "2026-06-19T15:15:43.858771+00:00",
+  "total_cases": 46,
+  "previous_round": "eval_out/ptv/cycle-20260618-2358/round-06",
+  "previous_fix_commit": "f2d451e44c54f4c9e9254d62f8a34ccaf51597f9",
+  "required_aspects": [
+    "intent",
+    "execution",
+    "evidence",
+    "memory",
+    "outcome",
+    "multi_cause_outcome"
+  ]
+}

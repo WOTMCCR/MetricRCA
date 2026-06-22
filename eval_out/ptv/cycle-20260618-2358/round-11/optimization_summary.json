@@ -1,0 +1,433 @@
+{
+  "controller_decision": {
+    "justification": "Adopt Analyst recommended_next_category=FIX-D. RULE-C3 blocks FIX-A while discovery gaps remain; RULE-C5 is satisfied because prior round was FIX-M; RULE-C1 does not block FIX-D.",
+    "selected_files": [
+      "metric_rca/business/policy_registry.py",
+      "metric_rca/runtime/plan_compiler.py"
+    ],
+    "selected_fix_category": "FIX-D",
+    "selected_layer": "policy"
+  },
+  "controller_rules_applied": {
+    "rule_c1_blocked_categories": [],
+    "rule_c1_reason": "Round 10 selected FIX-M. Round 11 regressed only top1_rate versus Round 10 but selected category is switching to FIX-D, not repeating FIX-M.",
+    "rule_c2_promoted": null,
+    "rule_c2_reason": "FIX-D was deferred once in Round 10, not >=2 consecutive rounds.",
+    "rule_c3_discovery_priority": true,
+    "rule_c3_reason": "Diagnosis contains FIX-D and FIX-A/FIX-M residuals; discovery gaps in MC02/MC03/MC07/C23 take priority because absent candidates cannot be ranked into place.",
+    "rule_c4_revert_assessment": {
+      "justification": "Fewer than two aggregate metrics regressed, so RULE-C4 revert gate is not triggered. Round 10 FIX-M improved top3/top3_contains and precision compared with Round 9.",
+      "regressed_metrics": [
+        "top1_rate"
+      ],
+      "revert_decision": "keep"
+    },
+    "rule_c5_reason": "Selecting FIX-D avoids any >2 consecutive category streak.",
+    "rule_c5_streak_counts": {
+      "FIX-M": 1
+    }
+  },
+  "created_at": "2026-06-19T17:21:14.688622+00:00",
+  "cycle_id": "cycle-20260618-2358",
+  "effective_fixes_history": [
+    {
+      "commit": null,
+      "note": "See prior round optimization_summary/fix_commit artifacts",
+      "round": 1
+    },
+    {
+      "commit": null,
+      "note": "See prior round optimization_summary/fix_commit artifacts",
+      "round": 2
+    },
+    {
+      "commit": null,
+      "note": "See prior round optimization_summary/fix_commit artifacts",
+      "round": 3
+    },
+    {
+      "commit": null,
+      "note": "See prior round optimization_summary/fix_commit artifacts",
+      "round": 4
+    },
+    {
+      "commit": null,
+      "note": "See prior round optimization_summary/fix_commit artifacts",
+      "round": 5
+    },
+    {
+      "commit": null,
+      "note": "See prior round optimization_summary/fix_commit artifacts",
+      "round": 6
+    },
+    {
+      "commit": null,
+      "note": "See prior round optimization_summary/fix_commit artifacts",
+      "round": 7
+    },
+    {
+      "commit": null,
+      "note": "See prior round optimization_summary/fix_commit artifacts",
+      "round": 8
+    },
+    {
+      "commit": null,
+      "note": "See prior round optimization_summary/fix_commit artifacts",
+      "round": 9
+    },
+    {
+      "commit": null,
+      "note": "See prior round optimization_summary/fix_commit artifacts",
+      "round": 10
+    }
+  ],
+  "failure_patterns": [
+    {
+      "affected_cases": [
+        "MC02_uv_multi_channel_drop",
+        "C23_uv_organic_drop"
+      ],
+      "evidence": "Round 11 trace shows select_signal_element signal_type=interaction for channel and category; selected_candidate root_cause_type=interaction_channel_category while ground truth expects campaign_traffic_drop.",
+      "fix_category": "FIX-D",
+      "pattern": "UV broad traffic cases compiled to interaction-only channel/category discovery, causing campaign_traffic_drop candidates to be displaced by interaction_channel_category.",
+      "root_layer": "policy_registry interaction_uv_anomaly discovery lanes / plan_compiler lane expansion"
+    },
+    {
+      "affected_cases": [
+        "MC03_cvr_multi_signal_drop"
+      ],
+      "evidence": "Round 11 MC03 E4_channel candidates include social and organic, but merge_contribution_sets output keeps social and desktop only; top3_contains_all_major_causes=0.",
+      "fix_category": "FIX-D",
+      "pattern": "PAY_CVR broad discovery merges channel and device lanes; merge keeps only selected channel social plus device desktop, dropping channel organic even though E4_channel discovered it.",
+      "root_layer": "policy_registry pay_cvr discovery shape"
+    },
+    {
+      "affected_cases": [
+        "MC07_uv_weak_multi_driver"
+      ],
+      "evidence": "Round 11 MC07 E2_channel candidates contain social and paid_ads only; affiliate appears in expected root_causes but not in candidate_scores.",
+      "fix_category": "FIX-D",
+      "pattern": "Weak UV multi-driver remains under-discovered because affiliate is not present in target-metric E2 candidates before signal selection.",
+      "root_layer": "discovery signal candidate pool"
+    }
+  ],
+  "fix_commit": "33bec81e927586d8e8c454a7b9a806e091755e7a",
+  "fix_status": "implemented",
+  "implemented_changes": [
+    "Added UV interaction discovery lanes that retain a parallel channel campaign lane with unique E_select/E3/E4 aliases.",
+    "Changed PAY_CVR broad discovery from channel+device merge to channel-only conversion discovery so same-dimension conversion candidates remain in the canonical E4 set.",
+    "Updated plan/policy tests to lock the new discovery graph without modifying ranking.py."
+  ],
+  "metrics_before_fix": {
+    "anomaly_accuracy": 1.0,
+    "avg_latency_ms_per_case": 0.0,
+    "avg_tokens_per_case": 0.0,
+    "case_total": 46,
+    "complete": true,
+    "completed_case_total": 46,
+    "completed_memory_case_total": 46,
+    "configured_case_total": 46,
+    "dangerous_sql_blocked": true,
+    "dominant_top1_rate": 0.869565,
+    "eval_suite": "regression",
+    "evidence_coverage_avg": 1.0,
+    "grpo_dataset": {
+      "manifest_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/grpo_dataset/manifest.json",
+      "trajectories_path": "eval_out/ptv/cycle-20260618-2358/round-11/eval-result/grpo_dataset/trajectories.jsonl"
+    },
+    "intent_accuracy": 1.0,
+    "llm_model": "gpt-5-nano",
+    "llm_provider": "openai",
+    "memory_disabled_top1_rate": 0.869565,
+    "memory_enabled_top1_rate": 0.869565,
+    "memory_hit_improvement": 0.0,
+    "memory_pollution_ok": true,
+    "memory_treatment_gate": false,
+    "multi_agent_path_distribution": {
+      "single_agent": 46
+    },
+    "no_anomaly_correct": true,
+    "p95_latency_ms": 0.0,
+    "p95_sql_count": 68.0,
+    "per_family": {
+      "adtributor": {
+        "anomaly_rate": 1.0,
+        "case_total": 2,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 68.0,
+        "top3_rate": 1.0
+      },
+      "ambiguous": {
+        "anomaly_rate": 1.0,
+        "case_total": 1,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 68.0,
+        "top3_rate": 1.0
+      },
+      "campaign": {
+        "anomaly_rate": 1.0,
+        "case_total": 1,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 12.0,
+        "top3_rate": 1.0
+      },
+      "composite": {
+        "anomaly_rate": 1.0,
+        "case_total": 1,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 68.0,
+        "top3_rate": 1.0
+      },
+      "conversion": {
+        "anomaly_rate": 1.0,
+        "case_total": 1,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 8.0,
+        "top3_rate": 1.0
+      },
+      "inventory": {
+        "anomaly_rate": 1.0,
+        "case_total": 1,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 12.0,
+        "top3_rate": 1.0
+      },
+      "multi_cause": {
+        "anomaly_rate": 1.0,
+        "case_total": 9,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 68.0,
+        "top3_rate": 0.444444
+      },
+      "multi_day": {
+        "anomaly_rate": 1.0,
+        "case_total": 1,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 68.0,
+        "top3_rate": 1.0
+      },
+      "net_gmv": {
+        "anomaly_rate": 1.0,
+        "case_total": 2,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 34.0,
+        "top3_rate": 1.0
+      },
+      "no_anomaly": {
+        "anomaly_rate": 1.0,
+        "case_total": 5,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 2.0,
+        "top3_rate": 1.0
+      },
+      "phase_c": {
+        "anomaly_rate": 1.0,
+        "case_total": 8,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 68.0,
+        "top3_rate": 1.0
+      },
+      "positive_anomaly": {
+        "anomaly_rate": 1.0,
+        "case_total": 1,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 68.0,
+        "top3_rate": 1.0
+      },
+      "quality": {
+        "anomaly_rate": 1.0,
+        "case_total": 1,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 8.0,
+        "top3_rate": 1.0
+      },
+      "regression": {
+        "anomaly_rate": 1.0,
+        "case_total": 12,
+        "evidence_coverage_rate": 1.0,
+        "memory_pollution_ok": true,
+        "p95_latency_ms": 0.0,
+        "p95_sql_count": 38.0,
+        "top3_rate": 1.0
+      }
+    },
+    "per_family_gate": false,
+    "reflection_repair_ok": true,
+    "report_traceable_rate": 1.0,
+    "root_cause_set_precision_avg": 0.75471,
+    "root_cause_set_recall_avg": 0.974638,
+    "sql_safe_rate": 1.0,
+    "thresholds_met": false,
+    "top1_rate": 0.869565,
+    "top3_contains_all_major_causes_rate": 0.891304,
+    "top3_rate": 0.891304,
+    "weighted_explanation_coverage_avg": 0.983043
+  },
+  "next_optimization_target": {
+    "files": [
+      "metric_rca/business/policy_registry.py",
+      "metric_rca/runtime/plan_compiler.py",
+      "tests/test_runtime_plan.py",
+      "tests/test_business_signal_policy.py"
+    ],
+    "fix_category": "FIX-D",
+    "layer": "policy",
+    "rationale": "Correct candidates are either not compiled into the plan or are lost because the plan shape forces an unnecessary merge. Discovery must be repaired before attribution/ranking work."
+  },
+  "ptv_round": 11,
+  "remaining_gaps": [
+    {
+      "case_id": "MC01_gmv_multi_cause_overall",
+      "deferred_reason": "Analyst marks FIX-M stall; RULE-C3 prioritizes current FIX-D discovery gaps.",
+      "status": "active"
+    },
+    {
+      "case_id": "MC04_gmv_weak_set",
+      "deferred_reason": "FIX-M/ranking-like residual ordering; not this round.",
+      "status": "active"
+    },
+    {
+      "case_id": "MC08_gmv_channel_category_mix",
+      "deferred_reason": "FIX-M/ranking-like residual ordering; not this round.",
+      "status": "active"
+    },
+    {
+      "case_id": "MC07_uv_weak_multi_driver",
+      "deferred_reason": "Requires broader signal candidate pool after current policy lane cleanup.",
+      "status": "partial"
+    }
+  ],
+  "revert_assessment": {
+    "justification": "Only one tracked aggregate metric regressed; switching category is the compliant next action.",
+    "regressed_metrics": [
+      "top1_rate"
+    ],
+    "revert_decision": "keep",
+    "triggered": false
+  },
+  "rule_c1_blocked_categories": [],
+  "rule_c2_promoted": null,
+  "stall_analysis_from_analyst": {
+    "category_history": [
+      "FIX-D",
+      "FIX-T",
+      "FIX-D",
+      "FIX-D",
+      "FIX-T",
+      "FIX-D",
+      "FIX-T",
+      "FIX-T",
+      "FIX-I",
+      "FIX-M"
+    ],
+    "current_streak": {
+      "FIX-M": 1
+    },
+    "deferred_streak_from_prior_rounds": {
+      "FIX-A": 0,
+      "FIX-D": 1,
+      "FIX-I": 0,
+      "FIX-M": 0,
+      "FIX-T": 0
+    },
+    "deferred_targets_if_recommended": {
+      "FIX-A": [
+        "C21_cvr_discovery",
+        "MC06_net_gmv_multi_driver",
+        "IX02_gmv_interaction_discovery"
+      ],
+      "FIX-D": [],
+      "FIX-M": [
+        "MC01_gmv_multi_cause_overall",
+        "MC04_gmv_weak_set",
+        "MC08_gmv_channel_category_mix",
+        "__cluster__:precision_broad_candidate_tail"
+      ]
+    },
+    "invalid_rationale": [
+      "edit metric_rca/runtime/ranking.py before resolving missing-cause discovery cases",
+      "repeat FIX-M immediately despite MC01/MC04/MC08 same-category stall",
+      "change scorer thresholds or ground truth to clear precision/top3 gates",
+      "treat Round 11 as green because top3 improved to 0.891304; gates still fail"
+    ],
+    "projected_streak_if_recommended_applied": {
+      "FIX-D": 1
+    },
+    "ranking_py_recommendation": "not_recommended",
+    "recommendation_reason": "The multi_cause family gate is still 0.444444 and the remaining family blockers include missing-cause discovery failures (MC02, MC03, MC07). Repeating FIX-M has high same-case stall on MC01/MC04/MC08; FIX-A/ranking.py is blocked by RULE-C3 and lacks full candidate-list proof. FIX-D is the compliant next category.",
+    "recommended_next_category": "FIX-D",
+    "rule_c1_blocked_categories": [],
+    "rule_c1_reason": "RULE-C1 checks top1_rate, top3_rate, and multi_cause_top3_rate. From Round 10 to Round 11, top1 is unchanged, top3 improves 0.847826\u21920.891304, and multi_cause top3 is unchanged at 0.444444; no category is C1-blocked.",
+    "rule_c1_triggered": false,
+    "rule_c2_promoted": null,
+    "rule_c2_reason": "FIX-D was deferred once in Round 10. Round 11 recommends FIX-D now, before it becomes a two-round mandatory promotion.",
+    "rule_c2_triggered": false,
+    "rule_c3_reason": "Active FIX-D discovery failures (MC02, MC03, MC07, C23) coexist with lower-priority FIX-A-suspected top1 ordering cases. RULE-C3 requires discovery before attribution; ranking.py is not recommended.",
+    "rule_c3_triggered": true,
+    "rule_c4_revert_assessment": {
+      "comparison_baseline": "round-10",
+      "justification": "Although recall, weighted coverage, and memory_hit_improvement regressed, Round 11 improved the threshold-critical top3_rate, top3_contains_all_major_causes_rate, and precision, while preserving complete eval execution. Reverting FIX-M would discard RS01/RS02/C21 top3 improvements; the narrower response is to switch to FIX-D for remaining discovery gaps.",
+      "regressed_metrics": [
+        "root_cause_set_recall_avg",
+        "weighted_explanation_coverage_avg",
+        "memory_hit_improvement"
+      ],
+      "required": true,
+      "revert_decision": "keep",
+      "triggered": true
+    },
+    "rule_c5_reason": "Current applied streak through Round 10 is FIX-M x1. Selecting FIX-D is not a third consecutive category and breaks the FIX-M same-case stall.",
+    "rule_c5_triggered": false,
+    "same_case_same_category_stalls": [
+      "MC01_gmv_multi_cause_overall",
+      "MC04_gmv_weak_set",
+      "MC08_gmv_channel_category_mix"
+    ]
+  },
+  "summary_type": "agent_optimization_context",
+  "tests_after_fix": [
+    {
+      "command": "PATH=.venv/bin:$PATH python -m pytest tests/test_business_signal_policy.py -q",
+      "result": "27 passed"
+    },
+    {
+      "command": "PATH=.venv/bin:$PATH python -m pytest tests/test_runtime_plan.py -q",
+      "result": "22 passed"
+    },
+    {
+      "command": "PATH=.venv/bin:$PATH python -m pytest tests/test_multi_agent.py::test_plan_compiler_routes_rate_metrics_to_rate_family -q",
+      "result": "1 passed"
+    },
+    {
+      "command": "PATH=.venv/bin:$PATH make test",
+      "result": "604 passed, 8 skipped, 29 warnings"
+    }
+  ],
+  "updated_at": "2026-06-19T17:24:03.571373+00:00"
+}

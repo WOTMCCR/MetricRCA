@@ -1,0 +1,78 @@
+{
+  "case_id": "C18_cvr_channel_landing",
+  "intent_ok": 1,
+  "anomaly_ok": 1,
+  "top1_ok": 1,
+  "top3_ok": 1,
+  "dominant_top1_ok": 1,
+  "root_cause_set_recall": 1.0,
+  "root_cause_set_precision": 1.0,
+  "weighted_explanation_coverage": 1.0,
+  "top3_contains_all_major_causes": 1,
+  "evidence_coverage": 1.0,
+  "sql_safe": 1,
+  "reflection_repair_ok": 1,
+  "report_traceable_ok": 1,
+  "memory_pollution_ok": 1,
+  "no_anomaly_task_ok": 1,
+  "adtributor_used": 0,
+  "multi_agent_path": "single_agent",
+  "detail": {
+    "status": "succeeded",
+    "metric_id": "pay_cvr",
+    "expected_metric": "pay_cvr",
+    "selected_candidate": {
+      "element": "affiliate",
+      "verdict": "confirmed",
+      "dimension": "channel",
+      "surprise_js": null,
+      "evidence_ids": [
+        "round-04-fresh-C18_cvr_channel_landing:E1",
+        "round-04-fresh-C18_cvr_channel_landing:E2_channel",
+        "round-04-fresh-C18_cvr_channel_landing:E3_ch_affiliate",
+        "round-04-fresh-C18_cvr_channel_landing:E4",
+        "round-04-fresh-C18_cvr_channel_landing:E_rank"
+      ],
+      "eng_confidence": 1.0,
+      "root_cause_type": "conversion_drop",
+      "signal_severity": 0.7750688163586316,
+      "contribution_pct": 1.0,
+      "evidence_support": 1.0,
+      "explanatory_power": null,
+      "reflection_factor": 1.0,
+      "dimension_elements": []
+    },
+    "expected_root_causes": [
+      {
+        "root_cause_type": "conversion_drop",
+        "dimension": "channel",
+        "element": "affiliate",
+        "weight": 1.0
+      }
+    ],
+    "token_count": 0,
+    "latency_ms": 0,
+    "sql_count": 8,
+    "trace_step_count": 5,
+    "memory_read_seen": false,
+    "tool_sequence": [
+      "detect_anomaly",
+      "drilldown_dimension",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "rank_root_causes"
+    ],
+    "memory_record_count": 1,
+    "memory_layers": [
+      "semantic"
+    ],
+    "eval_attempts": 1,
+    "final_run_id": "round-04-fresh-C18_cvr_channel_landing",
+    "memory_enabled": false,
+    "tags": [
+      "p7",
+      "specified_slice"
+    ],
+    "scenario_family": "regression"
+  }
+}

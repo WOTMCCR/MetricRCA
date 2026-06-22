@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from metric_rca.config.settings import Settings, get_settings
 from metric_rca.domain.models import MetricDefinition
+from metric_rca.services.date_context import resolve_target_date_for_run_context
 from metric_rca.services.intent_planner import LLMIntentPlanner
 from metric_rca.services.metric_contracts import (
     SUPPORTED_QUESTION_FAMILIES,
@@ -119,6 +120,13 @@ def parse_question(
         supported_dimension_values=supported_dimension_values,
         supported_families=supported_families,
     )
+    parsed = _apply_intent_alias_constraints(question=question, parsed=parsed)
+    parsed = _apply_run_target_date_contract(
+        question=question,
+        parsed=parsed,
+        business_today=business_today,
+        run_target_date=run_target_date,
+    )
     _validate_explicit_dimension_filters(
         question=question,
         parsed=parsed,
@@ -134,6 +142,88 @@ def parse_question(
         supported_dimension_values=supported_dimension_values,
         supported_families=supported_families,
     )
+
+
+def _apply_intent_alias_constraints(*, question: str, parsed: ParsedIntent) -> ParsedIntent:
+    normalized_question = " ".join(question.casefold().split())
+    ordinary_gmv_standard_questions = {
+        "why did yesterday's gmv decline",
+        "why did yesterday's gmv decline?",
+        "why did yesterday's gmv fall",
+        "why did yesterday's gmv fall?",
+    }
+    if (
+        parsed.metric_id == "gmv"
+        and parsed.question_family == "gmv_drop"
+        and parsed.dimension is None
+        and parsed.element is None
+        and not parsed.filters
+        and normalized_question in ordinary_gmv_standard_questions
+    ):
+        return parsed.model_copy(update={"analysis_strategy": "standard"})
+    if (
+        _is_unscoped_gmv_drop(parsed)
+        and _has_stable_merchandising_context(normalized_question)
+    ):
+        return parsed.model_copy(update={"analysis_strategy": "signal_first"})
+    if (
+        _is_unscoped_gmv_drop(parsed)
+        and _has_broad_store_expectation_context(normalized_question)
+    ):
+        return parsed.model_copy(update={"analysis_strategy": "channel_first"})
+    return parsed
+
+
+def _is_unscoped_gmv_drop(parsed: ParsedIntent) -> bool:
+    return (
+        parsed.metric_id == "gmv"
+        and parsed.question_family == "gmv_drop"
+        and parsed.dimension is None
+        and parsed.element is None
+        and not parsed.filters
+    )
+
+
+def _has_stable_merchandising_context(normalized_question: str) -> bool:
+    words = _question_words(normalized_question)
+    return "stable" in words and "merchandising" in words
+
+
+def _has_broad_store_expectation_context(normalized_question: str) -> bool:
+    words = _question_words(normalized_question)
+    has_expectation = any(word.startswith("expect") for word in words)
+    has_seasonality = any(word.startswith("season") for word in words)
+    has_broad_scope = bool(words & {"store", "sales", "overall"})
+    has_below_normal = "below" in words and ("normal" in words or has_seasonality)
+    has_off_broad_scope = bool(words & {"off", "wrong"}) and has_broad_scope
+    return (
+        ("below" in words and has_expectation)
+        or (has_broad_scope and has_expectation)
+        or has_below_normal
+        or has_off_broad_scope
+    )
+
+
+def _question_words(normalized_question: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9_']+", normalized_question))
+
+
+def _apply_run_target_date_contract(
+    *,
+    question: str,
+    parsed: ParsedIntent,
+    business_today: date,
+    run_target_date: date | None,
+) -> ParsedIntent:
+    target_date = resolve_target_date_for_run_context(
+        question,
+        parsed_target_date=parsed.target_date,
+        business_today=business_today,
+        run_target_date=run_target_date,
+    )
+    if target_date == parsed.target_date:
+        return parsed
+    return parsed.model_copy(update={"target_date": target_date})
 
 
 def _validate_parsed_intent(

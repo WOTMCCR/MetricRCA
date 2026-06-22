@@ -82,7 +82,7 @@ class ActionGateMiddleware:
             explicit_scope=self.context.explicit_filters,
             budget={
                 "max_steps": int(getattr(self.context.settings, "max_steps", 8)),
-                "max_query": int(getattr(self.context.settings, "max_query", 12)),
+                "max_query": int(getattr(self.context.settings, "max_query", 20)),
                 "max_drilldown_depth": int(getattr(self.context.settings, "max_drilldown_depth", 3)),
             },
             repository=self.context.repository,

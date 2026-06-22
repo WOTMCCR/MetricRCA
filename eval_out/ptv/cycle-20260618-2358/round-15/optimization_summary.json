@@ -1,0 +1,233 @@
+{
+  "base_commit": "54b6519700c9873abe484c1819123924fb56c359",
+  "controller_rules_applied": {
+    "RULE-C1": {
+      "blocked_categories": [],
+      "decision": "No category blocked; Round 15 improves the Round 13/14 precision and C21 states, so prior FIX-M is retained."
+    },
+    "RULE-C2": {
+      "decision": "Do not promote FIX-A because it is not gate-blocking and would not address the failed precision aggregate.",
+      "deferred_streak": {
+        "FIX-A": 4,
+        "FIX-D": 0,
+        "FIX-I": 0,
+        "FIX-INJ": 0,
+        "FIX-M": 0,
+        "FIX-T": 0
+      }
+    },
+    "RULE-C3": {
+      "decision": "Do not switch to FIX-D; source evidence exists for the remaining gate-blocking MC02 affiliate gap, but merge composition drops it."
+    },
+    "RULE-C4": {
+      "comparison_baseline": "round-13 because round-14 was eval-fatal",
+      "justification": "Round 15 fixes the round-14 eval-fatal C21 merge failure and improves aggregate precision, recall, top3, and weighted coverage versus the last complete round.",
+      "regressed_metrics": [],
+      "revert_decision": "keep",
+      "triggered": false
+    },
+    "RULE-C5": {
+      "current_category_streak": 1,
+      "decision": "FIX-M selected once more; not more than two consecutive rounds."
+    }
+  },
+  "controller_status": "fix_committed",
+  "cycle_id": "20260618-2358",
+  "decision_basis": {
+    "analyst_recommended_next_category": "FIX-M",
+    "blocking_metric": "root_cause_set_precision_avg",
+    "blocking_metric_required": 0.85,
+    "blocking_metric_value": 0.795031,
+    "diagnosis_counts": {
+      "FIX-A": 5,
+      "FIX-M": 16
+    },
+    "gap_counts": null,
+    "passing_metrics": {
+      "dangerous_sql_blocked": true,
+      "evidence_coverage_avg": 1.0,
+      "multi_cause_family_top3_rate": 0.888889,
+      "no_anomaly_correct": true,
+      "report_traceable_rate": 1.0,
+      "root_cause_set_recall_avg": 0.981884,
+      "sql_safe_rate": 1.0,
+      "top1_rate": 0.913043,
+      "top3_rate": 0.978261,
+      "weighted_explanation_coverage_avg": 0.98413
+    },
+    "primary_gap_clusters": [
+      {
+        "cases": [
+          "C06_gmv_multi_channel_drop",
+          "C07_gmv_category_channel_cross",
+          "C08_gmv_aov_drop",
+          "C09_gmv_uv_organic_drop",
+          "C14_net_gmv_gmv_driven",
+          "C24_gmv_positive_spike",
+          "C25_refund_discovery",
+          "C26_ambiguous_intent",
+          "C27_composite_cause",
+          "C28_multi_day_drift",
+          "MC01_gmv_multi_cause_overall",
+          "MC04_gmv_weak_set",
+          "MC05_gmv_lag_stockout_mix",
+          "MC08_gmv_channel_category_mix",
+          "RS02_gmv_residual_discovery"
+        ],
+        "cluster_id": "precision_broad_candidate_tail",
+        "evidence": "root_cause_set_precision_avg=0.795031 < 0.85. Affected cases have correct top1/top3 but final E4 sets retain false-positive channel/category/product/mechanism representatives; examples: C08 precision=0.2 with 5 candidates, C25 precision=0.2 with five product quality candidates, C06/C07/C26/C27 precision=0.428571 with 7 broad GMV candidates.",
+        "fix_category": "FIX-M",
+        "gate_blocking": true
+      },
+      {
+        "cases": [
+          "MC02_uv_multi_channel_drop"
+        ],
+        "cluster_id": "mc02_minor_affiliate_dropped_by_merge",
+        "evidence": "Affiliate appears in E2_channel and E4_channel_campaign, but final canonical E4 drops it; recall=0.666667, precision=0.5, weighted=0.85. This is representative merge/floor behavior, not absence of discovery evidence.",
+        "fix_category": "FIX-M",
+        "gate_blocking": true
+      },
+      {
+        "cases": [
+          "MC06_net_gmv_multi_driver",
+          "IX02_gmv_interaction_discovery",
+          "IX03_uv_interaction_cell",
+          "RS01_gmv_residual_dual_mechanism"
+        ],
+        "cluster_id": "top1_ordering_deferred_nonblocking",
+        "evidence": "These cases have wrong top1 ordering or root-type preservation issues, but aggregate top1_rate=0.913043 and top3_rate=0.978261 pass current thresholds. RS01 is the only top3 miss but aggregate top3/recall/weighted gates still pass.",
+        "fix_category": "FIX-A",
+        "gate_blocking": false
+      }
+    ],
+    "thresholds_met": false
+  },
+  "exit_decision": "continue_until_metricrca_gates_pass",
+  "fix_commit": "f9a3981d7b7d97004d1841badb6386e526e03a9e",
+  "forbidden_files_this_round": [
+    "metric_rca/runtime/ranking.py",
+    "metric_rca/eval/scorer.py",
+    "metric_rca/eval/ground_truth.py"
+  ],
+  "implemented_change": {
+    "files_changed": [
+      "metric_rca/runtime/contribution_set_builder.py",
+      "tests/test_contribution_set_builder.py"
+    ],
+    "fix_category": "FIX-M",
+    "summary": "Added a ContributionSetBuilder final projection guard that collapses broad high-confidence non-interaction single-driver representative sets to the selected candidate while retaining factor_graph/source evidence. Added regression tests for the collapse and for interaction-bearing preservation."
+  },
+  "optimization_summary": {
+    "expected_effect": "Raise precision on broad false-tail cases such as C06/C07/C08/C09/C14/C26/C27/C28 without touching ranking, scorer, ground truth, or discovery lane generation.",
+    "hypothesis": "Round 15 no longer has the C21 discovery failure. The only failed gate is root_cause_set_precision_avg, driven by broad representative sets where exploratory source lanes are promoted into final candidates even when the selected root cause is already a high-confidence single-driver explanation.",
+    "known_risks": [
+      "Over-collapsing could drop true secondary causes in residual or interaction cases.",
+      "The guard therefore excludes interaction-bearing representative sets and low-confidence selected candidates, and tests must cover those counterexamples."
+    ],
+    "planned_change": "Constrain ContributionSetBuilder final representative composition so broad, high-confidence, non-interaction single-driver merges keep the selected representative while preserving factor_graph/source evidence for traceability. Multi-cause and interaction-bearing sets remain outside this collapse rule."
+  },
+  "round": 15,
+  "rule_c1_blocked_categories": [],
+  "rule_c1_reason": "Round 14 was eval-fatal, so round 13 is the aggregate baseline. Round 15 restores completion and improves top3, precision, recall, and weighted coverage versus round 13; no category is blocked by regression.",
+  "rule_c2_deferred_categories": {
+    "FIX-A": 4
+  },
+  "rule_c2_reason": "No gate-blocking category has been deferred for two complete scoring rounds. FIX-A has a long nonblocking deferral, but applying it now would not address root_cause_set_precision_avg < 0.85.",
+  "rule_c3_reason": "No current gate-blocking FIX-D discovery absence remains. MC02 affiliate is present in source E2/E4_channel_campaign and is dropped by canonical merge, so it is classified as FIX-M rather than FIX-D.",
+  "rule_c4_revert_assessment": {
+    "comparison_baseline": "round-13 because round-14 was eval-fatal",
+    "justification": "Round 15 fixes the round-14 eval-fatal C21 merge failure and improves aggregate precision, recall, top3, and weighted coverage versus the last complete round.",
+    "regressed_metrics": [],
+    "revert_decision": "keep",
+    "triggered": false
+  },
+  "rule_c5_reason": "Current FIX-M streak is 1; selecting FIX-M now makes the projected streak 2, which is allowed. If Round 16 still fails, RULE-C5/anti-stall require switching categories.",
+  "selected_fix_category": "FIX-M",
+  "stall_analysis": {
+    "category_history": [
+      "FIX-D",
+      "FIX-T",
+      "FIX-D",
+      "FIX-D",
+      "FIX-T",
+      "FIX-D",
+      "FIX-T",
+      "FIX-T",
+      "FIX-I",
+      "FIX-M",
+      "FIX-D",
+      "FIX-M",
+      "FIX-D",
+      "FIX-M"
+    ],
+    "category_streak": {
+      "FIX-M": 1
+    },
+    "current_streak": {
+      "FIX-M": 1
+    },
+    "deferred_streak": {
+      "FIX-A": 4,
+      "FIX-D": 0,
+      "FIX-I": 0,
+      "FIX-INJ": 0,
+      "FIX-M": 0,
+      "FIX-T": 0
+    },
+    "deferred_streak_note": "FIX-A ordering work has been recorded since rounds 11-14, but it is nonblocking for current exit thresholds because top1/top3 aggregate gates pass; the only failing aggregate gate is precision.",
+    "invalid_rationale": [
+      "Patch metric_rca/runtime/ranking.py first: FIX-A top1 cases are nonblocking while precision is the failing gate, and ranking changes cannot remove broad false-positive E4 candidates.",
+      "Repeat broad FIX-D: MC02 affiliate is already discovered in source evidence, and the main precision tails are final-set composition problems.",
+      "Change scorer thresholds or ground truth to clear root_cause_set_precision_avg.",
+      "Treat round 15 as green because top1/top3/per-family gates pass; thresholds_met remains false due precision.",
+      "Revert the round-14/round-15 FIX-M work; it restored eval completion and fixed C21."
+    ],
+    "recommendation_reason": "The only failing aggregate threshold is root_cause_set_precision_avg=0.795031 < 0.85. The highest-impact failures are canonical E4 merge/representative-set precision tails, and MC02 affiliate is present in source evidence but dropped by merge. MetricRCA priority orders FIX-M before FIX-A when merge logic is wrong; top1/ranking issues are real but currently nonblocking.",
+    "recommended_next_category": "FIX-M",
+    "rule_c1_blocking_categories": [],
+    "rule_c1_reason": "Round 14 was eval-fatal, so round 13 is the aggregate baseline. Round 15 restores completion and improves top3, precision, recall, and weighted coverage versus round 13; no category is blocked by regression.",
+    "rule_c1_triggered": false,
+    "rule_c2_promoted": null,
+    "rule_c2_reason": "No gate-blocking category has been deferred for two complete scoring rounds. FIX-A has a long nonblocking deferral, but applying it now would not address root_cause_set_precision_avg < 0.85.",
+    "rule_c2_triggered": false,
+    "rule_c3_reason": "No current gate-blocking FIX-D discovery absence remains. MC02 affiliate is present in source E2/E4_channel_campaign and is dropped by canonical merge, so it is classified as FIX-M rather than FIX-D.",
+    "rule_c3_triggered": false,
+    "rule_c4_revert_assessment": {
+      "comparison_baseline": "round-13 because round-14 was eval-fatal",
+      "justification": "Round 15 fixes the round-14 eval-fatal C21 merge failure and improves aggregate precision, recall, top3, and weighted coverage versus the last complete round.",
+      "regressed_metrics": [],
+      "revert_decision": "keep",
+      "triggered": false
+    },
+    "rule_c5_reason": "Applied category streak is FIX-M x1 from round 14. Recommending FIX-M for the controller would project to x2, still within the maximum consecutive cap.",
+    "rule_c5_triggered": false
+  },
+  "target_files": [
+    "metric_rca/runtime/contribution_set_builder.py",
+    "tests/test_contribution_set_builder.py"
+  ],
+  "target_layer": "pipeline_merge",
+  "verification": [
+    {
+      "command": "PATH=.venv/bin:$PATH python -m pytest tests/test_contribution_set_builder.py -q",
+      "result": "9 passed"
+    },
+    {
+      "command": "PATH=.venv/bin:$PATH python -m pytest tests/test_merge_contribution_sets_tool.py tests/test_runtime_plan.py tests/test_runtime_tool_executor.py -q",
+      "result": "41 passed"
+    },
+    {
+      "command": "PATH=.venv/bin:$PATH make seed",
+      "result": "passed"
+    },
+    {
+      "command": "PATH=.venv/bin:$PATH make test",
+      "result": "609 passed, 8 skipped, 29 warnings"
+    },
+    {
+      "command": "rg -n \"fallback|graceful|degrad|except Exception|pass\\s*$|default provider|mock|stub|demo\" metric_rca/runtime/contribution_set_builder.py tests/test_contribution_set_builder.py",
+      "result": "no matches"
+    }
+  ]
+}

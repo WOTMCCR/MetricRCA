@@ -32,6 +32,7 @@ class TraceWriter:
                     "target_date": target_date,
                     "status": "running",
                     "error_code": None,
+                    "runtime_version": 3,
                     "created_at": _now(),
                     "finished_at": None,
                 }

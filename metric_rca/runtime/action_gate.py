@@ -11,10 +11,23 @@ from metric_rca.runtime.run_context import RunContext
 
 
 DATA_FETCHING_ACTIONS = frozenset(
-    {"detect_anomaly", "drilldown_dimension", "fetch_related_signal", "calculate_contribution"}
+    {
+        "detect_anomaly",
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+    }
 )
 DOWNSTREAM_ACTIONS = frozenset(
-    {"drilldown_dimension", "fetch_related_signal", "calculate_contribution", "rank_root_causes"}
+    {
+        "drilldown_dimension",
+        "select_signal_element",
+        "fetch_related_signal",
+        "calculate_contribution",
+        "merge_contribution_sets",
+        "rank_root_causes",
+    }
 )
 
 
@@ -81,6 +94,8 @@ def _explicit_scope_error(ctx: RunContext, action: RcaAction) -> str | None:
         if filters.get(dimension) != element:
             return f"explicit question scope requires filters.{dimension}={element}"
         return None
+    if ctx.scope_mode == "explicit_multi_driver":
+        return _explicit_multi_driver_scope_error(dimension, element, action, filters)
     if action.args.get("dimension") != dimension:
         return f"explicit question scope requires dimension={dimension}"
     if action.kind in {"fetch_related_signal", "calculate_contribution"} and str(action.args.get("element")) != element:
@@ -88,6 +103,44 @@ def _explicit_scope_error(ctx: RunContext, action: RcaAction) -> str | None:
     if action.kind in {"drilldown_dimension", "calculate_contribution"} and filters.get(dimension) != element:
         return f"explicit question scope requires filters.{dimension}={element}"
     return None
+
+
+def _explicit_multi_driver_scope_error(
+    dimension: str,
+    element: str,
+    action: RcaAction,
+    filters: dict[str, str],
+) -> str | None:
+    filtered_element = filters.get(dimension)
+    if filtered_element is not None and filtered_element != element:
+        return (
+            f"action {action.action_id} filters.{dimension}={filtered_element} "
+            f"contradicts explicit question scope {dimension}={element}"
+        )
+    action_dimension = action.args.get("dimension")
+    if _global_explanatory_scope_allowed(action, scoped_dimension=dimension):
+        return None
+    if (
+        action_dimension != dimension
+        and action.kind in {"drilldown_dimension", "calculate_contribution"}
+        and filters.get(dimension) != element
+    ):
+        return f"explicit multi-driver lane requires filters.{dimension}={element}"
+    if action.kind == "select_signal_element" and action_dimension == dimension:
+        return f"explicit multi-driver lane for {dimension} must bind element={element} directly"
+    if action.kind in {"fetch_related_signal", "calculate_contribution"} and action_dimension == dimension:
+        action_element = action.args.get("element")
+        if action_element != element:
+            return f"explicit multi-driver lane for {dimension} must bind element={element} directly"
+    return None
+
+
+def _global_explanatory_scope_allowed(action: RcaAction, *, scoped_dimension: str) -> bool:
+    if action.args.get("explicit_scope_policy") != "global_explanatory":
+        return False
+    if action.args.get("dimension") != scoped_dimension:
+        return False
+    return action.kind in {"select_signal_element", "fetch_related_signal", "calculate_contribution"}
 
 
 def _no_anomaly_downstream_error(ctx: RunContext, action: RcaAction) -> str | None:

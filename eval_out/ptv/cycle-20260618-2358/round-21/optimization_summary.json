@@ -1,0 +1,216 @@
+{
+  "artifact_hashes": {
+    "code_fix_commit_after_p0_review": "8490136bcc3076b167f36c21758cb4d1b028ca94",
+    "diagnosis_jsonl": "7ad205a94570c0e7f3127ae317bcf7262b2c9bcdb53d1cf3eb17ac19348a9a5f",
+    "eval_result_json": "8d447ac09c92430477badcae97b2c5d5fd2aeb80b31c26e57e86c6beb63d5865",
+    "gap_report_json": "154f1c284c465abfc4dfba467096c67a3e50539a23c78fdaa1ec9e9673b5bb91",
+    "post_eval_p0_review_fix_commit": "8490136bcc3076b167f36c21758cb4d1b028ca94",
+    "predictions_jsonl": "27ff7c62de22f9c72a0d49a48fcf6012ebbee789f00d8c79565db8e4e3cb05c1"
+  },
+  "confirmation_required_by_binding": true,
+  "confirmation_run_completed_this_turn": false,
+  "controller_decision": "stop_after_round_21_green_result; no additional code fix selected in this requested one-round PTV run",
+  "controller_rules_applied": {
+    "rule_c1_blocked_categories": [],
+    "rule_c2_promoted": null,
+    "rule_c3_discovery_priority": true,
+    "rule_c4_revert_assessment": {
+      "regressed_metrics": [],
+      "revert_decision": "keep",
+      "triggered": false
+    },
+    "rule_c5_streak_counts": {
+      "FIX-T": 2
+    }
+  },
+  "controller_status": "gates_passed_after_phase_d_refactor",
+  "cycle_id": "cycle-20260618-2358",
+  "effective_fixes_history": [
+    {
+      "category": "FIX-I",
+      "result": "complete but thresholds not met; per_family_gate=false",
+      "round": 19
+    },
+    {
+      "category": "FIX-T",
+      "result": "eval fatal/incomplete due evidence/tool contract",
+      "round": 20
+    },
+    {
+      "category": "FIX-T",
+      "commit": "871ec73",
+      "result": "complete green eval; thresholds_met=true",
+      "round": 21
+    }
+  ],
+  "eval_code_commit": "871ec735ea490bc2a0eae7fcf5fb35a20a8d27c2",
+  "eval_id": "ptv-cycle-20260618-2358-round-21",
+  "failure_patterns": [
+    {
+      "count": 37,
+      "impact": "PTV prediction accuracy only; product runtime performed better than predicted for most cases.",
+      "pattern": "prediction_overfit_multi_cause_outcome"
+    },
+    {
+      "count": 1,
+      "impact": "Nonblocking under current gates but only actual top3/coverage miss; root cause is residual discovery/decomposition, not Phase-D evidence identity.",
+      "pattern": "RS01_residual_decomposition_gap"
+    },
+    {
+      "cases": [
+        "MC06_net_gmv_multi_driver",
+        "IX02_gmv_interaction_discovery",
+        "IX03_uv_interaction_cell"
+      ],
+      "impact": "Top3 and recall pass; do not start a ranking self-lock loop while gates pass.",
+      "pattern": "nonblocking_top1_residuals"
+    }
+  ],
+  "fix_commit": "871ec735ea490bc2a0eae7fcf5fb35a20a8d27c2",
+  "gap_summary": {
+    "accuracy": 0.8514,
+    "by_aspect": {
+      "evidence": {
+        "correct": 46
+      },
+      "execution": {
+        "correct": 44,
+        "overfit": 2
+      },
+      "intent": {
+        "correct": 46
+      },
+      "memory": {
+        "correct": 46
+      },
+      "multi_cause_outcome": {
+        "complexity_gap": 1,
+        "correct": 8,
+        "overfit": 37
+      },
+      "outcome": {
+        "correct": 45,
+        "design_flaw": 1
+      }
+    },
+    "by_divergence": {
+      "complexity_gap": 1,
+      "correct": 235,
+      "design_flaw": 1,
+      "overfit": 39
+    },
+    "complexity_gap_count": 1,
+    "design_flaw_count": 1,
+    "total": 276
+  },
+  "if_continuing_next_target": {
+    "category": "FIX-D",
+    "files": [
+      "metric_rca/runtime/plan_compiler.py",
+      "metric_rca/business/policy_registry.py",
+      "tests/test_runtime_plan.py",
+      "tests/test_business_signal_policy.py"
+    ],
+    "layer": "policy/pipeline",
+    "rationale": "Only remaining top3/coverage miss is RS01 residual decomposition; discovery/decomposition should be fixed before ranking."
+  },
+  "metricrca_gates_passed": true,
+  "metrics_after": {
+    "anomaly_accuracy": 1.0,
+    "case_total": 46,
+    "complete": true,
+    "completed_case_total": 46,
+    "completed_memory_case_total": 46,
+    "dangerous_sql_blocked": true,
+    "dominant_top1_rate": 0.913043,
+    "evidence_coverage_avg": 1.0,
+    "intent_accuracy": 1.0,
+    "llm_model": "gpt-5-nano",
+    "llm_provider": "openai",
+    "memory_disabled_top1_rate": 0.913043,
+    "memory_enabled_top1_rate": 0.934783,
+    "memory_hit_improvement": 0.02174,
+    "memory_pollution_ok": true,
+    "memory_treatment_gate": false,
+    "no_anomaly_correct": true,
+    "p95_sql_count": 68.0,
+    "per_family_gate": true,
+    "report_traceable_rate": 1.0,
+    "root_cause_set_precision_avg": 0.911957,
+    "root_cause_set_recall_avg": 0.98913,
+    "sql_safe_rate": 1.0,
+    "thresholds_met": true,
+    "top1_rate": 0.913043,
+    "top3_contains_all_major_causes_rate": 0.978261,
+    "top3_rate": 0.978261,
+    "weighted_explanation_coverage_avg": 0.987391
+  },
+  "next_optimization_target": null,
+  "post_eval_p0_review_fix_commit": "8490136bcc3076b167f36c21758cb4d1b028ca94",
+  "post_eval_p0_review_note": "Round 21 eval ran at 871ec73. A subsequent read-only review found EvidenceIdentityError fail-soft paths; commit 8490136 fixes them and is verified by compileall, targeted pytest, and make test, but no second PTV eval was run in this turn.",
+  "remaining_gaps": [
+    {
+      "case_id": "RS01_gmv_residual_dual_mechanism",
+      "category": "FIX-D",
+      "gate_blocking": false,
+      "summary": "Residual question collapses campaign+aov causes into interaction_channel_category and misses category=fashion aov_drop."
+    },
+    {
+      "case_id": "MC06_net_gmv_multi_driver",
+      "category": "FIX-M",
+      "gate_blocking": false,
+      "summary": "Correct top3 set, wrong dominant top1 order."
+    },
+    {
+      "case_id": "IX02_gmv_interaction_discovery",
+      "category": "FIX-A",
+      "gate_blocking": false,
+      "summary": "Interaction present in top3, campaign selected top1."
+    },
+    {
+      "case_id": "IX03_uv_interaction_cell",
+      "category": "FIX-A",
+      "gate_blocking": false,
+      "summary": "Interaction present in top3, campaign selected top1."
+    }
+  ],
+  "round": 21,
+  "rule_c1_blocked_categories": [],
+  "rule_c1_reason": "Round 21 improved or matched all tracked aggregate metrics versus the last complete Round 19 eval and recovered from Round 20 fatal; no regression block is applied.",
+  "rule_c2_promoted": null,
+  "rule_c2_reason": "No deferred category is gate-blocking after Round 21; RS01 residual decomposition is nonblocking under current MetricRCA gates.",
+  "rule_c3_discovery_priority": true,
+  "rule_c3_reason": "If another optimization round is required, RS01 residual decomposition should be treated as FIX-D/FIX-M before any ranking-only FIX-A patch because the missing aov_drop secondary cause is a discovery/decomposition issue.",
+  "rule_c4_revert_assessment": {
+    "comparison_baseline": "round-19 last complete eval; round-20 eval-fatal/incomplete",
+    "justification": "Round 21 completed 46/46 cases, thresholds_met=true, per_family_gate=true, recall/precision/coverage improved versus Round 19, and the Phase-D refactor removed the Round 20 evidence/tool fatal.",
+    "regressed_metrics": [],
+    "revert_decision": "keep",
+    "triggered": false
+  },
+  "rule_c5_reason": "FIX-T has reached a two-round streak counting Round 20 and Round 21. Because gates pass no next fix is selected; if continuing, RULE-C5 blocks a third consecutive FIX-T.",
+  "rule_c5_streak_counts": {
+    "FIX-T": 2
+  },
+  "selected_fix_category": "FIX-T",
+  "selected_layer": "tool/pipeline",
+  "stall_analysis_from_analyst": {
+    "anti_stall_decision": "no_next_fix_selected_because_metricrca_gates_passed; if continuing, switch away from FIX-T because category_streak is 2",
+    "case_repeat_failures": [],
+    "category_streak": {
+      "FIX-T": 2
+    },
+    "current_streak": {
+      "FIX-T": 2
+    },
+    "deferred_streak": {
+      "FIX-A": 0,
+      "FIX-D": 0,
+      "FIX-I": 0,
+      "FIX-M": 0
+    },
+    "recommendation_reason": "Round 21 fixes Round 20 eval-fatal evidence identity/tool contract issue and passes MetricRCA gates. Remaining gaps are nonblocking residual/top1 issues, primarily RS01 residual decomposition.",
+    "recommended_next_category": null,
+    "stalled_cases": []
+  }
+}

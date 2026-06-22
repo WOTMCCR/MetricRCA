@@ -1,0 +1,17 @@
+{
+  "cycle_id": "20260618-2358",
+  "round": 15,
+  "branch": "codex/c-complex-causal",
+  "base_commit": "54b6519700c9873abe484c1819123924fb56c359",
+  "previous_fix_commit": "77255d1",
+  "previous_artifact_commit": "54b6519700c9873abe484c1819123924fb56c359",
+  "total_cases": 46,
+  "required_aspects": [
+    "intent",
+    "execution",
+    "evidence",
+    "memory",
+    "outcome",
+    "multi_cause_outcome"
+  ]
+}

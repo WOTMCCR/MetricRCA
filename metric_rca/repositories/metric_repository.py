@@ -36,6 +36,11 @@ from metric_rca.config.settings import Settings
 from metric_rca.domain.models import SQLPlan
 from metric_rca.guardrails.renderer import is_renderer_signed
 from metric_rca.guardrails.sql_guard import guard_sql, is_guard_signed
+from metric_rca.runtime.evidence_identity import (
+    EvidenceIdentityError,
+    split_evidence_id,
+    validate_evidence_alias,
+)
 
 REPOSITORY_POOL_SIZE = 1
 REPOSITORY_MAX_OVERFLOW = 1
@@ -47,7 +52,7 @@ MYSQL_DUPLICATE_ENTRY_ERRNO = 1062
 _IDEMPOTENT_TABLE_PREDICATES = {
     "agent_run": frozenset({"run_id"}),
     "trace_step": frozenset({"step_id"}),
-    "evidence": frozenset({"evidence_id"}),
+    "evidence": frozenset({"run_id", "alias"}),
     "sql_audit": frozenset({"audit_key"}),
     "operation_task": frozenset({"task_id"}),
     "memory_record": frozenset({"memory_id"}),
@@ -196,7 +201,7 @@ class MetricRepository:
                         text(
                             """
                             SELECT run_id, question, metric_id, target_date, status, error_code,
-                                   total_tokens, total_latency_ms, token_breakdown,
+                                   runtime_version, total_tokens, total_latency_ms, token_breakdown,
                                    created_at, finished_at
                             FROM agent_run
                             WHERE run_id = :run_id
@@ -230,7 +235,7 @@ class MetricRepository:
                     conn.execute(
                         text(
                             """
-                            SELECT evidence_id, run_id, query_spec, sql_text, sql_hash, guard_status,
+                            SELECT evidence_pk, evidence_id, run_id, alias, query_spec, sql_text, sql_hash, guard_status,
                                    result_summary, data_source, created_at
                             FROM evidence
                             WHERE run_id = :run_id AND evidence_id = :evidence_id
@@ -243,6 +248,39 @@ class MetricRepository:
                     .first()
                 )
         except SQLAlchemyError as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
+        if row is None:
+            return None
+        try:
+            return {
+                **dict(row),
+                "query_spec": _decode_json_column(row["query_spec"]),
+                "result_summary": _decode_json_column(row["result_summary"]),
+            }
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
+
+    def get_evidence_by_alias(self, *, run_id: str, alias: str) -> dict[str, Any] | None:
+        try:
+            valid_alias = validate_evidence_alias(alias)
+            with self._audit_engine.connect() as conn:
+                row = (
+                    conn.execute(
+                        text(
+                            """
+                            SELECT evidence_pk, evidence_id, run_id, alias, query_spec, sql_text, sql_hash,
+                                   guard_status, result_summary, data_source, created_at
+                            FROM evidence
+                            WHERE run_id = :run_id AND alias = :alias
+                            LIMIT 1
+                            """
+                        ),
+                        {"run_id": run_id, "alias": valid_alias},
+                    )
+                    .mappings()
+                    .first()
+                )
+        except (EvidenceIdentityError, SQLAlchemyError) as exc:
             raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
         if row is None:
             return None
@@ -293,11 +331,10 @@ class MetricRepository:
                     conn.execute(
                         text(
                             """
-                            SELECT evidence_id, run_id, query_spec, sql_text, sql_hash,
+                            SELECT evidence_pk, evidence_id, run_id, alias, query_spec, sql_text, sql_hash,
                                    guard_status, result_summary, data_source, created_at
                             FROM evidence
                             WHERE run_id = :run_id
-                            ORDER BY created_at ASC, evidence_id ASC
                             """
                         ),
                         {"run_id": run_id},
@@ -311,7 +348,7 @@ class MetricRepository:
                     "query_spec": _decode_json_column(row["query_spec"]),
                     "result_summary": _decode_json_column(row["result_summary"]),
                 }
-                for row in rows
+                for row in sorted(rows, key=lambda item: str(item["evidence_id"]))
             ]
         except (SQLAlchemyError, TypeError, json.JSONDecodeError) as exc:
             raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
@@ -418,12 +455,26 @@ class MetricRepository:
         except (SQLAlchemyError, TypeError, json.JSONDecodeError) as exc:
             raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
 
-    def get_ground_truth_cases(self, case_ids: list[str]) -> dict[str, dict[str, Any]]:
+    def get_ground_truth_cases(
+        self,
+        case_ids: list[str],
+        *,
+        split: str | None = None,
+        profile: str | None = None,
+    ) -> dict[str, dict[str, Any]]:
         if not case_ids:
             return {}
 
         placeholders = ", ".join(f":case_id_{index}" for index, _ in enumerate(case_ids))
         params = {f"case_id_{index}": case_id for index, case_id in enumerate(case_ids)}
+        filters = [f"case_id IN ({placeholders})"]
+        if split is not None:
+            filters.append("split = :split")
+            params["split"] = split
+        if profile is not None:
+            filters.append("profile = :profile")
+            params["profile"] = profile
+        where_clause = " AND ".join(filters)
 
         try:
             with self._audit_engine.connect() as conn:
@@ -432,9 +483,11 @@ class MetricRepository:
                         text(
                             f"""
                             SELECT case_id, business_date, metric_id, expected_anomaly,
-                                   root_cause_type, dimension, element
+                                   root_cause_type, dimension, element,
+                                   root_causes, confounders, expected_behavior,
+                                   scenario_id, split, seed, profile
                             FROM anomaly_ground_truth
-                            WHERE case_id IN ({placeholders})
+                            WHERE {where_clause}
                             """
                         ),
                         params,
@@ -451,6 +504,7 @@ class MetricRepository:
         agent_run = self.get_agent_run(run_id)
         metric_id = str(agent_run.get("metric_id")) if agent_run and agent_run.get("metric_id") else None
         run_started_at = agent_run.get("created_at") if agent_run else None
+        memory_read_memory_ids = self._memory_read_memory_ids_for_run(run_id)
         query_params: dict[str, Any] = {"run_mem_key_prefix": f"{run_id}|%"}
         if metric_id is not None:
             where_clause = """
@@ -504,8 +558,46 @@ class MetricRepository:
                 run_id=run_id,
                 metric_id=metric_id,
                 run_started_at=run_started_at,
+                memory_read_memory_ids=memory_read_memory_ids,
             )
         ]
+
+    def _memory_read_memory_ids_for_run(self, run_id: str) -> set[str]:
+        try:
+            with self._audit_engine.connect() as conn:
+                rows = (
+                    conn.execute(
+                        text(
+                            """
+                            SELECT output_summary
+                            FROM trace_step
+                            WHERE run_id = :run_id
+                              AND node = 'memory_read'
+                            ORDER BY seq ASC
+                            """
+                        ),
+                        {"run_id": run_id},
+                    )
+                    .mappings()
+                    .all()
+                )
+        except SQLAlchemyError as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
+        memory_ids: set[str] = set()
+        try:
+            for row in rows:
+                output_summary = _decode_json_column(row["output_summary"])
+                if not isinstance(output_summary, dict):
+                    continue
+                hits = output_summary.get("hits")
+                if not isinstance(hits, list):
+                    continue
+                for hit in hits:
+                    if isinstance(hit, dict) and hit.get("memory_id"):
+                        memory_ids.add(str(hit["memory_id"]))
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("SYSTEM_TABLE_READ_FAILED") from exc
+        return memory_ids
 
     def close(self) -> None:
         # 显式释放连接池，保证 -W error::ResourceWarning 下无未关闭连接告警。
@@ -516,6 +608,7 @@ class MetricRepository:
     def create_agent_run(self, row: dict[str, Any]) -> None:
         payload = {
             **row,
+            "runtime_version": int(row.get("runtime_version", 3)),
             "total_tokens": row.get("total_tokens"),
             "total_latency_ms": row.get("total_latency_ms"),
             "token_breakdown": json.dumps(row["token_breakdown"]) if row.get("token_breakdown") is not None else None,
@@ -524,11 +617,11 @@ class MetricRepository:
             """
             INSERT INTO agent_run (
               run_id, question, metric_id, target_date, status, error_code,
-              total_tokens, total_latency_ms, token_breakdown, created_at, finished_at
+              runtime_version, total_tokens, total_latency_ms, token_breakdown, created_at, finished_at
             )
             VALUES (
               :run_id, :question, :metric_id, :target_date, :status, :error_code,
-              :total_tokens, :total_latency_ms, :token_breakdown, :created_at, :finished_at
+              :runtime_version, :total_tokens, :total_latency_ms, :token_breakdown, :created_at, :finished_at
             )
             """,
             payload,
@@ -619,26 +712,36 @@ class MetricRepository:
         )
 
     def create_evidence(self, row: dict[str, Any]) -> None:
+        try:
+            identity = split_evidence_id(str(row["evidence_id"]))
+            run_id = str(row["run_id"])
+            alias = validate_evidence_alias(str(row.get("alias") or identity.alias))
+        except (KeyError, EvidenceIdentityError) as exc:
+            raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED") from exc
+        if identity.run_id != run_id or identity.alias != alias:
+            raise RuntimeError("SYSTEM_TABLE_WRITE_FAILED")
         payload = {
             **row,
+            "run_id": run_id,
+            "alias": alias,
             "query_spec": json.dumps(row["query_spec"]),
             "result_summary": json.dumps(row["result_summary"]),
         }
         self._insert(
             """
             INSERT INTO evidence (
-              evidence_id, run_id, query_spec, sql_text, sql_hash, guard_status,
+              evidence_id, run_id, alias, query_spec, sql_text, sql_hash, guard_status,
               result_summary, data_source, created_at
             )
             VALUES (
-              :evidence_id, :run_id, :query_spec, :sql_text, :sql_hash, :guard_status,
+              :evidence_id, :run_id, :alias, :query_spec, :sql_text, :sql_hash, :guard_status,
               :result_summary, :data_source, :created_at
             )
             """,
             payload,
             idempotency=_idempotency(
                 table="evidence",
-                predicates={"evidence_id": payload["evidence_id"]},
+                predicates={"run_id": payload["run_id"], "alias": payload["alias"]},
                 expected=payload,
                 json_fields={"query_spec", "result_summary"},
             ),
@@ -962,12 +1065,16 @@ def _memory_record_matches_run(
     run_id: str,
     metric_id: str | None,
     run_started_at: Any,
+    memory_read_memory_ids: set[str],
 ) -> bool:
     payload = row.get("payload")
     if not isinstance(payload, dict):
         raise RuntimeError("SYSTEM_TABLE_READ_FAILED")
     layer = str(row.get("layer"))
     mem_key = str(row.get("mem_key"))
+    allowed_suites = payload.get("eval_suites")
+    if allowed_suites and row.get("memory_id") not in memory_read_memory_ids and payload.get("run_id") != run_id:
+        return False
     if payload.get("run_id") == run_id or mem_key.startswith(f"{run_id}|"):
         return True
     if metric_id is None:

@@ -1,0 +1,92 @@
+{
+  "cycle_id": "20260618-2358",
+  "round": 13,
+  "layer": "Layer 1 - controller decision",
+  "selected_fix_category": "FIX-D",
+  "selected_target_layer": "policy/pipeline/data",
+  "target_files": [
+    "metric_rca/business/policy_registry.py",
+    "metric_rca/runtime/contribution_set_builder.py",
+    "metric_rca/data/anomaly_injection.py",
+    "tests/test_business_signal_policy.py",
+    "tests/test_runtime_plan.py",
+    "tests/test_contribution_set_builder.py",
+    "tests/test_complex_anomaly_injection.py",
+    "tests/test_multi_agent.py",
+    "docs/reference/decisions.md"
+  ],
+  "decision": "fix",
+  "status": "implemented",
+  "round13_metrics": {
+    "top1_rate": 0.913043,
+    "top3_rate": 0.956522,
+    "dominant_top1_rate": 0.913043,
+    "root_cause_set_recall_avg": 0.963768,
+    "root_cause_set_precision_avg": 0.762785,
+    "weighted_explanation_coverage_avg": 0.968478,
+    "top3_contains_all_major_causes_rate": 0.956522,
+    "per_family_gate": true,
+    "thresholds_met": false,
+    "blocking_gate": "root_cause_set_precision_avg < 0.85"
+  },
+  "rule_c1_blocked_categories": [],
+  "rule_c1_assessment": "Round 12 FIX-M improved top1/top3/top3_contains/precision and introduced no aggregate regression, so FIX-M is not blocked by RULE-C1; however FIX-D is required by RULE-C2/C3.",
+  "rule_c2_deferred_categories": [
+    "FIX-D"
+  ],
+  "rule_c2_triggered": true,
+  "rule_c3_triggered": true,
+  "rule_c3_assessment": "Active discovery gaps remain for C21 pay_cvr device discovery and MC02/MC07 UV affiliate discovery; FIX-D takes priority over deferred FIX-A interaction ordering.",
+  "rule_c4_triggered": false,
+  "revert_assessment": {
+    "required": false,
+    "decision": "keep",
+    "justification": "Round 13 improved or held all aggregate metrics versus Round 12; no >=2 aggregate regressions."
+  },
+  "rule_c5_category_streak": {
+    "current": "FIX-M",
+    "streak": 1,
+    "violates": false
+  },
+  "anti_stall_assessment": "Analyst stall_analysis recommends FIX-D; continuing ranking.py/FIX-A before discovery candidates exist is invalid.",
+  "evidence": {
+    "C21": "Trace uses only channel drilldown/select/fetch/calculate; selected paid_ads channel while expected device/mobile. Need device conversion discovery lane.",
+    "MC02": "UV channel contribution candidate set includes social/paid_ads; affiliate has actual>forecast in UV metric and is absent. Need separate campaign-signal discovery path, not ranker patch.",
+    "MC07": "Same UV affiliate absence as MC02, with top3_contains_all_major_causes=0 and weighted coverage 0.7.",
+    "MC03_guardrail": "MC03 is green under channel-only pay_cvr path; new pay_cvr device discovery must preserve channel conversion representatives and not regress MC03."
+  },
+  "planned_fix": "Declare explicit multi-lane discovery policies for pay_cvr and UV broad discovery so missing dimensions/signals are discovered upstream. Do not edit metric_rca/runtime/ranking.py.",
+  "forbidden_files_this_round": [
+    "metric_rca/runtime/ranking.py"
+  ],
+  "trajectory_reference": "eval_out/ptv/cycle-20260618-2358/round-13/ptv_trajectory.jsonl",
+  "fix_commit": "f6e0701",
+  "implemented_fix": {
+    "pay_cvr_discovery": "DEFAULT PAY_CVR discovery now declares channel and device conversion lanes with canonical E4 merge.",
+    "conversion_merge": "Conversion-only merges select the strongest verified conversion candidate across lanes and retain material channel conversion runners only when channel is the selected source.",
+    "seed_alignment": "Weak affiliate injection now applies on LAGGED_OBSERVE_DATE so MC02/MC07 affiliate truth is evidence-backed.",
+    "ranking_py_touched": false
+  },
+  "verification": [
+    {
+      "command": "PATH=.venv/bin:$PATH python -m pytest tests/test_business_signal_policy.py::test_pay_cvr_discovery_policy_declares_channel_and_device_conversion_lanes tests/test_runtime_plan.py::test_plan_compiler_builds_pay_cvr_channel_and_device_discovery_lanes tests/test_contribution_set_builder.py::test_contribution_set_builder_uses_strongest_conversion_candidate_as_selected tests/test_contribution_set_builder.py::test_contribution_set_builder_keeps_material_channel_conversion_runners_for_channel_selected_case tests/test_complex_anomaly_injection.py::test_complex_injection_functions_are_deterministic_and_exact -q",
+      "result": "5 passed"
+    },
+    {
+      "command": "PATH=.venv/bin:$PATH python -m pytest tests/test_business_signal_policy.py tests/test_runtime_plan.py tests/test_contribution_set_builder.py tests/test_merge_contribution_sets_tool.py tests/test_complex_anomaly_injection.py -q",
+      "result": "69 passed"
+    },
+    {
+      "command": "PATH=.venv/bin:$PATH make seed",
+      "result": "seed_profile=regression loaded 46-case slice"
+    },
+    {
+      "command": "PATH=.venv/bin:$PATH make test",
+      "result": "605 passed, 8 skipped, 29 warnings"
+    },
+    {
+      "command": "rg -n \"fallback|graceful|degrad|except Exception|pass\\s*$|default provider|mock|stub|demo\" <touched files>",
+      "result": "No production fallback hit; only existing test name contains fallback"
+    }
+  ]
+}

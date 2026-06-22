@@ -97,6 +97,40 @@ def test_validate_prediction_execution_accepts_tool_sequence_without_step_count(
     assert validate_prediction(pred) == []
 
 
+def test_validate_prediction_accepts_multi_cause_outcome() -> None:
+    pred = AspectPrediction(
+        case_id="MC01",
+        aspect="multi_cause_outcome",
+        prediction={
+            "root_causes": [
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads"},
+                {"root_cause_type": "stockout", "dimension": "category", "element": "electronics"},
+            ],
+            "top3_ok": True,
+        },
+        reasoning="gap_analyzer._analyze_multi_cause_outcome compares top3_ok to scorer output",
+        confidence=0.82,
+        risks=("rank_root_causes may put a non-major candidate into the top3 set",),
+    )
+
+    assert validate_prediction(pred) == []
+
+
+def test_validate_prediction_multi_cause_outcome_requires_root_causes_and_top3() -> None:
+    pred = AspectPrediction(
+        case_id="MC01",
+        aspect="multi_cause_outcome",
+        prediction={"root_causes": []},
+        reasoning="docs/ptv/bindings/metricrca.md requires top3_ok for multi-cause predictions",
+        confidence=0.82,
+        risks=("prediction writer may omit top3_ok for non-MC cases",),
+    )
+
+    warnings = validate_prediction(pred)
+
+    assert any("missing required key 'top3_ok'" in warning for warning in warnings)
+
+
 def test_validate_prediction_unknown_aspect() -> None:
     pred = AspectPrediction(
         case_id="x", aspect="custom_aspect",
@@ -237,6 +271,10 @@ def _actual(
     intent_ok: int = 1,
     anomaly_ok: int = 1,
     top1_ok: int = 1,
+    top3_ok: int = 1,
+    root_cause_set_recall: float = 1.0,
+    weighted_explanation_coverage: float = 1.0,
+    top3_contains_all_major_causes: int = 1,
     evidence_coverage: float = 1.0,
     memory_pollution_ok: int = 1,
     trace_step_count: int = 5,
@@ -248,6 +286,10 @@ def _actual(
         "intent_ok": intent_ok,
         "anomaly_ok": anomaly_ok,
         "top1_ok": top1_ok,
+        "top3_ok": top3_ok,
+        "root_cause_set_recall": root_cause_set_recall,
+        "weighted_explanation_coverage": weighted_explanation_coverage,
+        "top3_contains_all_major_causes": top3_contains_all_major_causes,
         "evidence_coverage": evidence_coverage,
         "memory_pollution_ok": memory_pollution_ok,
         "sql_safe": 1,
@@ -487,6 +529,70 @@ def test_gap_outcome_null_top1_is_not_asserted() -> None:
     report = analyze_gaps([pred], [actual])
 
     assert report.gaps[0].divergence == DIVERGENCE_CORRECT
+
+
+def test_gap_multi_cause_outcome_correct() -> None:
+    pred = AspectPrediction(
+        case_id="MC01",
+        aspect="multi_cause_outcome",
+        prediction={
+            "root_causes": [
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads"},
+                {"root_cause_type": "stockout", "dimension": "category", "element": "electronics"},
+            ],
+            "top3_ok": True,
+        },
+        reasoning="rank_root_causes should keep both major mechanisms inside top3",
+        confidence=0.8,
+        risks=("top3_contains_all_major_causes may drop below the scorer threshold",),
+    )
+
+    report = analyze_gaps([pred], [_actual("MC01", top3_ok=1, root_cause_set_recall=1.0)])
+
+    assert report.gaps[0].divergence == DIVERGENCE_CORRECT
+
+
+def test_gap_multi_cause_outcome_complexity_gap_when_predicted_pass_fails() -> None:
+    pred = AspectPrediction(
+        case_id="MC03",
+        aspect="multi_cause_outcome",
+        prediction={
+            "root_causes": [
+                {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "social"},
+                {"root_cause_type": "conversion_drop", "dimension": "channel", "element": "organic"},
+            ],
+            "top3_ok": True,
+        },
+        reasoning="plan_compiler should drill into channel for pay_cvr multi-cause cases",
+        confidence=0.7,
+        risks=("device drilldown may outrank channel conversion candidates",),
+    )
+
+    report = analyze_gaps([pred], [_actual("MC03", top3_ok=0, root_cause_set_recall=0.0)])
+
+    assert report.gaps[0].divergence == DIVERGENCE_COMPLEXITY_GAP
+    assert "predicted multi-cause top3 pass but actual fail" in report.gaps[0].detail
+
+
+def test_gap_multi_cause_outcome_overfit_when_predicted_fail_passes() -> None:
+    pred = AspectPrediction(
+        case_id="MC02",
+        aspect="multi_cause_outcome",
+        prediction={
+            "root_causes": [
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "paid_ads"},
+                {"root_cause_type": "campaign_traffic_drop", "dimension": "channel", "element": "social"},
+            ],
+            "top3_ok": False,
+        },
+        reasoning="rank_root_causes previously missed one channel cause in MC02",
+        confidence=0.66,
+        risks=("diversified top3 may now include the missing channel cause",),
+    )
+
+    report = analyze_gaps([pred], [_actual("MC02", top3_ok=1, root_cause_set_recall=0.85)])
+
+    assert report.gaps[0].divergence == DIVERGENCE_OVERFIT
 
 
 def test_gap_missing_actual_case() -> None:

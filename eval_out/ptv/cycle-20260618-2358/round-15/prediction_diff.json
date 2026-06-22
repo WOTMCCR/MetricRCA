@@ -1,0 +1,40 @@
+{
+  "added_keys_count": 0,
+  "changed_all": true,
+  "changed_count": 276,
+  "changed_keys_sample": [
+    "C06_gmv_multi_channel_drop/evidence",
+    "C06_gmv_multi_channel_drop/execution",
+    "C06_gmv_multi_channel_drop/intent",
+    "C06_gmv_multi_channel_drop/memory",
+    "C06_gmv_multi_channel_drop/multi_cause_outcome",
+    "C06_gmv_multi_channel_drop/outcome",
+    "C07_gmv_category_channel_cross/evidence",
+    "C07_gmv_category_channel_cross/execution",
+    "C07_gmv_category_channel_cross/intent",
+    "C07_gmv_category_channel_cross/memory",
+    "C07_gmv_category_channel_cross/multi_cause_outcome",
+    "C07_gmv_category_channel_cross/outcome",
+    "C08_gmv_aov_drop/evidence",
+    "C08_gmv_aov_drop/execution",
+    "C08_gmv_aov_drop/intent",
+    "C08_gmv_aov_drop/memory",
+    "C08_gmv_aov_drop/multi_cause_outcome",
+    "C08_gmv_aov_drop/outcome",
+    "C09_gmv_uv_organic_drop/evidence",
+    "C09_gmv_uv_organic_drop/execution"
+  ],
+  "compared_to_round": 14,
+  "removed_keys_count": 0,
+  "round": 15,
+  "round15_basis": {
+    "base_commit": "54b6519700c9873abe484c1819123924fb56c359",
+    "fix_category_in_effect": "FIX-M",
+    "note": "conversion-only merge selection is now contribution_pct-first and source lookup accepts selected runner candidates",
+    "previous_fix_commit": "77255d1",
+    "round": 15
+  },
+  "same_keys_count": 276,
+  "total_current": 276,
+  "total_previous": 276
+}

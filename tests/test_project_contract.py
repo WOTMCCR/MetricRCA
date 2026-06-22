@@ -10,6 +10,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _compact_make_output(stdout: str) -> str:
+    return " ".join(token for token in stdout.split() if token != "\\")
+
+
 def test_pyproject_declares_current_phase_dependencies() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
     assert pyproject["project"]["name"] == "metric_rca"
@@ -31,6 +35,7 @@ def test_pyproject_declares_current_phase_dependencies() -> None:
         "uvicorn",
         "httpx[socks]",
         "pytest",
+        "pyyaml",
     }
     forbidden_phase_gt1 = {
         "streamlit",
@@ -54,7 +59,6 @@ def test_pyproject_declares_current_phase_dependencies() -> None:
 def test_makefile_targets_match_documented_commands() -> None:
     expected = {
         "up": "docker compose up -d mysql",
-        "seed": "METRIC_RCA_DATA_SEED=20260606 python -m metric_rca.data.seed_data",
         "api": "uvicorn metric_rca.api.main:app --reload",
         "ui": "npm run dev --prefix frontend",
         "eval": "python -m metric_rca.evals.runner",
@@ -74,13 +78,107 @@ def test_makefile_targets_match_documented_commands() -> None:
             if line and not line.startswith("export ") and not line.startswith("make[")
         ]
         assert lines[-1] == command
+    seed_result = subprocess.run(
+        ["make", "-n", "seed"],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    seed_output = _compact_make_output(seed_result.stdout)
+    assert (
+        "METRIC_RCA_DATA_SEED=20260606 METRIC_RCA_SEED_PROFILE=regression "
+        "METRIC_RCA_ALLOW_DESTRUCTIVE_SEED=false python -m metric_rca.data.seed_data"
+    ) in seed_output
+    assert "python -m metric_rca.data.scenario_seed" in seed_output
+    assert "--catalog metric_rca/data/scenarios/catalog.yaml" in seed_output
+    assert "--scenario-set metric_rca/data/scenarios/phase_c_full.yaml" in seed_output
     makefile = (ROOT / "Makefile").read_text()
     assert "streamlit" not in makefile
 
 
-def test_eval_stream_make_target_passes_eval_id() -> None:
+def test_makefile_seed_profile_and_destructive_flags_are_explicit() -> None:
     result = subprocess.run(
-        ["make", "-n", "eval-stream", "EVAL_ID=eval-predict-test"],
+        ["make", "-n", "seed", "SEED_PROFILE=acceptance", "ALLOW_DESTRUCTIVE_SEED=true"],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    output = _compact_make_output(result.stdout)
+    assert (
+        "METRIC_RCA_SEED_PROFILE=acceptance METRIC_RCA_ALLOW_DESTRUCTIVE_SEED=true"
+        in output
+    )
+
+
+def test_makefile_declares_v3_eval_suite_targets() -> None:
+    expected = {
+        "eval-regression": "METRIC_RCA_EVAL_SUITE=regression python -m metric_rca.evals.runner",
+        "eval-blind": "METRIC_RCA_EVAL_SUITE=blind python -m metric_rca.evals.runner",
+        "eval-seed-sweep": "METRIC_RCA_EVAL_SUITE=seed-sweep python -m metric_rca.evals.runner",
+        "eval-mutation": "METRIC_RCA_EVAL_SUITE=mutation python -m metric_rca.evals.runner",
+        "eval-memory-treatment": "METRIC_RCA_EVAL_SUITE=memory-treatment python -m metric_rca.evals.runner",
+        "eval-acceptance": "METRIC_RCA_EVAL_SUITE=acceptance python -m metric_rca.evals.runner",
+    }
+    for target, command in expected.items():
+        result = subprocess.run(
+            ["make", "-n", target],
+            cwd=ROOT,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        lines = [
+            line
+            for line in result.stdout.splitlines()
+            if line and not line.startswith("export ") and not line.startswith("make[")
+        ]
+        assert lines[-1] == command
+
+
+def test_active_docs_do_not_claim_legacy_deepagents_runtime_or_20_case_only_eval() -> None:
+    active_docs = [
+        ROOT / "README.md",
+        ROOT / "docs" / "architecture.md",
+        ROOT / "docs" / "COMPLIANCE_MATRIX.md",
+        ROOT / "docs" / "final-design" / "06-v3-repair-plan.md",
+    ]
+    forbidden = [
+        "deepagents runtime",
+        "llm free tool-calling",
+        "old react loop",
+        "20-case eval",
+        "20 case eval",
+        "20-case-only",
+    ]
+    for path in active_docs:
+        source = path.read_text().lower()
+        assert not any(token in source for token in forbidden), path
+
+
+def test_historical_final_design_files_are_marked_superseded() -> None:
+    for path in sorted((ROOT / "docs" / "final-design").glob("0[0-5]-*.md")):
+        source = path.read_text().lower()
+        assert "historical v2 design" in source
+        assert "06-v3-repair-plan.md" in source
+
+
+def test_runner_entrypoint_has_no_legacy_runtime_memory_or_repair_methods() -> None:
+    source = (ROOT / "metric_rca" / "agent" / "runner.py").read_text()
+    forbidden = [
+        "_read_required_memory",
+        "_write_required_memory",
+        "_write_reflection_memory",
+        "_repair_instruction",
+        "Repair Reflection issue using persisted evidence only",
+    ]
+    assert not any(token in source for token in forbidden)
+
+
+def test_eval_stream_make_target_passes_eval_id_and_output_dir() -> None:
+    result = subprocess.run(
+        ["make", "-n", "eval-stream", "EVAL_ID=eval-predict-test", "EVAL_OUTPUT_DIR=eval_out/ptv/cycle-test"],
         cwd=ROOT,
         check=True,
         text=True,
@@ -91,7 +189,29 @@ def test_eval_stream_make_target_passes_eval_id() -> None:
         for line in result.stdout.splitlines()
         if line and not line.startswith("export ") and not line.startswith("make[")
     ]
-    assert lines[-1] == "python -m metric_rca.evals.runner --stream --eval-id eval-predict-test"
+    assert lines[-1] == (
+        "python -m metric_rca.evals.runner --stream --output-dir eval_out/ptv/cycle-test "
+        "--eval-id eval-predict-test"
+    )
+
+
+def test_eval_gaps_make_target_passes_eval_id_and_output_dir() -> None:
+    result = subprocess.run(
+        ["make", "-n", "eval-gaps", "EVAL_ID=eval-predict-test", "EVAL_OUTPUT_DIR=eval_out/ptv/cycle-test"],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    lines = [
+        line
+        for line in result.stdout.splitlines()
+        if line and not line.startswith("export ") and not line.startswith("make[")
+    ]
+    assert lines[-1] == (
+        "python -m metric_rca.evals.gap_analyzer --output-dir eval_out/ptv/cycle-test "
+        "--eval-id eval-predict-test"
+    )
 
 
 def test_compose_declares_mysql_only_contract() -> None:

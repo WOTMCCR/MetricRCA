@@ -15,7 +15,7 @@ from metric_rca.reporting.projector import (
 def test_projector_builds_report_from_persisted_e4_selected_candidate() -> None:
     report = build_report_from_persisted_artifacts(
         agent_run=_agent_run(status="succeeded"),
-        evidences=_evidences(e4_summary={"selected_candidate": _candidate()}),
+        evidences=_evidences(e4_summary=_e4_summary(_candidate())),
         tasks=[],
     )
 
@@ -49,9 +49,10 @@ def test_projector_rejects_missing_e4() -> None:
 def test_projector_rejects_malformed_e4() -> None:
     malformed_inputs = [
         {},
-        {"selected_candidate": None},
-        {"selected_candidate": {"root_cause_type": "campaign_traffic_drop"}},
-        {"selected_candidate": {**_candidate(), "contribution_pct": True}},
+        {"contribution_set": {}},
+        {"contribution_set": {"selected_candidate": None}},
+        {"contribution_set": {"selected_candidate": {"root_cause_type": "campaign_traffic_drop"}}},
+        {"contribution_set": {"selected_candidate": {**_candidate(), "contribution_pct": True}}},
     ]
 
     for summary in malformed_inputs:
@@ -76,7 +77,7 @@ def test_projector_rejects_missing_or_malformed_e4_for_succeeded_run() -> None:
     assert (
         build_report_from_persisted_artifacts(
             agent_run=_agent_run(status="succeeded"),
-            evidences=_evidences(e4_summary={"selected_candidate": {"verdict": "confirmed"}}),
+            evidences=_evidences(e4_summary={"contribution_set": {"selected_candidate": {"verdict": "confirmed"}}}),
             tasks=[],
         )
         is None
@@ -86,7 +87,7 @@ def test_projector_rejects_missing_or_malformed_e4_for_succeeded_run() -> None:
 def test_projector_report_has_no_unverified_numeric_fields() -> None:
     report = build_report_from_persisted_artifacts(
         agent_run=_agent_run(status="succeeded"),
-        evidences=_evidences(e4_summary={"selected_candidate": _candidate()}),
+        evidences=_evidences(e4_summary=_e4_summary(_candidate())),
         tasks=[],
     )
 
@@ -113,7 +114,7 @@ def test_projector_rejects_foreign_or_missing_candidate_evidence_ids() -> None:
     assert (
         build_report_from_persisted_artifacts(
             agent_run=_agent_run(status="succeeded"),
-            evidences=_evidences(e4_summary={"selected_candidate": foreign}),
+            evidences=_evidences(e4_summary=_e4_summary(foreign)),
             tasks=[],
         )
         is None
@@ -121,7 +122,7 @@ def test_projector_rejects_foreign_or_missing_candidate_evidence_ids() -> None:
     assert (
         build_report_from_persisted_artifacts(
             agent_run=_agent_run(status="succeeded"),
-            evidences=_evidences(e4_summary={"selected_candidate": missing}),
+            evidences=_evidences(e4_summary=_e4_summary(missing)),
             tasks=[],
         )
         is None
@@ -129,7 +130,7 @@ def test_projector_rejects_foreign_or_missing_candidate_evidence_ids() -> None:
 
 
 def test_projector_rejects_candidate_evidence_not_persisted_passed() -> None:
-    evidences = _evidences(e4_summary={"selected_candidate": _candidate()})
+    evidences = _evidences(e4_summary=_e4_summary(_candidate()))
     evidences[1] = {**evidences[1], "guard_status": "rejected"}
 
     report = build_report_from_persisted_artifacts(
@@ -163,7 +164,7 @@ def test_projector_no_anomaly_e1_only() -> None:
 def test_projector_failed_run_no_report() -> None:
     report = build_report_from_persisted_artifacts(
         agent_run=_agent_run(status="failed", error_code="REFLECTION_REPAIR_FAILED"),
-        evidences=_evidences(e4_summary={"selected_candidate": _candidate()}),
+        evidences=_evidences(e4_summary=_e4_summary(_candidate())),
         tasks=[],
     )
 
@@ -187,10 +188,10 @@ def test_projector_no_anomaly_rejects_task_or_candidate() -> None:
 
 
 def test_projector_helpers_are_deterministic_and_alias_scoped() -> None:
-    evidences = _evidences(e4_summary={"selected_candidate": _candidate()})
+    evidences = _evidences(e4_summary=_e4_summary(_candidate()))
     by_alias = evidence_by_alias([*evidences, _evidence("foreign:E1")], run_id="run-1")
-    candidate = project_candidate_from_e4({"selected_candidate": _candidate()})
-    claims = numeric_claims_from_e4({"selected_candidate": _candidate()}, "run-1:E4")
+    candidate = project_candidate_from_e4(_e4_summary(_candidate()))
+    claims = numeric_claims_from_e4(_e4_summary(_candidate()), "run-1:E4")
 
     assert sorted(by_alias) == ["E1", "E2", "E3", "E4", "E_rank"]
     assert candidate == {
@@ -204,9 +205,9 @@ def test_projector_helpers_are_deterministic_and_alias_scoped() -> None:
 
 def test_project_candidates_from_e4_projects_top_k_display_fields() -> None:
     candidates = project_candidates_from_e4(
-        {
-            "selected_candidate": _candidate(),
-            "candidates": [
+        _e4_summary(
+            _candidate(),
+            candidates=[
                 _candidate(),
                 {
                     **_candidate(),
@@ -216,7 +217,7 @@ def test_project_candidates_from_e4_projects_top_k_display_fields() -> None:
                     "eng_confidence": 0.25,
                 },
             ],
-        }
+        )
     )
 
     assert candidates == [
@@ -227,7 +228,7 @@ def test_project_candidates_from_e4_projects_top_k_display_fields() -> None:
             "verdict": "confirmed",
             "contribution_pct": 0.9,
             "eng_confidence": 0.85,
-                "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4", "run-1:E_rank"],
+            "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4", "run-1:E_rank"],
         },
         {
             "root_cause_type": "campaign_traffic_drop",
@@ -236,7 +237,7 @@ def test_project_candidates_from_e4_projects_top_k_display_fields() -> None:
             "verdict": "likely",
             "contribution_pct": 0.1,
             "eng_confidence": 0.25,
-                "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4", "run-1:E_rank"],
+            "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4", "run-1:E_rank"],
         },
     ]
 
@@ -244,10 +245,12 @@ def test_project_candidates_from_e4_projects_top_k_display_fields() -> None:
 def test_project_candidates_from_e4_rejects_malformed_top_k_without_partial_projection() -> None:
     candidates = project_candidates_from_e4(
         {
-            "candidates": [
-                _candidate(),
-                {**_candidate(), "element": ""},
-            ],
+            "contribution_set": {
+                "candidates": [
+                    _candidate(),
+                    {**_candidate(), "element": ""},
+                ]
+            }
         }
     )
 
@@ -276,6 +279,24 @@ def _candidate() -> dict[str, Any]:
         "eng_confidence": 0.85,
         "verdict": "confirmed",
         "evidence_ids": ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4", "run-1:E_rank"],
+    }
+
+
+def _e4_summary(candidate: dict[str, Any], *, candidates: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    candidate_list = candidates or [candidate]
+    evidence_ids: list[str] = []
+    for item in [candidate, *candidate_list]:
+        for evidence_id in item.get("evidence_ids", []):
+            if evidence_id not in evidence_ids:
+                evidence_ids.append(evidence_id)
+    return {
+        "contribution_set": {
+            "selected_candidate": candidate,
+            "candidates": candidate_list,
+            "evidence_ids": evidence_ids,
+            "factor_graph": {},
+            "selection_evidence_id": None,
+        },
     }
 
 

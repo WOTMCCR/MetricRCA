@@ -21,6 +21,14 @@ class EvalCase:
 
 
 @dataclass(frozen=True)
+class RootCauseTruth:
+    root_cause_type: str
+    dimension: str | None
+    element: str | None
+    weight: float = 1.0
+
+
+@dataclass(frozen=True)
 class GroundTruth:
     case_id: str
     business_date: date
@@ -29,6 +37,7 @@ class GroundTruth:
     root_cause_type: str | None
     dimension: str | None
     element: str | None
+    root_causes: tuple[RootCauseTruth, ...] = ()
 
 
 @dataclass(frozen=True)

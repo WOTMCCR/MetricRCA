@@ -1,0 +1,93 @@
+{
+  "case_id": "MC03_cvr_multi_signal_drop",
+  "intent_ok": 1,
+  "anomaly_ok": 1,
+  "top1_ok": 1,
+  "top3_ok": 0,
+  "dominant_top1_ok": 1,
+  "root_cause_set_recall": 0.5,
+  "root_cause_set_precision": 0.5,
+  "weighted_explanation_coverage": 0.67,
+  "top3_contains_all_major_causes": 0,
+  "evidence_coverage": 1.0,
+  "sql_safe": 1,
+  "reflection_repair_ok": 1,
+  "report_traceable_ok": 1,
+  "memory_pollution_ok": 1,
+  "no_anomaly_task_ok": 1,
+  "adtributor_used": 0,
+  "multi_agent_path": "single_agent",
+  "detail": {
+    "status": "succeeded",
+    "metric_id": "pay_cvr",
+    "expected_metric": "pay_cvr",
+    "selected_candidate": {
+      "element": "social",
+      "verdict": "confirmed",
+      "dimension": "channel",
+      "surprise_js": null,
+      "evidence_ids": [
+        "eval-result-MC03_cvr_multi_signal_drop:E1",
+        "eval-result-MC03_cvr_multi_signal_drop:E2_channel",
+        "eval-result-MC03_cvr_multi_signal_drop:E_select_channel",
+        "eval-result-MC03_cvr_multi_signal_drop:E3_ch",
+        "eval-result-MC03_cvr_multi_signal_drop:E4_channel",
+        "eval-result-MC03_cvr_multi_signal_drop:E4",
+        "eval-result-MC03_cvr_multi_signal_drop:E_rank"
+      ],
+      "eng_confidence": 1.0,
+      "root_cause_type": "conversion_drop",
+      "signal_severity": 0.7070340826686005,
+      "contribution_pct": 0.6754416349151366,
+      "evidence_support": 1.0,
+      "explanatory_power": null,
+      "reflection_factor": 1.0,
+      "dimension_elements": []
+    },
+    "expected_root_causes": [
+      {
+        "root_cause_type": "conversion_drop",
+        "dimension": "channel",
+        "element": "social",
+        "weight": 0.67
+      },
+      {
+        "root_cause_type": "conversion_drop",
+        "dimension": "channel",
+        "element": "organic",
+        "weight": 0.33
+      }
+    ],
+    "token_count": 0,
+    "latency_ms": 0,
+    "sql_count": 18,
+    "trace_step_count": 11,
+    "memory_read_seen": false,
+    "tool_sequence": [
+      "detect_anomaly",
+      "drilldown_dimension",
+      "drilldown_dimension",
+      "select_signal_element",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "select_signal_element",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "merge_contribution_sets",
+      "rank_root_causes"
+    ],
+    "memory_record_count": 1,
+    "memory_layers": [
+      "semantic"
+    ],
+    "eval_attempts": 1,
+    "final_run_id": "eval-result-MC03_cvr_multi_signal_drop",
+    "memory_enabled": false,
+    "tags": [
+      "phase_c",
+      "multi_cause",
+      "discovery"
+    ],
+    "scenario_family": "multi_cause"
+  }
+}

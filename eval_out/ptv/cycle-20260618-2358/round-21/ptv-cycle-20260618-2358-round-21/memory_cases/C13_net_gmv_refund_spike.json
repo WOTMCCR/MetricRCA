@@ -1,0 +1,86 @@
+{
+  "phase": "memory",
+  "case_id": "C13_net_gmv_refund_spike",
+  "intent_ok": 1,
+  "anomaly_ok": 1,
+  "top1_ok": 1,
+  "top3_ok": 1,
+  "dominant_top1_ok": 1,
+  "root_cause_set_recall": 1.0,
+  "root_cause_set_precision": 1.0,
+  "weighted_explanation_coverage": 1.0,
+  "top3_contains_all_major_causes": 1,
+  "evidence_coverage": 1.0,
+  "sql_safe": 1,
+  "reflection_repair_ok": 1,
+  "report_traceable_ok": 1,
+  "memory_pollution_ok": 1,
+  "no_anomaly_task_ok": 1,
+  "adtributor_used": 1,
+  "multi_agent_path": "single_agent",
+  "detail": {
+    "status": "succeeded",
+    "metric_id": "net_gmv",
+    "expected_metric": "net_gmv",
+    "selected_candidate": {
+      "element": "1",
+      "verdict": "confirmed",
+      "dimension": "product",
+      "surprise_js": 0.0,
+      "evidence_ids": [
+        "ptv-cycle-20260618-2358-round-2bebe5ba:E1",
+        "ptv-cycle-20260618-2358-round-2bebe5ba:E2_product",
+        "ptv-cycle-20260618-2358-round-2bebe5ba:E3_prod_1",
+        "ptv-cycle-20260618-2358-round-2bebe5ba:E4",
+        "ptv-cycle-20260618-2358-round-2bebe5ba:E_rank"
+      ],
+      "eng_confidence": 1.0,
+      "root_cause_type": "complaint_or_quality_issue",
+      "signal_severity": 1.0,
+      "contribution_pct": 1.0,
+      "evidence_support": 1.0,
+      "explanatory_power": 1.0,
+      "reflection_factor": 1.0,
+      "dimension_elements": [
+        [
+          "product",
+          "1"
+        ]
+      ]
+    },
+    "expected_root_causes": [
+      {
+        "root_cause_type": "complaint_or_quality_issue",
+        "dimension": "product",
+        "element": "1",
+        "weight": 1.0
+      }
+    ],
+    "token_count": 0,
+    "latency_ms": 0,
+    "sql_count": 12,
+    "trace_step_count": 6,
+    "memory_read_seen": true,
+    "tool_sequence": [
+      "read_priors",
+      "detect_anomaly",
+      "drilldown_dimension",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "rank_root_causes"
+    ],
+    "memory_record_count": 1,
+    "memory_layers": [
+      "semantic"
+    ],
+    "eval_attempts": 1,
+    "final_run_id": "ptv-cycle-20260618-2358-round-2bebe5ba",
+    "memory_enabled": true,
+    "tags": [
+      "p7",
+      "net_gmv",
+      "specified_slice"
+    ],
+    "scenario_family": "net_gmv"
+  }
+}

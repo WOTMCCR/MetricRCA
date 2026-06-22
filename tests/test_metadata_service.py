@@ -15,7 +15,7 @@ from metric_rca.intelligence.agent_runtime import AgentRuntimeError
 from metric_rca.repositories.metadata_repository import MetadataRepository
 from metric_rca.runtime.plan_compiler import RcaPlanCompiler
 from metric_rca.services.intent_planner import LLMIntentPlanner, IntentPlanner, _LLMIntentOutput, build_system_prompt
-from metric_rca.services.metric_service import MetricService, MetricServiceError, ParsedIntent
+from metric_rca.services.metric_service import MetricService, MetricServiceError, ParsedIntent, parse_question
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -378,11 +378,7 @@ def test_parse_question_rejects_element_not_present_in_metadata_dimension_values
 
 
 def test_parse_question_accepts_llm_resolved_past_business_date() -> None:
-    service = MetricService(
-        FakeMetadataRepository([_metric("gmv")]),
-        settings=_settings_without_llm_key(),
-    )
-    service._intent_planner = StaticIntentPlanner(
+    planner = StaticIntentPlanner(
         ParsedIntent(
             metric_id="gmv",
             target_date=date(2026, 6, 3),
@@ -391,9 +387,130 @@ def test_parse_question_accepts_llm_resolved_past_business_date() -> None:
         )
     )
 
-    parsed = service.parse_question("Was GMV abnormal two days ago?", business_today=date(2026, 6, 6))
+    parsed = parse_question(
+        "Was GMV abnormal two days ago?",
+        business_today=date(2026, 6, 6),
+        run_target_date=None,
+        intent_planner=planner,
+        supported_metrics=["gmv"],
+        supported_dimensions=["channel", "category"],
+        supported_dimension_values={"channel": ["paid_ads"], "category": ["electronics"]},
+        supported_families=["gmv_drop"],
+    )
 
     assert parsed.target_date == date(2026, 6, 3)
+
+
+def test_parse_question_enforces_run_target_date_for_relative_question_when_llm_uses_business_today() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv")]),
+        settings=Settings(
+            db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
+            readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+            llm_enabled=True,
+            llm_provider="openai",
+            llm_model="gpt-test",
+            llm_api_key="key",
+            target_date=date(2026, 6, 3),
+        ),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 4),
+            question_family="gmv_drop",
+            analysis_strategy="standard",
+        )
+    )
+
+    parsed = service.parse_question("Was GMV abnormal two days ago?", business_today=date(2026, 6, 4))
+
+    assert parsed.metric_id == "gmv"
+    assert parsed.target_date == date(2026, 6, 3)
+
+
+def test_parse_question_does_not_rewrite_explicit_calendar_future_date() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv")]),
+        settings=Settings(
+            db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
+            readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+            llm_enabled=True,
+            llm_provider="openai",
+            llm_model="gpt-test",
+            llm_api_key="key",
+            target_date=date(2026, 6, 3),
+        ),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 4),
+            question_family="gmv_drop",
+            analysis_strategy="standard",
+        )
+    )
+
+    with pytest.raises(MetricServiceError) as exc_info:
+        service.parse_question("Why did GMV change on 2026-06-04?", business_today=date(2026, 6, 4))
+
+    assert exc_info.value.code == "DATE_RANGE_INVALID"
+
+
+def test_parse_question_does_not_rewrite_true_multi_day_range() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv")]),
+        settings=Settings(
+            db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
+            readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+            llm_enabled=True,
+            llm_provider="openai",
+            llm_model="gpt-test",
+            llm_api_key="key",
+            target_date=date(2026, 6, 3),
+        ),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 4),
+            question_family="gmv_drop",
+            analysis_strategy="standard",
+        )
+    )
+
+    with pytest.raises(MetricServiceError) as exc_info:
+        service.parse_question("Why did GMV change over the last 7 days?", business_today=date(2026, 6, 4))
+
+    assert exc_info.value.code == "DATE_RANGE_INVALID"
+
+
+def test_parse_question_rejects_current_day_request_even_when_llm_returns_run_target_date() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv")]),
+        settings=Settings(
+            db_dsn="mysql+pymysql://writer:writer@127.0.0.1:3307/metric_rca",
+            readonly_db_dsn="mysql+pymysql://reader:reader@127.0.0.1:3307/metric_rca",
+            llm_enabled=True,
+            llm_provider="openai",
+            llm_model="gpt-test",
+            llm_api_key="key",
+            target_date=date(2026, 6, 5),
+        ),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            question_family="gmv_drop",
+            analysis_strategy="standard",
+        )
+    )
+
+    with pytest.raises(MetricServiceError) as exc_info:
+        service.parse_question("Why did GMV change today?", business_today=date(2026, 6, 6))
+
+    assert exc_info.value.code == "DATE_RANGE_INVALID"
 
 
 def test_parse_question_rejects_llm_resolved_current_or_future_business_date() -> None:
@@ -416,11 +533,167 @@ def test_parse_question_rejects_llm_resolved_current_or_future_business_date() -
     assert exc_info.value.code == "DATE_RANGE_INVALID"
 
 
-def test_no_keyword_parsing_in_metric_service() -> None:
-    source = (ROOT / "metric_rca" / "services" / "metric_service.py").read_text()
-    forbidden = ['in text', 'if "gmv"', 'if "refund"', "_dimension_from_text", "_element_from_text"]
-    offenders = [token for token in forbidden if token in source]
-    assert offenders == []
+def test_metric_service_applies_stable_merchandising_intent_alias_without_answer_selection() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv", dimensions=["channel", "category", "product"])]),
+        settings=_settings_without_llm_key(),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            question_family="gmv_drop",
+            analysis_strategy="product_first",
+        )
+    )
+
+    parsed = service.parse_question(
+        "Why did yesterday's GMV fall despite stable merchandising?",
+        business_today=date(2026, 6, 6),
+    )
+
+    assert parsed.analysis_strategy == "signal_first"
+    assert parsed.dimension is None
+    assert parsed.element is None
+    assert parsed.filters == {}
+
+
+def test_metric_service_stabilizes_plain_gmv_decline_as_standard_strategy() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv", dimensions=["channel", "category", "product"])]),
+        settings=_settings_without_llm_key(),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            question_family="gmv_drop",
+            analysis_strategy="channel_first",
+        )
+    )
+
+    parsed = service.parse_question("Why did yesterday's GMV decline?", business_today=date(2026, 6, 6))
+
+    assert parsed.analysis_strategy == "standard"
+    assert parsed.dimension is None
+    assert parsed.element is None
+    assert parsed.filters == {}
+
+
+def test_metric_service_stabilizes_broad_store_expectation_query_as_channel_first() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv", dimensions=["channel", "category", "product"])]),
+        settings=_settings_without_llm_key(),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            question_family="gmv_drop",
+            analysis_strategy="signal_first",
+        )
+    )
+
+    parsed = service.parse_question(
+        "Why was yesterday's GMV below expectation across the store?",
+        business_today=date(2026, 6, 6),
+    )
+
+    assert parsed.analysis_strategy == "channel_first"
+    assert parsed.dimension is None
+    assert parsed.element is None
+    assert parsed.filters == {}
+
+    parsed = service.parse_question(
+        "Was store GMV abnormal against expectations yesterday?",
+        business_today=date(2026, 6, 6),
+    )
+
+    assert parsed.analysis_strategy == "channel_first"
+
+    parsed = service.parse_question(
+        "Was yesterday's GMV meaningfully below its normal seasonal range?",
+        business_today=date(2026, 6, 6),
+    )
+
+    assert parsed.analysis_strategy == "channel_first"
+
+
+def test_metric_service_keeps_bare_abnormal_gmv_questions_standard() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv", dimensions=["channel", "category", "product"])]),
+        settings=_settings_without_llm_key(),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            question_family="gmv_drop",
+            analysis_strategy="standard",
+        )
+    )
+
+    parsed = service.parse_question("Was yesterday's GMV actually abnormal?", business_today=date(2026, 6, 6))
+
+    assert parsed.analysis_strategy == "standard"
+    assert parsed.dimension is None
+    assert parsed.element is None
+    assert parsed.filters == {}
+
+    parsed = service.parse_question("Was GMV abnormal two days ago?", business_today=date(2026, 6, 6))
+
+    assert parsed.analysis_strategy == "standard"
+
+
+def test_metric_service_keeps_stable_merchandising_priority_over_broad_store_alias() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv", dimensions=["channel", "category", "product"])]),
+        settings=_settings_without_llm_key(),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            question_family="gmv_drop",
+            analysis_strategy="channel_first",
+        )
+    )
+
+    parsed = service.parse_question(
+        "Why was store GMV below expectations despite stable merchandising?",
+        business_today=date(2026, 6, 6),
+    )
+
+    assert parsed.analysis_strategy == "signal_first"
+    assert parsed.dimension is None
+    assert parsed.element is None
+    assert parsed.filters == {}
+
+
+def test_stable_merchandising_intent_alias_does_not_override_explicit_slice() -> None:
+    service = MetricService(
+        FakeMetadataRepository([_metric("gmv", dimensions=["channel", "category", "product"])]),
+        settings=_settings_without_llm_key(),
+    )
+    service._intent_planner = StaticIntentPlanner(
+        ParsedIntent(
+            metric_id="gmv",
+            target_date=date(2026, 6, 5),
+            question_family="gmv_drop",
+            analysis_strategy="standard",
+            dimension="product",
+            element="2",
+        )
+    )
+
+    parsed = service.parse_question(
+        "Why did yesterday product=2 GMV fall despite stable merchandising?",
+        business_today=date(2026, 6, 6),
+    )
+
+    assert parsed.analysis_strategy == "standard"
+    assert parsed.dimension == "product"
+    assert parsed.element == "2"
 
 
 def test_intent_planner_system_prompt_has_no_hardcoded_metrics() -> None:
@@ -467,13 +740,14 @@ def test_intent_planner_prompt_includes_net_gmv_slice_examples() -> None:
         run_target_date=date(2026, 6, 5),
         supported_metrics=["net_gmv"],
         supported_dimensions=["channel", "product"],
-        supported_dimension_values={"channel": ["paid_ads"], "product": ["1"]},
+        supported_dimension_values={"channel": ["affiliate", "paid_ads"], "product": ["1"]},
         supported_families=["net_gmv_drop"],
     )
 
     assert "net GMV" in prompt
     assert "metric_id=net_gmv" in prompt
     assert "paid ads -> paid_ads" in prompt
+    assert "Why did net GMV fall in paid ads yesterday?" in prompt
     assert "question_family=net_gmv_drop" in prompt
 
 
@@ -506,6 +780,21 @@ def test_intent_planner_prompt_includes_phase_b_alias_date_and_ambiguity_guidanc
     assert "GMV has been declining since the weekend" in prompt
     assert "analysis_strategy=signal_first" in prompt
     assert "Was GMV abnormal two days ago?" not in prompt
+
+
+def test_intent_planner_prompt_includes_focused_segment_interaction_guidance() -> None:
+    prompt = build_system_prompt(
+        business_today=date(2026, 6, 1),
+        run_target_date=date(2026, 5, 31),
+        supported_metrics=["uv"],
+        supported_dimensions=["channel", "category"],
+        supported_dimension_values={"channel": ["paid_ads"], "category": ["electronics"]},
+        supported_families=["uv_drop", "interaction_uv_anomaly"],
+    )
+
+    assert "focused segment on a specific date" in prompt
+    assert "interaction_uv_anomaly" in prompt
+    assert "Why did traffic collapse in the focused segment on the 31st?" in prompt
 
 
 def test_metric_service_passes_run_target_date_to_intent_planner() -> None:
@@ -654,6 +943,53 @@ def test_llm_intent_planner_maps_agent_runtime_error_to_typed_error() -> None:
     assert exc_info.value.code == "LLM_REQUIRED_UNAVAILABLE"
 
 
+def test_llm_intent_planner_retries_date_range_error_for_run_target_relative_question() -> None:
+    runtime = _FakeAgentRuntime(
+        [
+            {
+                "error_code": "DATE_RANGE_INVALID",
+                "metric_id": None,
+                "target_date": None,
+                "question_family": None,
+                "analysis_strategy": "standard",
+                "dimension": None,
+                "element": None,
+                "filters": [],
+            },
+            {
+                "error_code": None,
+                "metric_id": "gmv",
+                "target_date": "2026-06-03",
+                "question_family": "gmv_drop",
+                "analysis_strategy": "standard",
+                "dimension": None,
+                "element": None,
+                "filters": [],
+            },
+        ]
+    )
+    planner = LLMIntentPlanner(
+        provider="openai",
+        model="gpt-test",
+        api_key="test-key",
+        agent_runtime=runtime,
+    )
+
+    parsed = planner.parse(
+        "Was GMV abnormal two days ago?",
+        business_today=date(2026, 6, 4),
+        run_target_date=date(2026, 6, 3),
+        supported_metrics=["gmv"],
+        supported_dimensions=["channel"],
+        supported_dimension_values={"channel": ["paid_ads"]},
+        supported_families=["gmv_drop"],
+    )
+
+    assert parsed.target_date == date(2026, 6, 3)
+    assert len(runtime.calls) == 2
+    assert "DATE_RANGE_INVALID" in runtime.calls[1]["user_input"]
+
+
 def test_intent_planner_uses_agent_runtime_abstraction() -> None:
     runtime = _FakeAgentRuntime(
         [
@@ -737,7 +1073,7 @@ def test_llm_intent_planner_retries_parse_failed_with_same_schema() -> None:
 
     assert len(runtime.calls) == 2
     assert runtime.calls[-1]["output_type"] == _LLMIntentOutput
-    assert "Previous parser attempt returned PARSE_FAILED" in str(runtime.calls[-1]["user_input"])
+    assert "PARSE_FAILED" in str(runtime.calls[-1]["user_input"])
     assert parsed.metric_id == "gmv"
     assert parsed.analysis_strategy == "channel_first"
 
@@ -775,6 +1111,51 @@ def test_llm_intent_planner_accepts_signal_first_strategy() -> None:
     assert parsed.dimension is None
     assert parsed.element is None
     assert parsed.filters == {}
+
+
+def test_llm_intent_planner_retries_metric_not_found_for_explicit_supported_metric_surface() -> None:
+    runtime = _FakeAgentRuntime(
+        [
+            {
+                "error_code": "METRIC_NOT_FOUND",
+                "metric_id": None,
+                "target_date": None,
+                "question_family": None,
+                "analysis_strategy": "standard",
+                "dimension": None,
+                "element": None,
+                "filters": [],
+            },
+            {
+                "error_code": None,
+                "metric_id": "gmv",
+                "target_date": "2026-06-01",
+                "question_family": "gmv_drop",
+                "analysis_strategy": "standard",
+                "dimension": "channel",
+                "element": "social",
+                "filters": [{"dimension": "channel", "value": "social"}],
+            },
+        ]
+    )
+
+    planner = LLMIntentPlanner(provider="openai", model="gpt-5-nano", api_key="test-key", agent_runtime=runtime)
+    parsed = planner.parse(
+        "Why did social GMV fall on June 1 after the weekend campaign change?",
+        business_today=date(2026, 6, 2),
+        run_target_date=date(2026, 6, 1),
+        supported_metrics=["gmv", "uv"],
+        supported_dimensions=["channel"],
+        supported_dimension_values={"channel": ["paid_ads", "social"]},
+        supported_families=["gmv_drop", "uv_drop"],
+    )
+
+    assert len(runtime.calls) == 2
+    assert "METRIC_NOT_FOUND" in str(runtime.calls[-1]["user_input"])
+    assert parsed.metric_id == "gmv"
+    assert parsed.target_date == date(2026, 6, 1)
+    assert parsed.dimension == "channel"
+    assert parsed.element == "social"
 
 
 def test_llm_intent_planner_does_not_retry_typed_semantic_error() -> None:

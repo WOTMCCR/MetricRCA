@@ -1,0 +1,3 @@
+python -m metric_rca.evals.runner --stream --output-dir eval_out/ptv/cycle-20260618-2358 --eval-id round-04
+{"error_code": "SYSTEM_TABLE_WRITE_FAILED", "message": "SYSTEM_TABLE_WRITE_FAILED: round-04-mem-gmv_paid_ads_drop"}
+make: *** [Makefile:50: eval-stream] Error 1

@@ -21,7 +21,7 @@ from metric_rca.domain.models import PHASE1_METRICS
 
 
 REQUIRED_SIGNAL_TYPES: frozenset[str] = frozenset(
-    {"campaign", "inventory", "conversion", "refund_quality"}
+    {"campaign", "inventory", "conversion", "refund_quality", "interaction"}
 )
 
 
@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     # 业务终止上限（业务安全机制，不依赖框架 recursion_limit）。
     max_steps: int = 8
-    max_query: int = 12
+    max_query: int = 20
     max_drilldown_depth: int = 3
     max_repair: int = 1
 
@@ -69,6 +69,7 @@ class Settings(BaseSettings):
     eval_llm_max_attempts: int = Field(default=3, ge=1)
     eval_llm_retry_seconds: float = 20.0
     eval_concurrency: int = Field(default=1, ge=1)
+    eval_suite: Literal["regression", "blind", "seed-sweep", "mutation", "memory-treatment", "acceptance"] = "regression"
     multi_agent_enabled: bool = False
     adtributor_t_ep: float = 0.67
     adtributor_t_eep: float = 0.10
@@ -84,28 +85,9 @@ class Settings(BaseSettings):
             "inventory": "stockout_rate",
             "conversion": "pay_cvr",
             "refund_quality": "complaint_rate",
+            "interaction": "gmv",
         }
     )
-    root_cause_type_by_metric: dict[str, str] = Field(
-        default_factory=lambda: {
-            "refund_rate": "complaint_or_quality_issue",
-            "pay_cvr": "conversion_drop",
-            "stockout_rate": "stockout",
-            "complaint_rate": "complaint_or_quality_issue",
-        }
-    )
-    root_cause_type_by_dimension: dict[str, str] = Field(
-        default_factory=lambda: {
-            "channel": "campaign_traffic_drop",
-            "category": "stockout",
-            "device": "conversion_drop",
-            "product": "stockout",
-        }
-    )
-    root_cause_type_by_dimension_element: dict[str, str] = Field(
-        default_factory=dict
-    )
-
     @model_validator(mode="after")
     def _required_provider_available(self) -> Settings:
         if self.llm_api_key is None and self.llm_provider in {None, "openai"}:
@@ -114,7 +96,7 @@ class Settings(BaseSettings):
         if signal_keys != REQUIRED_SIGNAL_TYPES:
             raise ValueError(
                 "CONFIG_INVALID: signal_metric_by_type must contain exactly campaign, "
-                "inventory, conversion, refund_quality"
+                "inventory, conversion, refund_quality, interaction"
             )
         invalid_signal_metrics = [
             metric_id

@@ -8,8 +8,13 @@ from typing import Any
 
 from pydantic import Field
 
-from metric_rca.config.settings import get_settings
-from metric_rca.domain.enums import EvidenceVerdict, RootCauseType
+from metric_rca.business.policy_registry import (
+    DEFAULT_POLICY_REGISTRY,
+    MetricPolicyRegistry,
+    PolicyRegistryError,
+    root_cause_type_for_metric_dimension,
+)
+from metric_rca.domain.enums import EvidenceVerdict
 from metric_rca.domain.models import MetricDefinition, RootCauseCandidate, StrictModel
 
 
@@ -28,12 +33,15 @@ def compute_dimension_contribution(
     baseline_rows: list[dict[str, Any]],
     evidence_ids: list[str],
     anomaly_direction: str | None = None,
+    policy_registry: MetricPolicyRegistry = DEFAULT_POLICY_REGISTRY,
     top_threshold: float = 0.60,
 ) -> AttributionResult:
     if not evidence_ids:
         return AttributionResult(ok=False, error_code="EVIDENCE_MISSING")
-    if not current_rows or not baseline_rows:
-        return AttributionResult(ok=False, error_code="ATTRIBUTION_COVERAGE_LOW")
+    if not current_rows:
+        return AttributionResult(ok=False, error_code="NO_CURRENT_DATA")
+    if not baseline_rows:
+        return AttributionResult(ok=False, error_code="INSUFFICIENT_BASELINE_DATA")
 
     current_by_element = _values_by_element(current_rows, dimension)
     baseline_by_element = _baseline_means_by_element(baseline_rows, dimension)
@@ -57,6 +65,15 @@ def compute_dimension_contribution(
     if total_bad_delta <= 0:
         return AttributionResult(ok=False, error_code="ATTRIBUTION_COVERAGE_LOW")
 
+    try:
+        root_cause_type = _root_cause_type(
+            metric_definition.metric_id,
+            dimension,
+            registry=policy_registry,
+        )
+    except PolicyRegistryError as exc:
+        return AttributionResult(ok=False, error_code=exc.code)
+
     raw_candidates: list[RootCauseCandidate] = []
     for element, bad_delta in bad_delta_by_element.items():
         if bad_delta <= 0:
@@ -68,7 +85,7 @@ def compute_dimension_contribution(
             score = contribution_pct * signal_severity * evidence_support
             raw_candidates.append(
                 RootCauseCandidate(
-                    root_cause_type=_root_cause_type(metric_definition.metric_id, dimension, element),
+                    root_cause_type=root_cause_type,
                     dimension=dimension,
                     element=element,
                     contribution_pct=contribution_pct,
@@ -186,15 +203,5 @@ def _gmv_factors(row: dict[str, float]) -> dict[str, float]:
     }
 
 
-def _root_cause_type(metric_id: str, dimension: str, element: str) -> str:
-    settings = get_settings()
-    metric_rule = settings.root_cause_type_by_metric.get(metric_id)
-    if metric_rule is not None:
-        return metric_rule
-    dimension_rule = settings.root_cause_type_by_dimension.get(dimension)
-    if dimension_rule is not None:
-        return dimension_rule
-    element_rule = settings.root_cause_type_by_dimension_element.get(f"{dimension}:{element}")
-    if element_rule is not None:
-        return element_rule
-    return RootCauseType.AOV_DROP.value
+def _root_cause_type(metric_id: str, dimension: str, *, registry: MetricPolicyRegistry) -> str:
+    return root_cause_type_for_metric_dimension(metric_id=metric_id, dimension=dimension, registry=registry)

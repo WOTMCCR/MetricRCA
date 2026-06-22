@@ -78,6 +78,194 @@ def test_reflection_low_attribution_coverage_returns_ATTRIBUTION_COVERAGE_LOW() 
     assert issue.suggested_action.args["metric_id"] == "gmv"
 
 
+def test_reflection_does_not_loop_low_coverage_after_adtributor_rank_evidence() -> None:
+    candidate = _candidate(
+        contribution_pct=0.3283161395107113,
+        evidence_ids=[
+            "run-1:E1",
+            "run-1:E2_channel",
+            "run-1:E_select_channel",
+            "run-1:E3_ch",
+            "run-1:E4_channel",
+            "run-1:E4",
+            "run-1:E_rank",
+        ],
+        dimension_elements=[("channel", "paid_ads")],
+    )
+    contribution_summary = _contribution_summary(candidate)
+    contribution_summary["ranker"] = "adtributor_internal"
+    contribution_summary["adtributor_status"] = "applied"
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2_channel"),
+        _evidence(
+            "run-1:E_select_channel",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "selected_element": "paid_ads",
+                "candidate_scores": [{"element": "paid_ads", "signal_score": 0.9748593844296922}],
+            },
+        ),
+        _evidence(
+            "run-1:E3_ch",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "value": 0.9748593844296922,
+            },
+        ),
+        _evidence("run-1:E4_channel"),
+        _evidence("run-1:E4", summary=contribution_summary),
+        _evidence("run-1:E_rank", summary=contribution_summary),
+    ]
+    state = _state(candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
+
+    assert result.passed is True
+    assert "ATTRIBUTION_COVERAGE_LOW" not in _checks(result)
+
+
+def test_reflection_keeps_low_coverage_when_candidate_does_not_bind_e4() -> None:
+    candidate = _candidate(
+        contribution_pct=0.3283161395107113,
+        verdict="possible",
+        evidence_ids=["run-1:E_rank"],
+    )
+    contribution_summary = _contribution_summary(candidate)
+    contribution_summary["ranker"] = "adtributor_internal"
+    contribution_summary["adtributor_status"] = "applied"
+    evidences = [
+        _evidence("run-1:E4", summary=contribution_summary),
+        _evidence("run-1:E_rank", summary=contribution_summary),
+    ]
+    state = _state(candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
+
+    assert result.passed is False
+    assert "ATTRIBUTION_COVERAGE_LOW" in _checks(result)
+
+
+def test_reflection_keeps_low_coverage_when_e4_is_not_persisted() -> None:
+    candidate = _candidate(contribution_pct=0.3283161395107113)
+    contribution_summary = _contribution_summary(candidate)
+    contribution_summary["ranker"] = "adtributor_internal"
+    contribution_summary["adtributor_status"] = "applied"
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2"),
+        _evidence(
+            "run-1:E3",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "value": 0.90,
+            },
+        ),
+        _evidence("run-1:E4", summary=contribution_summary),
+        _evidence("run-1:E_rank", summary=contribution_summary),
+    ]
+    persisted = _persisted_rows(evidences)
+    persisted.pop("run-1:E4")
+    state = _state(candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=persisted)
+
+    assert result.passed is False
+    assert "ATTRIBUTION_COVERAGE_LOW" in _checks(result)
+    assert "persisted_evidence" in _checks(result)
+
+
+def test_reflection_keeps_low_coverage_when_only_e4_marks_adtributor_rank() -> None:
+    candidate = _candidate(contribution_pct=0.3283161395107113)
+    e4_summary = _contribution_summary(candidate)
+    e4_summary["ranker"] = "adtributor_internal"
+    e4_summary["adtributor_status"] = "applied"
+    e_rank_summary = _contribution_summary(candidate)
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2"),
+        _evidence(
+            "run-1:E3",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "value": 0.90,
+            },
+        ),
+        _evidence("run-1:E4", summary=e4_summary),
+        _evidence("run-1:E_rank", summary=e_rank_summary),
+    ]
+    state = _state(candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
+
+    assert result.passed is False
+    assert "ATTRIBUTION_COVERAGE_LOW" in _checks(result)
+
+
+def test_reflection_keeps_low_coverage_when_candidate_does_not_bind_e_rank() -> None:
+    candidate = _candidate(
+        contribution_pct=0.3283161395107113,
+        verdict="possible",
+        evidence_ids=["run-1:E4"],
+    )
+    contribution_summary = _contribution_summary(candidate)
+    contribution_summary["ranker"] = "adtributor_internal"
+    contribution_summary["adtributor_status"] = "applied"
+    evidences = [
+        _evidence("run-1:E4", summary=contribution_summary),
+        _evidence("run-1:E_rank", summary=contribution_summary),
+    ]
+    state = _state(candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
+
+    assert result.passed is False
+    assert "ATTRIBUTION_COVERAGE_LOW" in _checks(result)
+
+
+def test_reflection_keeps_low_coverage_when_e_rank_persisted_summary_mismatches_state() -> None:
+    candidate = _candidate(contribution_pct=0.3283161395107113)
+    contribution_summary = _contribution_summary(candidate)
+    contribution_summary["ranker"] = "adtributor_internal"
+    contribution_summary["adtributor_status"] = "applied"
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2"),
+        _evidence(
+            "run-1:E3",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "value": 0.90,
+            },
+        ),
+        _evidence("run-1:E4", summary=contribution_summary),
+        _evidence("run-1:E_rank", summary=contribution_summary),
+    ]
+    persisted = _persisted_rows(evidences)
+    persisted["run-1:E_rank"]["result_summary"] = _contribution_summary(_candidate(contribution_pct=0.95))
+    state = _state(candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=persisted)
+
+    assert result.passed is False
+    assert "ATTRIBUTION_COVERAGE_LOW" in _checks(result)
+    assert "persisted_evidence" in _checks(result)
+
+
 def test_reflection_accepts_low_coverage_rate_candidate_with_matching_signal() -> None:
     candidate = _candidate(
         root_cause_type="complaint_or_quality_issue",
@@ -323,15 +511,30 @@ def test_reflection_top_candidate_must_match_persisted_e4_selected_candidate() -
         _evidence("run-1:E1"),
         _evidence("run-1:E2"),
         _evidence("run-1:E3"),
-        _evidence("run-1:E4", summary={"selected_candidate": state_candidate.model_dump(mode="json")}),
+        _evidence("run-1:E4", summary=_contribution_summary(state_candidate)),
     ]
     state = _state(candidates=[state_candidate], evidences=evidences)
     persisted = _persisted_rows(evidences)
-    persisted["run-1:E4"]["result_summary"] = {
-        "selected_candidate": persisted_candidate.model_dump(mode="json")
-    }
+    persisted["run-1:E4"]["result_summary"] = _contribution_summary(persisted_candidate)
 
     result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=persisted)
+
+    assert result.passed is False
+    assert "candidate_traceability" in _checks(result)
+
+
+def test_reflection_rejects_legacy_selected_candidate_only_e4_summary() -> None:
+    candidate = _candidate()
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2"),
+        _evidence("run-1:E3"),
+        _legacy_evidence("run-1:E4", summary={"selected_candidate": candidate.model_dump(mode="json")}),
+        _evidence("run-1:E_rank", summary=_contribution_summary(candidate)),
+    ]
+    state = _state(candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
 
     assert result.passed is False
     assert "candidate_traceability" in _checks(result)
@@ -426,6 +629,54 @@ def test_reflection_accepts_related_signal_metric_for_aliased_e3_evidence() -> N
     )
 
     result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(state["evidences"]))
+
+    assert result.passed is True
+
+
+def test_reflection_accepts_related_signal_metric_for_dynamic_selection_evidence() -> None:
+    candidate = _candidate(
+        dimension="channel",
+        element="organic",
+        evidence_ids=[
+            "run-1:E1",
+            "run-1:E2_channel",
+            "run-1:E_select_channel",
+            "run-1:E3_ch_organic",
+            "run-1:E4",
+            "run-1:E_rank",
+        ],
+    )
+    evidences = [
+        _evidence("run-1:E1", metric_id="uv"),
+        _evidence("run-1:E2_channel", metric_id="uv"),
+        _evidence(
+            "run-1:E_select_channel",
+            metric_id="gmv",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "selected_element": "organic",
+                "candidate_scores": [{"element": "organic", "signal_score": 0.88}],
+            },
+        ),
+        _evidence(
+            "run-1:E3_ch_organic",
+            metric_id="gmv",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "element": "organic",
+                "value": 0.90,
+            },
+        ),
+        _evidence("run-1:E4", metric_id="uv", summary={"selected_candidate": candidate.model_dump(mode="json")}),
+        _evidence("run-1:E_rank", metric_id="uv", summary={"selected_candidate": candidate.model_dump(mode="json")}),
+    ]
+    state = _state(metric_id="uv", candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
 
     assert result.passed is True
 
@@ -598,6 +849,118 @@ def test_reflection_passes_only_with_current_run_persisted_e1_to_e4() -> None:
     assert result == ReflectionResult(passed=True, issues=[], repaired=False, repair_count=0)
 
 
+def test_reflection_warns_but_passes_when_cross_chain_contributions_overlap() -> None:
+    paid_ads = _candidate(contribution_pct=0.70)
+    electronics = _candidate(
+        root_cause_type="stockout",
+        dimension="category",
+        element="electronics",
+        contribution_pct=0.60,
+        evidence_ids=["run-1:E1", "run-1:E2_category", "run-1:E3_category", "run-1:E4", "run-1:E_rank"],
+    )
+    summary = _contribution_summary(paid_ads)
+    summary["candidates"] = [
+        paid_ads.model_dump(mode="json"),
+        electronics.model_dump(mode="json"),
+    ]
+    summary["contribution_set"]["candidates"] = summary["candidates"]
+    summary["contribution_set"]["factor_graph"] = {"chain_evidence_ids": ["run-1:E4_channel", "run-1:E4_category"]}
+    evidences = [
+        _evidence("run-1:E1"),
+        _evidence("run-1:E2"),
+        _evidence(
+            "run-1:E3",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "value": 0.90,
+            },
+        ),
+        _evidence("run-1:E4", summary=summary),
+        _evidence("run-1:E_rank", summary=summary),
+    ]
+    state = _state(candidates=[paid_ads], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
+
+    assert result.passed is True
+    issue = next(issue for issue in result.issues if issue.check == "cross_chain_contribution_overlap")
+    assert issue.severity == "warning"
+
+
+def test_reflection_accepts_cross_chain_interaction_with_paired_non_causal_signals() -> None:
+    candidate = _candidate(
+        root_cause_type="interaction_channel_category",
+        dimension="channel",
+        element="paid_ads",
+        evidence_ids=[
+            "run-1:E1",
+            "run-1:E2_channel",
+            "run-1:E_select_channel",
+            "run-1:E3_ch_paid_ads",
+            "run-1:E4_channel",
+            "run-1:E2_category",
+            "run-1:E_select_category",
+            "run-1:E3_cat_electronics",
+            "run-1:E4_category",
+            "run-1:E4",
+            "run-1:E_rank",
+        ],
+        dimension_elements=[("channel", "paid_ads"), ("category", "electronics")],
+    )
+    summary = _contribution_summary(candidate)
+    summary["contribution_set"]["factor_graph"] = {
+        "chain_evidence_ids": ["run-1:E4_channel", "run-1:E4_category"]
+    }
+    evidences = [
+        _evidence("run-1:E1", summary={"metric_id": "gmv", "is_anomaly": True, "bad_direction": True}),
+        _evidence("run-1:E2_channel", summary={"metric_id": "gmv", "dimension": "channel"}),
+        _evidence(
+            "run-1:E_select_channel",
+            summary={"signal_type": "campaign", "signal_metric_id": "gmv", "dimension": "channel"},
+        ),
+        _evidence(
+            "run-1:E3_ch_paid_ads",
+            summary={
+                "signal_type": "campaign",
+                "signal_metric_id": "gmv",
+                "dimension": "channel",
+                "element": "paid_ads",
+                "is_anomaly": False,
+                "bad_direction": False,
+            },
+        ),
+        _evidence("run-1:E4_channel", summary={"metric_id": "gmv", "dimension": "channel"}),
+        _evidence("run-1:E2_category", summary={"metric_id": "gmv", "dimension": "category"}),
+        _evidence(
+            "run-1:E_select_category",
+            summary={"signal_type": "inventory", "signal_metric_id": "stockout_rate", "dimension": "category"},
+        ),
+        _evidence(
+            "run-1:E3_cat_electronics",
+            metric_id="stockout_rate",
+            summary={
+                "signal_type": "inventory",
+                "signal_metric_id": "stockout_rate",
+                "dimension": "category",
+                "element": "electronics",
+                "is_anomaly": False,
+                "bad_direction": False,
+            },
+        ),
+        _evidence("run-1:E4_category", summary={"metric_id": "gmv", "dimension": "category"}),
+        _evidence("run-1:E4", summary=summary),
+        _evidence("run-1:E_rank", summary=summary),
+    ]
+    state = _state(candidates=[candidate], evidences=evidences)
+
+    result = verify_reflection(state, max_repair=1, persisted_evidence_by_id=_persisted_rows(evidences))
+
+    assert result.passed is True
+
+
 def _checks(result) -> set[str]:
     return {issue.check for issue in result.issues}
 
@@ -643,6 +1006,7 @@ def _candidate(
     contribution_pct: float = 0.90,
     verdict: str = "confirmed",
     evidence_ids: list[str] | None = None,
+    dimension_elements: list[tuple[str, str]] | None = None,
 ) -> RootCauseCandidate:
     return RootCauseCandidate(
         root_cause_type=root_cause_type,
@@ -656,10 +1020,33 @@ def _candidate(
         evidence_ids=evidence_ids
         if evidence_ids is not None
         else ["run-1:E1", "run-1:E2", "run-1:E3", "run-1:E4", "run-1:E_rank"],
+        dimension_elements=dimension_elements or [],
     )
 
 
 def _evidence(
+    evidence_id: str,
+    *,
+    metric_id: str = "gmv",
+    target_date: date = date(2026, 6, 5),
+    guard_status: str = "passed",
+    summary: dict[str, Any] | None = None,
+) -> Evidence:
+    if summary is not None:
+        summary = _canonical_summary_for_evidence(evidence_id, summary)
+    return Evidence(
+        evidence_id=evidence_id,
+        query_spec=build_query_spec(metric_id=metric_id, start_date=target_date, end_date=target_date),
+        sql="SELECT 1",
+        sql_hash="0" * 64,
+        guard_status=guard_status,
+        result_summary=summary or {"metric_id": metric_id, "target_date": str(target_date), "value": 0.90},
+        data_source="fact_order",
+        created_at=datetime(2026, 6, 5),
+    )
+
+
+def _legacy_evidence(
     evidence_id: str,
     *,
     metric_id: str = "gmv",
@@ -677,6 +1064,32 @@ def _evidence(
         data_source="fact_order",
         created_at=datetime(2026, 6, 5),
     )
+
+
+def _canonical_summary_for_evidence(evidence_id: str, summary: dict[str, Any]) -> dict[str, Any]:
+    if not (evidence_id.endswith(":E4") or evidence_id.endswith(":E_rank")):
+        return summary
+    if "contribution_set" in summary:
+        return summary
+    selected = summary.get("selected_candidate")
+    if not isinstance(selected, dict):
+        return summary
+    return {**summary, **_contribution_summary(RootCauseCandidate.model_validate(selected))}
+
+
+def _contribution_summary(candidate: RootCauseCandidate) -> dict[str, Any]:
+    candidate_payload = candidate.model_dump(mode="json")
+    return {
+        "selected_candidate": candidate_payload,
+        "candidates": [candidate_payload],
+        "contribution_set": {
+            "selected_candidate": candidate_payload,
+            "candidates": [candidate_payload],
+            "evidence_ids": candidate.evidence_ids,
+            "factor_graph": {},
+            "selection_evidence_id": None,
+        },
+    }
 
 
 def _persisted_rows(evidences: list[Evidence]) -> dict[str, dict[str, Any]]:

@@ -1,0 +1,3743 @@
+{
+  "all_cases": 46,
+  "aspects": [
+    "intent",
+    "execution",
+    "evidence",
+    "memory",
+    "outcome",
+    "multi_cause_outcome"
+  ],
+  "changed_count": 276,
+  "changes": [
+    {
+      "aspect": "intent",
+      "case_id": "gmv_paid_ads_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "gmv_paid_ads_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "gmv_paid_ads_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "gmv_paid_ads_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "gmv_paid_ads_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "gmv_paid_ads_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "gmv_stockout_electronics",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "gmv_stockout_electronics",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "gmv_stockout_electronics",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "gmv_stockout_electronics",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "gmv_stockout_electronics",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "gmv_stockout_electronics",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "cvr_mobile_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "cvr_mobile_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "cvr_mobile_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "cvr_mobile_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "cvr_mobile_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "cvr_mobile_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "refund_rate_product_quality",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "refund_rate_product_quality",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "refund_rate_product_quality",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "refund_rate_product_quality",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "refund_rate_product_quality",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "refund_rate_product_quality",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "gmv_no_anomaly",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "gmv_no_anomaly",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "gmv_no_anomaly",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "gmv_no_anomaly",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "gmv_no_anomaly",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "gmv_no_anomaly",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C06_gmv_multi_channel_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C06_gmv_multi_channel_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C06_gmv_multi_channel_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C06_gmv_multi_channel_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C06_gmv_multi_channel_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C06_gmv_multi_channel_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C07_gmv_category_channel_cross",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C07_gmv_category_channel_cross",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C07_gmv_category_channel_cross",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C07_gmv_category_channel_cross",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C07_gmv_category_channel_cross",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C07_gmv_category_channel_cross",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C08_gmv_aov_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C08_gmv_aov_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C08_gmv_aov_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C08_gmv_aov_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C08_gmv_aov_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C08_gmv_aov_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C09_gmv_uv_organic_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C09_gmv_uv_organic_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C09_gmv_uv_organic_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C09_gmv_uv_organic_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C09_gmv_uv_organic_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C09_gmv_uv_organic_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C10_gmv_price_change",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C10_gmv_price_change",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C10_gmv_price_change",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C10_gmv_price_change",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C10_gmv_price_change",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C10_gmv_price_change",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C11_gmv_promo_end_falloff",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C11_gmv_promo_end_falloff",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C11_gmv_promo_end_falloff",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C11_gmv_promo_end_falloff",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C11_gmv_promo_end_falloff",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C11_gmv_promo_end_falloff",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C12_gmv_single_sku_stockout",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C12_gmv_single_sku_stockout",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C12_gmv_single_sku_stockout",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C12_gmv_single_sku_stockout",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C12_gmv_single_sku_stockout",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C12_gmv_single_sku_stockout",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C13_net_gmv_refund_spike",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C13_net_gmv_refund_spike",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C13_net_gmv_refund_spike",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C13_net_gmv_refund_spike",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C13_net_gmv_refund_spike",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C13_net_gmv_refund_spike",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C14_net_gmv_gmv_driven",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C14_net_gmv_gmv_driven",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C14_net_gmv_gmv_driven",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C14_net_gmv_gmv_driven",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C14_net_gmv_gmv_driven",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C14_net_gmv_gmv_driven",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C15_refund_rate_logistics",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C15_refund_rate_logistics",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C15_refund_rate_logistics",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C15_refund_rate_logistics",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C15_refund_rate_logistics",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C15_refund_rate_logistics",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C16_stockout_rate_warehouse",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C16_stockout_rate_warehouse",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C16_stockout_rate_warehouse",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C16_stockout_rate_warehouse",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C16_stockout_rate_warehouse",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C16_stockout_rate_warehouse",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C17_complaint_rate_quality",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C17_complaint_rate_quality",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C17_complaint_rate_quality",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C17_complaint_rate_quality",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C17_complaint_rate_quality",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C17_complaint_rate_quality",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C18_cvr_channel_landing",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C18_cvr_channel_landing",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C18_cvr_channel_landing",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C18_cvr_channel_landing",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C18_cvr_channel_landing",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C18_cvr_channel_landing",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C19_gmv_seasonal_false_positive",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C19_gmv_seasonal_false_positive",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C19_gmv_seasonal_false_positive",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C19_gmv_seasonal_false_positive",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C19_gmv_seasonal_false_positive",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C19_gmv_seasonal_false_positive",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C20_cvr_no_anomaly_noise",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C20_cvr_no_anomaly_noise",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C20_cvr_no_anomaly_noise",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C20_cvr_no_anomaly_noise",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C20_cvr_no_anomaly_noise",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C20_cvr_no_anomaly_noise",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C21_cvr_discovery",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C21_cvr_discovery",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C21_cvr_discovery",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C21_cvr_discovery",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C21_cvr_discovery",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C21_cvr_discovery",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C22_gmv_borderline",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C22_gmv_borderline",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C22_gmv_borderline",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C22_gmv_borderline",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C22_gmv_borderline",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C22_gmv_borderline",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C23_uv_organic_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C23_uv_organic_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C23_uv_organic_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C23_uv_organic_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C23_uv_organic_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C23_uv_organic_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "predicted_remaining_precision_tail",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C24_gmv_positive_spike",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C24_gmv_positive_spike",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_columns",
+        "evidence_reference_limit",
+        "expected_error_priority_if_failure",
+        "previous_round_failure",
+        "round21_basis",
+        "round21_change_note",
+        "round21_fix_expectation"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C24_gmv_positive_spike",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note",
+        "round21_fix_expectation"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C24_gmv_positive_spike",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note",
+        "round21_memory_prepass_expectation"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C24_gmv_positive_spike",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note",
+        "round21_fix_expectation"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C24_gmv_positive_spike",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_fix_expectation",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C25_refund_discovery",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C25_refund_discovery",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C25_refund_discovery",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C25_refund_discovery",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C25_refund_discovery",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C25_refund_discovery",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "predicted_remaining_precision_tail",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C26_ambiguous_intent",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C26_ambiguous_intent",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C26_ambiguous_intent",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C26_ambiguous_intent",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C26_ambiguous_intent",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C26_ambiguous_intent",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C27_composite_cause",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C27_composite_cause",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C27_composite_cause",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C27_composite_cause",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C27_composite_cause",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C27_composite_cause",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "C28_multi_day_drift",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "C28_multi_day_drift",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "C28_multi_day_drift",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "C28_multi_day_drift",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "C28_multi_day_drift",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "C28_multi_day_drift",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "MC01_gmv_multi_cause_overall",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "MC01_gmv_multi_cause_overall",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "MC01_gmv_multi_cause_overall",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "MC01_gmv_multi_cause_overall",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "MC01_gmv_multi_cause_overall",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "MC01_gmv_multi_cause_overall",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "MC02_uv_multi_channel_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "MC02_uv_multi_channel_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "MC02_uv_multi_channel_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "MC02_uv_multi_channel_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "MC02_uv_multi_channel_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "MC02_uv_multi_channel_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "MC03_cvr_multi_signal_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "MC03_cvr_multi_signal_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "MC03_cvr_multi_signal_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "MC03_cvr_multi_signal_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "MC03_cvr_multi_signal_drop",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "MC03_cvr_multi_signal_drop",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "MC04_gmv_weak_set",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "MC04_gmv_weak_set",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "MC04_gmv_weak_set",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "MC04_gmv_weak_set",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "MC04_gmv_weak_set",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "MC04_gmv_weak_set",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "MC05_gmv_lag_stockout_mix",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "MC05_gmv_lag_stockout_mix",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "MC05_gmv_lag_stockout_mix",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "MC05_gmv_lag_stockout_mix",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "MC05_gmv_lag_stockout_mix",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "MC05_gmv_lag_stockout_mix",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "MC06_net_gmv_multi_driver",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "MC06_net_gmv_multi_driver",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "MC06_net_gmv_multi_driver",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "MC06_net_gmv_multi_driver",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "MC06_net_gmv_multi_driver",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "MC06_net_gmv_multi_driver",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "MC07_uv_weak_multi_driver",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "MC07_uv_weak_multi_driver",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "MC07_uv_weak_multi_driver",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "MC07_uv_weak_multi_driver",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "MC07_uv_weak_multi_driver",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "MC07_uv_weak_multi_driver",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "MC08_gmv_channel_category_mix",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "MC08_gmv_channel_category_mix",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "MC08_gmv_channel_category_mix",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "MC08_gmv_channel_category_mix",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "MC08_gmv_channel_category_mix",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "MC08_gmv_channel_category_mix",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "IX01_gmv_channel_category_interaction",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "IX01_gmv_channel_category_interaction",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "IX01_gmv_channel_category_interaction",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "IX01_gmv_channel_category_interaction",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "IX01_gmv_channel_category_interaction",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "IX01_gmv_channel_category_interaction",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "IX02_gmv_interaction_discovery",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "IX02_gmv_interaction_discovery",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "IX02_gmv_interaction_discovery",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "IX02_gmv_interaction_discovery",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "IX02_gmv_interaction_discovery",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "IX02_gmv_interaction_discovery",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "predicted_remaining_precision_tail",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "IX03_uv_interaction_cell",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "IX03_uv_interaction_cell",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "IX03_uv_interaction_cell",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "IX03_uv_interaction_cell",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "IX03_uv_interaction_cell",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "IX03_uv_interaction_cell",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "predicted_remaining_precision_tail",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "IX04_gmv_interaction_no_single_driver",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "IX04_gmv_interaction_no_single_driver",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "IX04_gmv_interaction_no_single_driver",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "IX04_gmv_interaction_no_single_driver",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "IX04_gmv_interaction_no_single_driver",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "IX04_gmv_interaction_no_single_driver",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "LG01_gmv_lagged_social",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "LG01_gmv_lagged_social",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "LG01_gmv_lagged_social",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "LG01_gmv_lagged_social",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "LG01_gmv_lagged_social",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "LG01_gmv_lagged_social",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "LG02_uv_lagged_social_discovery",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "LG02_uv_lagged_social_discovery",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "LG02_uv_lagged_social_discovery",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "LG02_uv_lagged_social_discovery",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "LG02_uv_lagged_social_discovery",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "LG02_uv_lagged_social_discovery",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "predicted_remaining_precision_tail",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "WK01_gmv_weak_affiliate_boundary",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "WK01_gmv_weak_affiliate_boundary",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "WK01_gmv_weak_affiliate_boundary",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "WK01_gmv_weak_affiliate_boundary",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "WK01_gmv_weak_affiliate_boundary",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "WK01_gmv_weak_affiliate_boundary",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "WK02_gmv_no_anomaly_weak",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "WK02_gmv_no_anomaly_weak",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "WK02_gmv_no_anomaly_weak",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "WK02_gmv_no_anomaly_weak",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "WK02_gmv_no_anomaly_weak",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "WK02_gmv_no_anomaly_weak",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "RS01_gmv_residual_dual_mechanism",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "RS01_gmv_residual_dual_mechanism",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "RS01_gmv_residual_dual_mechanism",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "RS01_gmv_residual_dual_mechanism",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "RS01_gmv_residual_dual_mechanism",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "RS01_gmv_residual_dual_mechanism",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy"
+      ]
+    },
+    {
+      "aspect": "intent",
+      "case_id": "RS02_gmv_residual_discovery",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "execution",
+      "case_id": "RS02_gmv_residual_discovery",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "evidence",
+      "case_id": "RS02_gmv_residual_discovery",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "evidence_identity_shape",
+        "evidence_reference_limit",
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "memory",
+      "case_id": "RS02_gmv_residual_discovery",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "outcome",
+      "case_id": "RS02_gmv_residual_discovery",
+      "changed_fields": [
+        "prediction"
+      ],
+      "prediction_changed_keys": [
+        "round21_basis",
+        "round21_change_note"
+      ]
+    },
+    {
+      "aspect": "multi_cause_outcome",
+      "case_id": "RS02_gmv_residual_discovery",
+      "changed_fields": [
+        "prediction",
+        "reasoning",
+        "confidence",
+        "risks"
+      ],
+      "prediction_changed_keys": [
+        "is_multi_cause_case",
+        "predicted_remaining_precision_tail",
+        "root_cause_set_precision",
+        "root_cause_set_recall",
+        "root_causes",
+        "round21_basis",
+        "round21_change_note",
+        "round21_non_multi_policy",
+        "top3_contains_all_major_causes",
+        "top3_ok",
+        "weighted_explanation_coverage"
+      ]
+    }
+  ],
+  "cycle_id": "cycle-20260618-2358",
+  "from_round": 20,
+  "notes": [
+    "Every prediction line carries round21_basis metadata, so unchanged case predictions are explicitly tied to commit 871ec73.",
+    "C24_gmv_positive_spike execution/evidence/memory/outcome reasoning updated for evidence_id length 192 and typed runtime error priority.",
+    "Non-multi-cause multi_cause_outcome predictions use root_causes=[] and false top3 flags per Round 21 instruction."
+  ],
+  "required_total": 276,
+  "round21_basis": {
+    "current_head": "871ec735ea490bc2a0eae7fcf5fb35a20a8d27c2",
+    "fix_category": "FIX-T",
+    "fix_commit": "871ec73",
+    "fix_summary": "Decouple evidence identity: evidence.evidence_id VARCHAR(192), run_id+alias columns, compile-time alias budget validation, and typed tool-error precedence over SQL-count mismatch masking.",
+    "prediction_sources": [
+      "round-20 predictions",
+      "round-20 gap_report.json",
+      "round-20 optimization_summary.json",
+      "metric_rca/runtime/evidence_identity.py",
+      "metric_rca/runtime/execution_contract.py",
+      "metric_rca/runtime/plan_validator.py",
+      "metric_rca/runtime/plan_executor.py",
+      "metric_rca/runtime/plan_compiler.py",
+      "metric_rca/evals/regression_public_cases.jsonl"
+    ],
+    "previous_round": 20,
+    "previous_round_dir": "eval_out/ptv/cycle-20260618-2358/round-20",
+    "private_ground_truth_jsonl_used": false,
+    "ptv_round": 21
+  },
+  "to_round": 21,
+  "total_current": 276,
+  "total_previous": 276
+}

@@ -8,15 +8,17 @@ from json import JSONDecodeError
 import math
 from typing import Any
 
-from metric_rca.agent.evidence_aliases import E2_ALIAS_BY_DIMENSION, e2_alias_for_e3_id
+from metric_rca.runtime.evidence_identity import E2_ALIAS_BY_DIMENSION, e2_alias_for_e3_id
 from metric_rca.agent.tools.registry import select_signal_type
+from metric_rca.business.policy_registry import root_cause_type_for_metric_dimension
 from metric_rca.domain.enums import RootCauseType
-from metric_rca.domain.models import AgentAction, Evidence, ReflectionIssue, ReflectionResult, RootCauseCandidate
+from metric_rca.domain.models import AgentAction, ContributionSet, Evidence, ReflectionIssue, ReflectionResult, RootCauseCandidate
 
 
 REQUIRED_EVIDENCE_ALIASES = ("E1", "E2", "E3", "E4", "E_rank")
 ATTRIBUTION_COVERAGE_THRESHOLD = 0.50
 ADDITIVE_ATTRIBUTION_METRICS = frozenset({"gmv", "net_gmv", "uv"})
+CROSS_CHAIN_OVERLAP_WARNING_THRESHOLD = 1.10
 
 
 def verify_reflection(
@@ -112,7 +114,11 @@ def verify_reflection(
         if (
             candidate is candidates[0]
             and candidate.contribution_pct < ATTRIBUTION_COVERAGE_THRESHOLD
-            and _low_coverage_repair_applies(state)
+            and _low_coverage_repair_applies(
+                state=state,
+                candidate=candidate,
+                persisted_evidence_by_id=persisted_evidence_by_id,
+            )
         ):
             issues.append(
                 _issue(
@@ -159,15 +165,17 @@ def verify_reflection(
         issues.append(_issue("numeric_traceability", "report numeric claim is not traceable to evidence"))
     if _has_unsupported_causal_language(state, candidates):
         issues.append(_issue("causal_language", "confirmed causal language requires complete current-run evidence"))
+    issues.extend(_cross_chain_consistency_warnings(state=state, evidence_by_id=evidence_by_id))
     if repair_count > max_repair:
         issues.append(_issue("repair_limit", "repair_count exceeds max_repair"))
 
-    if issues and repair_count >= max_repair:
+    error_issues = [issue for issue in issues if issue.severity == "error"]
+    if error_issues and repair_count >= max_repair:
         return ReflectionResult(passed=False, issues=issues, repaired=False, repair_count=repair_count)
     return ReflectionResult(
-        passed=not issues,
+        passed=not error_issues,
         issues=issues,
-        repaired=not issues and repair_count > 0,
+        repaired=not error_issues and repair_count > 0,
         repair_count=repair_count,
     )
 
@@ -182,8 +190,136 @@ def _issue(check: str, message: str, *, suggested_action: AgentAction | None = N
     )
 
 
-def _low_coverage_repair_applies(state: dict[str, Any]) -> bool:
-    return str(state.get("metric_id") or "") in ADDITIVE_ATTRIBUTION_METRICS
+def _warning(check: str, message: str) -> ReflectionIssue:
+    return ReflectionIssue(
+        check=check,
+        severity="warning",
+        by="rule",
+        message=message,
+    )
+
+
+def _cross_chain_consistency_warnings(
+    *,
+    state: dict[str, Any],
+    evidence_by_id: dict[str, Evidence],
+) -> list[ReflectionIssue]:
+    e4 = evidence_by_id.get(f"{state.get('run_id')}:E4")
+    if e4 is None:
+        return []
+    summary = e4.result_summary or {}
+    raw_contribution_set = summary.get("contribution_set")
+    if not isinstance(raw_contribution_set, dict):
+        return []
+    contribution_set = ContributionSet.model_validate(raw_contribution_set)
+    factor_graph = contribution_set.factor_graph
+    raw_chain_ids = factor_graph.get("chain_evidence_ids")
+    raw_chains = factor_graph.get("chains")
+    chain_count = 0
+    if isinstance(raw_chain_ids, list):
+        chain_count = len(raw_chain_ids)
+    elif isinstance(raw_chains, list):
+        chain_count = len(raw_chains)
+    if chain_count <= 1:
+        return []
+    contribution_total = sum(float(candidate.contribution_pct) for candidate in contribution_set.candidates)
+    if contribution_total <= CROSS_CHAIN_OVERLAP_WARNING_THRESHOLD:
+        return []
+    return [
+        _warning(
+            "cross_chain_contribution_overlap",
+            "cross-chain contribution percentages overlap; interpret merged coverage as non-additive",
+        )
+    ]
+
+
+def _low_coverage_repair_applies(
+    *,
+    state: dict[str, Any],
+    candidate: RootCauseCandidate,
+    persisted_evidence_by_id: dict[str, dict[str, Any] | None] | None,
+) -> bool:
+    if str(state.get("metric_id") or "") not in ADDITIVE_ATTRIBUTION_METRICS:
+        return False
+    return not _adtributor_rank_evidence_already_applied(
+        state=state,
+        candidate=candidate,
+        persisted_evidence_by_id=persisted_evidence_by_id,
+    )
+
+
+def _adtributor_rank_evidence_already_applied(
+    *,
+    state: dict[str, Any],
+    candidate: RootCauseCandidate,
+    persisted_evidence_by_id: dict[str, dict[str, Any] | None] | None,
+) -> bool:
+    if persisted_evidence_by_id is None:
+        return False
+    if not _candidate_has_alias(state=state, candidate=candidate, alias="E4"):
+        return False
+    if not _candidate_has_alias(state=state, candidate=candidate, alias="E_rank"):
+        return False
+    e4 = _evidence_for_exact_alias(state, "E4")
+    e_rank = _evidence_for_exact_alias(state, "E_rank")
+    if e4 is None or e_rank is None:
+        return False
+    if not _persisted_evidence_matches(
+        state=state,
+        evidence=e4,
+        persisted_evidence_by_id=persisted_evidence_by_id,
+    ):
+        return False
+    if not _persisted_evidence_matches(
+        state=state,
+        evidence=e_rank,
+        persisted_evidence_by_id=persisted_evidence_by_id,
+    ):
+        return False
+    persisted_e4 = persisted_evidence_by_id.get(e4.evidence_id)
+    persisted_e_rank = persisted_evidence_by_id.get(e_rank.evidence_id)
+    if persisted_e4 is None or persisted_e_rank is None:
+        return False
+    e4_summary = persisted_e4.get("result_summary") or {}
+    e_rank_summary = persisted_e_rank.get("result_summary") or {}
+    if not isinstance(e4_summary, dict) or not isinstance(e_rank_summary, dict):
+        return False
+    if not _summary_marks_adtributor_rank(e_rank_summary):
+        return False
+    return _summary_selects_candidate(e4_summary, candidate) and _summary_selects_candidate(
+        e_rank_summary,
+        candidate,
+    )
+
+
+def _summary_marks_adtributor_rank(summary: dict[str, Any]) -> bool:
+    if summary.get("ranker") == "adtributor_internal" or summary.get("adtributor_status") == "applied":
+        return True
+    contribution_set = summary.get("contribution_set")
+    if not isinstance(contribution_set, dict):
+        return False
+    factor_graph = contribution_set.get("factor_graph")
+    if not isinstance(factor_graph, dict):
+        return False
+    return (
+        factor_graph.get("ranker") == "adtributor_internal"
+        or factor_graph.get("adtributor_status") == "applied"
+    )
+
+
+def _summary_selects_candidate(summary: dict[str, Any], candidate: RootCauseCandidate) -> bool:
+    selected_candidate = _selected_candidate_from_e4_summary(summary)
+    if selected_candidate is None:
+        return False
+    return _canonical(selected_candidate) == _canonical(candidate)
+
+
+def _evidence_for_exact_alias(state: dict[str, Any], alias: str) -> Evidence | None:
+    target_id = f"{state.get('run_id')}:{alias}"
+    for evidence in [_as_evidence(item) for item in state.get("evidences", [])]:
+        if evidence.evidence_id == target_id:
+            return evidence
+    return None
 
 
 def _persisted_evidence_matches(
@@ -216,6 +352,12 @@ def _e3_signal_matches_candidate(
     evidence_by_id: dict[str, Evidence],
 ) -> bool:
     if _aov_drop_is_proven_by_e4_decomposition(state=state, candidate=candidate, evidence_by_id=evidence_by_id):
+        return True
+    if _interaction_is_proven_by_cross_chain_evidence(
+        state=state,
+        candidate=candidate,
+        evidence_by_id=evidence_by_id,
+    ):
         return True
     e3 = _candidate_e3_evidence(state=state, candidate=candidate, evidence_by_id=evidence_by_id)
     if e3 is None:
@@ -262,6 +404,81 @@ def _aov_drop_is_proven_by_e4_decomposition(
     return str(decomposition.get("largest_drop_factor")) in {"aov", RootCauseType.AOV_DROP.value}
 
 
+def _interaction_is_proven_by_cross_chain_evidence(
+    *,
+    state: dict[str, Any],
+    candidate: RootCauseCandidate,
+    evidence_by_id: dict[str, Evidence],
+) -> bool:
+    if candidate.root_cause_type != RootCauseType.INTERACTION_CHANNEL_CATEGORY.value:
+        return False
+    pairs = _candidate_pairs(candidate)
+    if not _has_pair_dimension(pairs, "channel") or not _has_pair_dimension(pairs, "category"):
+        return False
+    if not _target_e1_is_bad_direction_anomaly(state=state, evidence_by_id=evidence_by_id):
+        return False
+    if not _candidate_has_alias(state=state, candidate=candidate, alias="E4_channel"):
+        return False
+    if not _candidate_has_alias(state=state, candidate=candidate, alias="E4_category"):
+        return False
+    for dimension, element in pairs:
+        if dimension not in {"channel", "category"}:
+            continue
+        if not _has_non_causal_single_dimension_signal(
+            candidate=candidate,
+            evidence_by_id=evidence_by_id,
+            dimension=dimension,
+            element=element,
+        ):
+            return False
+    return True
+
+
+def _candidate_pairs(candidate: RootCauseCandidate) -> set[tuple[str, str]]:
+    pairs = {(str(dimension), str(element)) for dimension, element in candidate.dimension_elements}
+    if candidate.dimension is not None and candidate.element is not None:
+        pairs.add((candidate.dimension, str(candidate.element)))
+    return pairs
+
+
+def _has_pair_dimension(pairs: set[tuple[str, str]], dimension: str) -> bool:
+    return any(pair_dimension == dimension for pair_dimension, _ in pairs)
+
+
+def _target_e1_is_bad_direction_anomaly(*, state: dict[str, Any], evidence_by_id: dict[str, Evidence]) -> bool:
+    e1 = evidence_by_id.get(f"{state.get('run_id')}:E1")
+    if e1 is None:
+        return False
+    summary = e1.result_summary or {}
+    return summary.get("is_anomaly") is True and summary.get("bad_direction") is True
+
+
+def _candidate_has_alias(*, state: dict[str, Any], candidate: RootCauseCandidate, alias: str) -> bool:
+    prefix = f"{state.get('run_id')}:"
+    return any(evidence_id == f"{prefix}{alias}" for evidence_id in candidate.evidence_ids)
+
+
+def _has_non_causal_single_dimension_signal(
+    *,
+    candidate: RootCauseCandidate,
+    evidence_by_id: dict[str, Evidence],
+    dimension: str,
+    element: str,
+) -> bool:
+    for evidence_id in candidate.evidence_ids:
+        evidence = evidence_by_id.get(evidence_id)
+        if evidence is None:
+            continue
+        alias = evidence_id.split(":", maxsplit=1)[1] if ":" in evidence_id else evidence_id
+        if alias != "E3" and not alias.startswith("E3_"):
+            continue
+        summary = evidence.result_summary or {}
+        if summary.get("dimension") != dimension or str(summary.get("element")) != element:
+            continue
+        return summary.get("is_anomaly") is not True or summary.get("bad_direction") is not True
+    return False
+
+
 def _candidate_e3_evidence(
     *,
     state: dict[str, Any],
@@ -301,12 +518,25 @@ def _top_candidate_matches_persisted_e4(
     if not isinstance(summary, dict):
         return False
 
-    selected = summary.get("selected_candidate")
-    if not isinstance(selected, dict):
+    selected_candidate = _selected_candidate_from_e4_summary(summary)
+    if selected_candidate is None:
         return False
-
-    selected_candidate = RootCauseCandidate.model_validate(selected)
     return _canonical(candidate) == _canonical(selected_candidate)
+
+
+def _selected_candidate_from_e4_summary(summary: dict[str, Any]) -> RootCauseCandidate | None:
+    contribution_set = summary.get("contribution_set")
+    if isinstance(contribution_set, dict):
+        canonical = ContributionSet.model_validate(contribution_set).selected_candidate
+        selected = summary.get("selected_candidate")
+        if isinstance(selected, dict) and _canonical_candidate(selected) != _canonical(canonical.model_dump(mode="json")):
+            return None
+        return canonical
+    return None
+
+
+def _canonical_candidate(value: Any) -> Any:
+    return _canonical(RootCauseCandidate.model_validate(value).model_dump(mode="json"))
 
 
 def _missing_required_aliases(state: dict[str, Any], evidence_ids: list[str]) -> list[str]:
@@ -426,8 +656,8 @@ def _suggested_action_for_no_candidates(state: dict[str, Any]) -> AgentAction | 
         element = _first_candidate_element(summary)
         if dimension is None or element is None:
             continue
-        root_cause_type = _repair_root_cause_type(metric_id=str(state.get("metric_id")), dimension=str(dimension))
         try:
+            root_cause_type = _repair_root_cause_type(metric_id=str(state.get("metric_id")), dimension=str(dimension))
             signal_type = select_signal_type(
                 metric_id=str(state.get("metric_id")),
                 dimension=str(dimension),
@@ -509,13 +739,7 @@ def _first_candidate_element(summary: dict[str, Any]) -> str | None:
 
 
 def _repair_root_cause_type(*, metric_id: str, dimension: str) -> str:
-    if metric_id in {"refund_rate", "complaint_rate", "net_gmv"}:
-        return RootCauseType.COMPLAINT_OR_QUALITY_ISSUE.value
-    if metric_id == "pay_cvr" or dimension == "device":
-        return RootCauseType.CONVERSION_DROP.value
-    if dimension == "channel":
-        return RootCauseType.CAMPAIGN_TRAFFIC_DROP.value
-    return RootCauseType.STOCKOUT.value
+    return root_cause_type_for_metric_dimension(metric_id=metric_id, dimension=dimension)
 
 
 def _contribution_repair_chain(state: dict[str, Any], e3_id: str) -> list[str]:
@@ -552,7 +776,12 @@ def _time_range_matches(evidence: Evidence, target_date: Any) -> bool:
 
 def _metric_matches(evidence: Evidence, metric_id: Any) -> bool:
     alias = evidence.evidence_id.split(":", maxsplit=1)[1] if ":" in evidence.evidence_id else ""
-    if (alias == "E3" or alias.startswith("E3_")) and evidence.result_summary.get("signal_metric_id"):
+    if (
+        alias == "E3"
+        or alias.startswith("E3_")
+        or alias == "E_select"
+        or alias.startswith("E_select_")
+    ) and evidence.result_summary.get("signal_metric_id"):
         return True
     return evidence.query_spec.metric_id == metric_id
 

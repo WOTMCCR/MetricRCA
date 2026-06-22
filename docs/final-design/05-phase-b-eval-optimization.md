@@ -1,3 +1,6 @@
+> Historical v2 design. Active production runtime decisions are superseded by
+> `docs/final-design/06-v3-repair-plan.md`.
+
 # 阶段 B — Eval-Driven System Optimization via PTV
 
 > 状态：accepted（2026-06-16 用户批准）。本文档是阶段 B 的设计源（design source of truth），

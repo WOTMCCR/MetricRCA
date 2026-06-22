@@ -13,6 +13,7 @@ from metric_rca.domain.models import Evidence, MetricDefinition, RootCauseCandid
 from metric_rca.guardrails.query_spec import build_query_spec
 from metric_rca.runtime.plan_compiler import RcaPlanCompiler
 from metric_rca.runtime.plan_models import CasePrior
+from metric_rca.runtime.memory_service import RuntimeMemoryService
 from metric_rca.services.metric_contracts import ParsedIntent
 
 
@@ -367,6 +368,222 @@ def test_case_prior_is_planning_hint_not_evidence() -> None:
     assert prior.source_memory_ids == ["mem-1"]
 
 
+def test_runtime_memory_rejects_answer_bearing_prior_without_empty_fallback() -> None:
+    trace = _RuntimeTraceWriter()
+    service = RuntimeMemoryService(
+        dependencies=_RuntimeMemoryDependencies(
+            memory_repo=_RuntimeMemoryRepo(
+                hits_by_key={
+                    "gmv|run": [
+                        {
+                            "memory_id": "mem-poison",
+                            "preferred_dimensions": ["channel"],
+                            "root_cause_type": "campaign_traffic_drop",
+                            "nested": {"expected_element": "paid_ads"},
+                            "confidence": 0.95,
+                            "source": "reflection_verified",
+                        }
+                    ]
+                }
+            ),
+            trace_writer=trace,
+            settings=_RuntimeSettings(memory_enabled=True, memory_required=False),
+        )
+    )
+
+    try:
+        service.read_priors(
+            "run-1",
+            ParsedIntent(metric_id="gmv", target_date=date(2026, 6, 5), question_family="gmv_drop"),
+        )
+    except RuntimeError as exc:
+        assert str(exc) == "MEMORY_READ_FAILED: memory read failed"
+    else:
+        raise AssertionError("answer-bearing memory must fail, not degrade to empty priors")
+    assert trace.steps[-1]["error_code"] == "MEMORY_READ_FAILED"
+
+
+def test_runtime_memory_ignores_answer_bearing_prior_scoped_to_other_eval_suite() -> None:
+    trace = _RuntimeTraceWriter()
+    service = RuntimeMemoryService(
+        dependencies=_RuntimeMemoryDependencies(
+            memory_repo=_RuntimeMemoryRepo(
+                hits_by_key={
+                    "gmv|run": [
+                        {
+                            "memory_id": "mem-other-suite-poison",
+                            "eval_suites": ["memory-treatment"],
+                            "preferred_dimensions": ["product"],
+                            "nested": {"expected_element": "2"},
+                            "question_family": "gmv_drop",
+                            "analysis_strategy": "standard",
+                            "confidence": 0.95,
+                            "source": "system_verified",
+                        }
+                    ]
+                }
+            ),
+            trace_writer=trace,
+            settings=_RuntimeSettings(memory_enabled=True, memory_required=False, eval_suite="regression"),
+        )
+    )
+
+    priors = service.read_priors(
+        "run-1",
+        ParsedIntent(metric_id="gmv", target_date=date(2026, 6, 5), question_family="gmv_drop"),
+    )
+
+    assert priors == []
+    assert trace.steps[-1]["error_code"] is None
+    assert trace.steps[-1]["output_summary"]["excluded_hit_count"] == 1
+
+
+def test_runtime_memory_write_failure_is_typed_even_when_not_required() -> None:
+    service = RuntimeMemoryService(
+        dependencies=_RuntimeMemoryDependencies(
+            memory_repo=_RuntimeMemoryRepo(write_error=RuntimeError("MEMORY_WRITE_FAILED")),
+            trace_writer=_RuntimeTraceWriter(),
+            settings=_RuntimeSettings(memory_enabled=True, memory_required=False, memory_write_on_finalize=True),
+        )
+    )
+
+    try:
+        service.write_verified_case(
+            "run-1",
+            {"status": "succeeded", "top_candidate": {"dimension": "channel", "root_cause_type": "campaign_traffic_drop"}},
+            _RuntimeReflection(),
+            ParsedIntent(metric_id="gmv", target_date=date(2026, 6, 5), question_family="gmv_drop"),
+        )
+    except RuntimeError as exc:
+        assert str(exc) == "MEMORY_WRITE_FAILED: memory write failed"
+    else:
+        raise AssertionError("memory write failure must fail fast")
+
+
+def test_runtime_memory_filters_case_priors_by_intent_contract() -> None:
+    trace = _RuntimeTraceWriter()
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date=date(2026, 6, 5),
+        question_family="gmv_drop",
+        analysis_strategy="standard",
+    )
+    service = RuntimeMemoryService(
+        dependencies=_RuntimeMemoryDependencies(
+            memory_repo=_RuntimeMemoryRepo(
+                hits_by_key={
+                    "gmv|run": [
+                        {
+                            "memory_id": "mem-old-unscoped",
+                            "preferred_dimensions": ["product"],
+                            "preferred_signal_types": ["inventory"],
+                            "prior_root_causes": ["stockout"],
+                            "confidence": 0.95,
+                            "source": "reflection_verified",
+                            "layer": "episodic",
+                            "mem_key": "gmv|run",
+                        },
+                        {
+                            "memory_id": "mem-matching-intent",
+                            "preferred_dimensions": ["channel"],
+                            "preferred_signal_types": ["campaign"],
+                            "prior_root_causes": ["campaign_traffic_drop"],
+                            "question_family": "gmv_drop",
+                            "analysis_strategy": "standard",
+                            "confidence": 0.95,
+                            "source": "reflection_verified",
+                            "layer": "episodic",
+                            "mem_key": "gmv|run",
+                        },
+                    ]
+                }
+            ),
+            trace_writer=trace,
+            settings=_RuntimeSettings(memory_enabled=True, memory_required=False),
+        )
+    )
+
+    priors = service.read_priors("run-1", parsed)
+
+    assert [prior.source_memory_ids for prior in priors] == [["mem-matching-intent"]]
+    assert trace.steps[-1]["output_summary"]["excluded_hit_count"] == 1
+
+
+def test_runtime_memory_uses_eval_suite_scoped_prior_only_for_matching_suite() -> None:
+    hit = {
+        "memory_id": "mem-treatment",
+        "layer": "case",
+        "mem_key": "gmv|run",
+        "metric_id": "gmv",
+        "question_family": "gmv_drop",
+        "analysis_strategy": "standard",
+        "eval_suites": ["memory-treatment"],
+        "preferred_dimensions": ["product"],
+        "preferred_signal_types": ["inventory"],
+        "prior_root_causes": ["aov_drop"],
+        "confidence": 0.95,
+        "source": "system_verified",
+    }
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date=date(2026, 6, 5),
+        question_family="gmv_drop",
+        analysis_strategy="standard",
+    )
+
+    regression_service = RuntimeMemoryService(
+        dependencies=_RuntimeMemoryDependencies(
+            memory_repo=_RuntimeMemoryRepo(hits_by_key={"gmv|run": [hit]}),
+            trace_writer=_RuntimeTraceWriter(),
+            settings=_RuntimeSettings(memory_enabled=True, memory_required=False, eval_suite="regression"),
+        )
+    )
+    treatment_trace = _RuntimeTraceWriter()
+    treatment_service = RuntimeMemoryService(
+        dependencies=_RuntimeMemoryDependencies(
+            memory_repo=_RuntimeMemoryRepo(hits_by_key={"gmv|run": [hit]}),
+            trace_writer=treatment_trace,
+            settings=_RuntimeSettings(memory_enabled=True, memory_required=False, eval_suite="memory-treatment"),
+        )
+    )
+
+    assert regression_service.read_priors("run-regression", parsed) == []
+    priors = treatment_service.read_priors("run-treatment", parsed)
+
+    assert len(priors) == 1
+    assert priors[0].preferred_dimensions == ["product"]
+    assert priors[0].prior_root_causes == ["aov_drop"]
+    assert treatment_trace.steps[-1]["input_summary"]["eval_suite"] == "memory-treatment"
+
+
+def test_runtime_memory_writes_intent_contract_for_future_prior_filtering() -> None:
+    repo = _RuntimeMemoryRepo()
+    service = RuntimeMemoryService(
+        dependencies=_RuntimeMemoryDependencies(
+            memory_repo=repo,
+            trace_writer=_RuntimeTraceWriter(),
+            settings=_RuntimeSettings(memory_enabled=True, memory_required=False, memory_write_on_finalize=True),
+        )
+    )
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date=date(2026, 6, 5),
+        question_family="gmv_drop",
+        analysis_strategy="product_first",
+    )
+
+    service.write_verified_case(
+        "run-1",
+        {"status": "succeeded", "top_candidate": {"dimension": "product", "root_cause_type": "aov_drop"}},
+        _RuntimeReflection(),
+        parsed,
+    )
+
+    payload = repo.writes[0]["payload"]
+    assert payload["question_family"] == "gmv_drop"
+    assert payload["analysis_strategy"] == "product_first"
+
+
 def test_plan_compiler_keeps_memory_hints_without_skipping_evidence_chain() -> None:
     prior = CasePrior(
         metric_id="gmv",
@@ -502,3 +719,57 @@ def _persisted(evidence: Evidence) -> dict[str, Any]:
         "guard_status": evidence.guard_status,
         "result_summary": evidence.result_summary,
     }
+
+
+class _RuntimeSettings:
+    def __init__(
+        self,
+        *,
+        memory_enabled: bool,
+        memory_required: bool,
+        memory_write_on_finalize: bool = True,
+        eval_suite: str = "regression",
+    ) -> None:
+        self.memory_enabled = memory_enabled
+        self.memory_required = memory_required
+        self.memory_write_on_finalize = memory_write_on_finalize
+        self.eval_suite = eval_suite
+
+
+class _RuntimeMemoryDependencies:
+    def __init__(self, *, memory_repo: Any, trace_writer: Any, settings: Any) -> None:
+        self.memory_repo = memory_repo
+        self.trace_writer = trace_writer
+        self.settings = settings
+
+
+class _RuntimeMemoryRepo:
+    def __init__(
+        self,
+        *,
+        hits_by_key: dict[str, list[dict[str, Any]]] | None = None,
+        write_error: RuntimeError | None = None,
+    ) -> None:
+        self._hits_by_key = hits_by_key or {}
+        self._write_error = write_error
+        self.writes: list[dict[str, Any]] = []
+
+    def read_layers(self, mem_key: str, *, layers: tuple[str, ...]) -> list[dict[str, Any]]:
+        return list(self._hits_by_key.get(mem_key, []))
+
+    def write(self, record: dict[str, Any]) -> None:
+        if self._write_error is not None:
+            raise self._write_error
+        self.writes.append(record)
+
+
+class _RuntimeTraceWriter:
+    def __init__(self) -> None:
+        self.steps: list[dict[str, Any]] = []
+
+    def write_step(self, **kwargs: Any) -> None:
+        self.steps.append(kwargs)
+
+
+class _RuntimeReflection:
+    repair_count = 0

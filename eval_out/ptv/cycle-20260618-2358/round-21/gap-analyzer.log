@@ -1,0 +1,133 @@
+python -m metric_rca.evals.gap_analyzer --output-dir eval_out/ptv/cycle-20260618-2358/round-21 --eval-id ptv-cycle-20260618-2358-round-21
+# Gap Report: ptv-cycle-20260618-2358-round-21
+
+**Accuracy**: 85% (235/276)
+
+- **design_flaw**: 1
+- **complexity_gap**: 1
+- **overfit**: 39
+- **correct**: 235
+
+## Details
+
+### gmv_paid_ads_drop [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+### gmv_stockout_electronics [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### cvr_mobile_drop [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### refund_rate_product_quality [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### gmv_no_anomaly [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C06_gmv_multi_channel_drop [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C07_gmv_category_channel_cross [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C08_gmv_aov_drop [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C09_gmv_uv_organic_drop [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C10_gmv_price_change [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C11_gmv_promo_end_falloff [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C12_gmv_single_sku_stockout [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C13_net_gmv_refund_spike [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C14_net_gmv_gmv_driven [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C15_refund_rate_logistics [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C16_stockout_rate_warehouse [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C17_complaint_rate_quality [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C18_cvr_channel_landing [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C19_gmv_seasonal_false_positive [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C20_cvr_no_anomaly_noise [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C21_cvr_discovery [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C22_gmv_borderline [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C23_uv_organic_drop [execution] — overfit
+  fewer steps than predicted (predicted=14, actual=6, -8)
+
+### C23_uv_organic_drop [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C24_gmv_positive_spike [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C25_refund_discovery [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C26_ambiguous_intent [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C27_composite_cause [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### C28_multi_day_drift [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### IX01_gmv_channel_category_interaction [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### IX02_gmv_interaction_discovery [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### IX03_uv_interaction_cell [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### IX04_gmv_interaction_no_single_driver [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### LG01_gmv_lagged_social [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### LG02_uv_lagged_social_discovery [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### WK01_gmv_weak_affiliate_boundary [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### WK02_gmv_no_anomaly_weak [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass
+
+### RS01_gmv_residual_dual_mechanism [execution] — overfit
+  fewer steps than predicted (predicted=24, actual=11, -13)
+
+### RS01_gmv_residual_dual_mechanism [outcome] — design_flaw
+  wrong root cause type: predicted campaign_traffic_drop, got interaction_channel_category
+
+### RS01_gmv_residual_dual_mechanism [multi_cause_outcome] — complexity_gap
+  predicted multi-cause top3 pass but actual fail
+
+### RS02_gmv_residual_discovery [multi_cause_outcome] — overfit
+  predicted multi-cause top3 fail but actual pass

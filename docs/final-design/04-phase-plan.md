@@ -1,3 +1,6 @@
+> Historical v2 design. Active production runtime decisions are superseded by
+> `docs/final-design/06-v3-repair-plan.md`.
+
 # 最终版阶段计划（P6–P9）与 Codex 分发模式
 
 ## 0. 分发与监督模式（沿用现有）

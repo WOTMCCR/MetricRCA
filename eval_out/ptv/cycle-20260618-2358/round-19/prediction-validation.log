@@ -1,0 +1,13 @@
+predictions_path=eval_out/ptv/cycle-20260618-2358/round-19/predictions.jsonl
+row_count=276 expected=276
+unique_pairs=276 expected=276
+case_count=46 expected=46
+required_aspects=intent,execution,evidence,memory,outcome,multi_cause_outcome
+unique_reasoning_count=276 expected=276
+case_specific_reasoning_missing=0
+risks_missing=0
+metric_rca.evals.prediction_exit=0
+changed_count=276
+prediction_payload_changed_count=276
+material_behavior_changed_count=138
+validation_status=passed

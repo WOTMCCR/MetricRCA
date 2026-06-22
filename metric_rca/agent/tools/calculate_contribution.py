@@ -19,8 +19,9 @@ from metric_rca.agent.tools.runtime import (
     tool_error,
 )
 from metric_rca.agent.tools.schemas import CalculateContributionArgs, ToolResult
+from metric_rca.business.policy_registry import root_cause_type_for_metric_dimension
 from metric_rca.domain.enums import RootCauseType
-from metric_rca.domain.models import Evidence, Observation, RootCauseCandidate
+from metric_rca.domain.models import ContributionSet, Evidence, Observation, RootCauseCandidate
 from metric_rca.guardrails.query_spec import QuerySpecError, build_query_spec
 from metric_rca.guardrails.renderer import SQLRenderer
 from metric_rca.guardrails.sql_guard import guard_sql
@@ -43,8 +44,21 @@ def calculate_contribution(
     run_error = run_context_error(repository, args.run_id, args.metric_id, args.target_date)
     if run_error:
         return tool_error(action, run_error, "run_id is not an active matching run")
-    if not current_run_guarded_evidence(repository, args.run_id, args.evidence_ids, {"E1", "E2", "E3"}):
-        evidence_hint = current_run_guarded_evidence_hint(repository, args.run_id, ["E1", "E2", "E3"])
+    try:
+        has_required_evidence = current_run_guarded_evidence(
+            repository,
+            args.run_id,
+            args.evidence_ids,
+            {"E1", "E2", "E3"},
+        )
+        evidence_hint = (
+            []
+            if has_required_evidence
+            else current_run_guarded_evidence_hint(repository, args.run_id, ["E1", "E2", "E3"])
+        )
+    except ToolRuntimeError as exc:
+        return runtime_error(action, exc)
+    if not has_required_evidence:
         retry_hint = evidence_hint or [f"{args.run_id}:E1", f"{args.run_id}:E2", f"{args.run_id}:E3"]
         return tool_error(
             action,
@@ -55,6 +69,8 @@ def calculate_contribution(
                 f"then retry with evidence_ids {retry_hint}"
             ),
         )
+    evidence_alias = args.evidence_alias
+    evidence_id = f"{args.run_id}:{evidence_alias}"
     existing = _existing_contribution_result(args, repository=repository)
     if existing is not None:
         return existing
@@ -97,7 +113,7 @@ def calculate_contribution(
         baseline = execute_guarded_plan(repository=repository, plan=baseline_plan, run_id=args.run_id)
     except ToolRuntimeError as exc:
         return runtime_error(action, exc)
-    current_run_evidence = [*args.evidence_ids, f"{args.run_id}:E4"]
+    current_run_evidence = [*args.evidence_ids, evidence_id]
     anomaly_direction = _anomaly_direction(args.run_id, repository=repository)
     attribution = compute_dimension_contribution(
         metric_definition=metric_definition,
@@ -108,7 +124,12 @@ def calculate_contribution(
         anomaly_direction=anomaly_direction,
     )
     if not attribution.ok:
-        return tool_error(action, attribution.error_code or "ATTRIBUTION_COVERAGE_LOW", "attribution coverage low")
+        return tool_error(
+            action,
+            attribution.error_code or "ATTRIBUTION_COVERAGE_LOW",
+            "attribution coverage low",
+            sql_count=2,
+        )
 
     selected_candidate = _candidate_for_selected_element(
         candidates=attribution.candidates,
@@ -120,6 +141,7 @@ def calculate_contribution(
             action,
             "ATTRIBUTION_COVERAGE_LOW",
             "selected element is not an attributed candidate",
+            sql_count=2,
         )
     selected_candidate = _with_selected_signal_severity(
         selected_candidate,
@@ -219,8 +241,15 @@ def calculate_contribution(
             element=args.element,
             coverage=attribution.coverage,
         )
+    result_summary = _with_canonical_contribution_set(
+        result_summary=result_summary,
+        selected_candidate=selected_candidate,
+        candidates=attribution_candidates,
+        evidence_ids=current_run_evidence,
+        dimension=args.dimension,
+    )
     evidence = Evidence(
-        evidence_id=f"{args.run_id}:E4",
+        evidence_id=evidence_id,
         query_spec=baseline_spec,
         sql=baseline_plan.sql,
         sql_hash=baseline_plan.sql_hash,
@@ -241,29 +270,32 @@ def calculate_contribution(
             evidence_ids=[evidence.evidence_id],
         ),
         evidences=[evidence],
-        evidence_alias="E4",
+        evidence_alias=evidence_alias,
         candidates=attribution_candidates,
         sql_count=sql_count,
     )
 
 
 def _existing_contribution_result(args: CalculateContributionArgs, *, repository: Any) -> ToolResult | None:
-    evidence_id = f"{args.run_id}:E4"
+    evidence_id = f"{args.run_id}:{args.evidence_alias}"
     row = repository.get_evidence(run_id=args.run_id, evidence_id=evidence_id)
     if row is None or row.get("guard_status") != "passed":
         return None
     summary = row.get("result_summary")
     if not isinstance(summary, dict):
-        return _existing_e4_mismatch_result(evidence_id)
+        return _existing_e4_mismatch_result(evidence_id, args.evidence_alias)
     if (
         summary.get("metric_id") != args.metric_id
         or summary.get("dimension") != args.dimension
         or str(summary.get("element")) != str(args.element)
     ):
-        return _existing_e4_mismatch_result(evidence_id)
+        return _existing_e4_mismatch_result(evidence_id, args.evidence_alias)
     if [str(item) for item in summary.get("input_evidence_ids", [])] != [str(item) for item in args.evidence_ids]:
-        return _existing_e4_mismatch_result(evidence_id)
-    candidates = [RootCauseCandidate.model_validate(candidate) for candidate in summary.get("candidates", [])]
+        return _existing_e4_mismatch_result(evidence_id, args.evidence_alias)
+    contribution_set = summary.get("contribution_set")
+    if not isinstance(contribution_set, dict):
+        return _existing_e4_mismatch_result(evidence_id, args.evidence_alias)
+    candidates = ContributionSet.model_validate(contribution_set).candidates
     return ToolResult(
         observation=Observation(
             action_name="calculate_contribution",
@@ -271,12 +303,59 @@ def _existing_contribution_result(args: CalculateContributionArgs, *, repository
             payload=summary,
             evidence_ids=[evidence_id],
         ),
-        evidence_alias="E4",
+        evidence_alias=args.evidence_alias,
         candidates=candidates,
     )
 
 
-def _existing_e4_mismatch_result(evidence_id: str) -> ToolResult:
+def _with_canonical_contribution_set(
+    *,
+    result_summary: dict[str, Any],
+    selected_candidate: RootCauseCandidate,
+    candidates: list[RootCauseCandidate],
+    evidence_ids: list[str],
+    dimension: str,
+) -> dict[str, Any]:
+    contribution_set = ContributionSet(
+        selected_candidate=selected_candidate,
+        candidates=candidates,
+        evidence_ids=_ordered_unique(evidence_ids),
+        factor_graph=_factor_graph_from_summary(result_summary),
+        selection_evidence_id=_selection_evidence_id(evidence_ids=evidence_ids, dimension=dimension),
+    )
+    result_summary = dict(result_summary)
+    result_summary["contribution_set"] = contribution_set.model_dump(mode="json")
+    result_summary["selected_candidate"] = contribution_set.selected_candidate.model_dump(mode="json")
+    result_summary["candidates"] = [candidate.model_dump(mode="json") for candidate in contribution_set.candidates]
+    return result_summary
+
+
+def _factor_graph_from_summary(result_summary: dict[str, Any]) -> dict[str, Any]:
+    factor_graph: dict[str, Any] = {}
+    for key in ("decomposition", "net_gmv_decomposition", "net_gmv_chain", "metric_contribution"):
+        if key in result_summary:
+            factor_graph[key] = result_summary[key]
+    return factor_graph
+
+
+def _selection_evidence_id(*, evidence_ids: list[str], dimension: str) -> str | None:
+    for evidence_id in evidence_ids:
+        alias = str(evidence_id).split(":", maxsplit=1)[-1]
+        if alias == f"E_select_{dimension}" or alias.startswith(f"E_select_{dimension}_"):
+            return str(evidence_id)
+    return None
+
+
+def _ordered_unique(values: list[str]) -> list[str]:
+    unique: list[str] = []
+    for value in values:
+        text = str(value)
+        if text not in unique:
+            unique.append(text)
+    return unique
+
+
+def _existing_e4_mismatch_result(evidence_id: str, evidence_alias: str = "E4") -> ToolResult:
     return ToolResult(
         observation=Observation(
             action_name="calculate_contribution",
@@ -285,7 +364,7 @@ def _existing_e4_mismatch_result(evidence_id: str) -> ToolResult:
             message="E4 evidence is already persisted for this run; call rank_root_causes with the existing E4.",
             evidence_ids=[evidence_id],
         ),
-        evidence_alias="E4",
+        evidence_alias=evidence_alias,
     )
 
 
@@ -480,9 +559,13 @@ def _with_selected_signal_severity(candidate: Any, *, args: CalculateContributio
     if signal_summary is None:
         return candidate
     updates: dict[str, Any] = {}
-    signal_root_cause_type = _root_cause_type_from_signal_summary(signal_summary)
-    if signal_root_cause_type is not None:
-        updates["root_cause_type"] = signal_root_cause_type
+    signal_type = signal_summary.get("signal_type")
+    if isinstance(signal_type, str) and signal_type:
+        updates["root_cause_type"] = root_cause_type_for_metric_dimension(
+            metric_id=args.metric_id,
+            dimension=args.dimension,
+            signal_type=signal_type,
+        )
     delta_pct = signal_summary.get("delta_pct")
     try:
         signal_severity = min(1.0, abs(float(delta_pct)))
@@ -501,20 +584,6 @@ def _with_selected_signal_severity(candidate: Any, *, args: CalculateContributio
         }
     )
     return candidate.model_copy(update=updates)
-
-
-def _root_cause_type_from_signal_summary(signal_summary: dict[str, Any]) -> str | None:
-    signal_type = str(signal_summary.get("signal_type") or "")
-    signal_metric_id = str(signal_summary.get("signal_metric_id") or signal_summary.get("metric_id") or "")
-    if signal_type == "refund_quality" or signal_metric_id in {"refund_rate", "complaint_rate"}:
-        return RootCauseType.COMPLAINT_OR_QUALITY_ISSUE.value
-    if signal_type == "campaign":
-        return RootCauseType.CAMPAIGN_TRAFFIC_DROP.value
-    if signal_type == "conversion":
-        return RootCauseType.CONVERSION_DROP.value
-    if signal_type == "inventory":
-        return RootCauseType.STOCKOUT.value
-    return None
 
 
 def _selected_signal_summary(*, args: CalculateContributionArgs, repository: Any) -> dict[str, Any] | None:

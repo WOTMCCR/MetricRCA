@@ -1,0 +1,116 @@
+{
+  "phase": "memory",
+  "case_id": "MC06_net_gmv_multi_driver",
+  "intent_ok": 1,
+  "anomaly_ok": 1,
+  "top1_ok": 0,
+  "top3_ok": 1,
+  "dominant_top1_ok": 0,
+  "root_cause_set_recall": 1.0,
+  "root_cause_set_precision": 1.0,
+  "weighted_explanation_coverage": 1.0,
+  "top3_contains_all_major_causes": 1,
+  "evidence_coverage": 1.0,
+  "sql_safe": 1,
+  "reflection_repair_ok": 1,
+  "report_traceable_ok": 1,
+  "memory_pollution_ok": 1,
+  "no_anomaly_task_ok": 1,
+  "adtributor_used": 1,
+  "multi_agent_path": "single_agent",
+  "detail": {
+    "status": "succeeded",
+    "metric_id": "net_gmv",
+    "expected_metric": "net_gmv",
+    "selected_candidate": {
+      "element": "electronics",
+      "verdict": "likely",
+      "dimension": "category",
+      "surprise_js": 0.003893988777388005,
+      "evidence_ids": [
+        "ptv-cycle-20260618-2358-round-d7891b37:E1",
+        "ptv-cycle-20260618-2358-round-d7891b37:E2_category",
+        "ptv-cycle-20260618-2358-round-d7891b37:E_select_category",
+        "ptv-cycle-20260618-2358-round-d7891b37:E3_cat",
+        "ptv-cycle-20260618-2358-round-d7891b37:E4_category",
+        "ptv-cycle-20260618-2358-round-d7891b37:E4",
+        "ptv-cycle-20260618-2358-round-d7891b37:E_rank"
+      ],
+      "eng_confidence": 1.0,
+      "root_cause_type": "stockout",
+      "signal_severity": 1.0,
+      "contribution_pct": 1.0,
+      "evidence_support": 1.0,
+      "explanatory_power": 1.0,
+      "reflection_factor": 1.0,
+      "dimension_elements": [
+        [
+          "category",
+          "electronics"
+        ],
+        [
+          "category",
+          "fashion"
+        ],
+        [
+          "channel",
+          "paid_ads"
+        ]
+      ]
+    },
+    "expected_root_causes": [
+      {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "weight": 0.5
+      },
+      {
+        "root_cause_type": "stockout",
+        "dimension": "category",
+        "element": "electronics",
+        "weight": 0.3
+      },
+      {
+        "root_cause_type": "conversion_drop",
+        "dimension": "channel",
+        "element": "affiliate",
+        "weight": 0.2
+      }
+    ],
+    "token_count": 0,
+    "latency_ms": 0,
+    "sql_count": 34,
+    "trace_step_count": 14,
+    "memory_read_seen": true,
+    "tool_sequence": [
+      "read_priors",
+      "detect_anomaly",
+      "drilldown_dimension",
+      "drilldown_dimension",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "select_signal_element",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "select_signal_element",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "merge_contribution_sets",
+      "rank_root_causes"
+    ],
+    "memory_record_count": 1,
+    "memory_layers": [
+      "semantic"
+    ],
+    "eval_attempts": 1,
+    "final_run_id": "ptv-cycle-20260618-2358-round-d7891b37",
+    "memory_enabled": true,
+    "tags": [
+      "phase_c",
+      "multi_cause",
+      "specified_slice"
+    ],
+    "scenario_family": "multi_cause"
+  }
+}

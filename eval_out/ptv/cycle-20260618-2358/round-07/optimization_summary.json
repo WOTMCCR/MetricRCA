@@ -1,0 +1,119 @@
+{
+  "ptv_round": 7,
+  "cycle_id": "20260618-2358",
+  "created_at": "2026-06-19T15:26:26.038793+00:00",
+  "layer": "Layer 1 optimization summary",
+  "inputs": {
+    "gap_report": "eval_out/ptv/cycle-20260618-2358/round-07/gap_report.json",
+    "diagnosis": "eval_out/ptv/cycle-20260618-2358/round-07/diagnosis.jsonl",
+    "trajectory": "eval_out/ptv/cycle-20260618-2358/round-07/ptv_trajectory.jsonl",
+    "eval_stream_log": "eval_out/ptv/cycle-20260618-2358/round-07/eval-stream.log"
+  },
+  "metrics_before": {
+    "status": "eval_aborted",
+    "exit_status": "2",
+    "full_case_total": 0,
+    "partial_memory_case_total": 5,
+    "error_code": "SYSTEM_TABLE_WRITE_FAILED",
+    "active_blocker": "fetch_related_signal explicit E3 lane alias overflow under long C06 eval run id",
+    "failed_run_id": "eval-result-mem-C06_gmv_multi-40a4e2e5",
+    "failed_action": "fetch_related_signal",
+    "budget_at_failure": {
+      "step_count": 18,
+      "query_count": 52,
+      "max_query": 70,
+      "drilldown_depth": 3
+    },
+    "evidence_alias_lengths": {
+      "head_behavior_suffixed": 65,
+      "fixed_explicit_alias": 56,
+      "schema_limit": 64
+    }
+  },
+  "rule_c1_blocked_categories": [],
+  "rule_c1_reason": "Round 6 FIX-D budget sizing did not cause a measured aggregate regression; it advanced execution beyond the old 50-query boundary. Round 7 failure is a newly exposed tool alias overflow, so no category is blocked by C1.",
+  "rule_c2_deferred_categories": {},
+  "rule_c2_forced_category": null,
+  "rule_c2_reason": "No deferred FIX-A/FIX-M work is actionable because full eval still aborts before case scoring. The only current diagnosis is the tool persistence blocker.",
+  "rule_c3_discovery_priority_applied": false,
+  "rule_c3_reason": "No active FIX-D diagnosis remains in Round 7. Discovery produced the interaction lane; fetch_related_signal failed to persist its explicit E3 alias.",
+  "rule_c4_revert_assessment": {
+    "triggered": false,
+    "aggregate_regressions": [],
+    "decision": "keep",
+    "justification": "No full aggregate metrics are available. The Round 6 budget change is validated by trace evidence: Round 7 reached query_count=52 under max_query=70 and failed later in fetch_related_signal persistence."
+  },
+  "rule_c5_category_streak": {
+    "FIX-D": 1
+  },
+  "rule_c5_allowed": true,
+  "stall_analysis_used": true,
+  "stall_analysis_from_analyst": {
+    "category_history": [
+      "FIX-D",
+      "FIX-T",
+      "FIX-D",
+      "FIX-D",
+      "FIX-T",
+      "FIX-D"
+    ],
+    "category_streak": {
+      "FIX-D": 1
+    },
+    "deferred_streak": {},
+    "blocked_by_rule_c1": [],
+    "rule_c1_triggered": false,
+    "rule_c2_triggered": false,
+    "rule_c5_triggered": false,
+    "recommended_next_category": "FIX-T",
+    "recommendation_reason": "The Round 7 blocker is in the fetch_related_signal tool alias contract. Round 6 FIX-D budget sizing advanced execution past the prior budget boundary, and continuing in plan_compiler/ranking would not address a varchar(64) evidence_id overflow in a tool persistence path.",
+    "invalid_rationale": [
+      "stabilize ranking first before fixing evidence alias overflow",
+      "add more discovery lanes before fixing tool persistence",
+      "treat SYSTEM_TABLE_WRITE_FAILED as a budget failure despite query_count 52 under max_query 70",
+      "skip diagnosis because eval aborted"
+    ]
+  },
+  "anti_stall_decision": "Switch category from FIX-D to FIX-T; continuing plan_compiler or ranking would not address evidence_id overflow in fetch_related_signal.",
+  "round_limit_escalation_assessment": {
+    "round_number": 7,
+    "max_rounds": 6,
+    "structural_diagnosis": false,
+    "escalate": false,
+    "reason": "Escalation after 6 rounds applies to STRUCTURAL diagnoses. Round 7 diagnosis is a bounded FIX-T tool contract bug."
+  },
+  "controller_decision": {
+    "decision": "fix",
+    "selected_fix_category": "FIX-T",
+    "target_layer": "tool",
+    "fix_subtype": "explicit_e3_lane_alias_overflow",
+    "target_files": [
+      "metric_rca/agent/tools/fetch_related_signal.py",
+      "tests/test_tools.py"
+    ],
+    "do_not_modify": [
+      "metric_rca/runtime/ranking.py",
+      "metric_rca/runtime/plan_compiler.py"
+    ],
+    "justification": "The plan compiler already supplies stable per-lane E3 aliases. The tool must honor an explicit alias as a complete alias instead of suffixing the dynamic element.",
+    "fix_commit": "978e707d35a89832df5211c3beee082b718c9029",
+    "fix_status": "committed"
+  },
+  "selected_fix_category": "FIX-T",
+  "target_layer": "tool",
+  "target_files": [
+    "metric_rca/agent/tools/fetch_related_signal.py",
+    "tests/test_tools.py"
+  ],
+  "do_not_modify": [
+    "metric_rca/runtime/ranking.py",
+    "metric_rca/runtime/plan_compiler.py"
+  ],
+  "case_targets": [
+    "C06_gmv_multi_channel_drop execution abort",
+    "broad GMV interaction channel E3 lane"
+  ],
+  "expected_change": "fetch_related_signal persists E3_ch_interaction instead of E3_ch_interaction_paid_ads when plan_compiler provides an explicit lane alias.",
+  "fix_commit": "978e707d35a89832df5211c3beee082b718c9029",
+  "fix_status": "committed"
+}

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 from datetime import date
+import re
 from typing import Literal, Protocol
 
 from pydantic import Field, ValidationError
 
 from metric_rca.domain.models import StrictModel
 from metric_rca.intelligence.agent_runtime import AgentRuntime, AgentRuntimeError
+from metric_rca.services.date_context import should_retry_run_target_date_error
 from metric_rca.services.llm_client import LLMClientConfigError, build_agent_runtime
 from metric_rca.services.metric_contracts import (
     AnalysisStrategy,
@@ -68,6 +70,18 @@ RULES:
 - Use analysis_strategy=product_first when an unscoped target KPI question should
   first verify product/inventory movement, including merchandise sales, price, or
   average-order-value wording.
+- Use question_family=interaction_gmv_anomaly or interaction_uv_anomaly with
+  analysis_strategy=standard when a GMV or UV question asks about a joint
+  channel-category slice, a cross-dimension interaction, or a drop larger than
+  individual drilldowns suggest.
+- Do not use interaction_gmv_anomaly or interaction_uv_anomaly for broad
+  multi-slice or multi-cause wording such as "across more than one slice".
+  Use the ordinary metric drop family unless the question explicitly asks for a
+  joint channel-category/campaign-category slice, a focused segment, a
+  cross-dimension interaction, or a larger-than-individual-drilldowns residual.
+- For UV/traffic questions, a focused segment on a specific date is an
+  interaction_uv_anomaly even when the question omits the concrete channel and
+  category values.
 - Product/merchandise/price wording takes priority over broad store/channel
   defaults. If a GMV question says "merchandise sales", product, SKU, item,
   price, AOV, basket size, or average order value, use
@@ -125,6 +139,9 @@ RULES:
   supported KPI such as GMV. For example, "Why did yesterday's GMV decline in
   merchandise sales?" is metric_id=gmv, question_family=gmv_drop,
   analysis_strategy=product_first, with no explicit dimension/filter.
+  "Why did yesterday's GMV decline?" is metric_id=gmv,
+  question_family=gmv_drop, analysis_strategy=standard, with no explicit
+  dimension/filter.
   "Why was yesterday's GMV below expectation across the store?" and "Was
   yesterday's GMV meaningfully below its normal seasonal range?" are
   metric_id=gmv, question_family=gmv_drop, analysis_strategy=channel_first,
@@ -137,6 +154,13 @@ RULES:
   "GMV has been declining since the weekend, what's happening?" is metric_id=gmv,
   question_family=gmv_drop, analysis_strategy={stable_merch_strategy}, target_date equal
   to the most recent completed business day, with no explicit dimension/filter.
+  "Why did GMV fall for that campaign-category slice?" is metric_id=gmv,
+  question_family=interaction_gmv_anomaly, analysis_strategy=standard.
+  "Why did traffic collapse in the focused segment?" is metric_id=uv,
+  question_family=interaction_uv_anomaly, analysis_strategy=standard.
+  "Why did traffic collapse in the focused segment on the 31st?" is
+  metric_id=uv, question_family=interaction_uv_anomaly,
+  analysis_strategy=standard.
 {slice_examples}
 - Do not infer a category/product element from broad words such as merchandise
   unless a supported dimension value is explicit in the user question.
@@ -269,6 +293,28 @@ class LLMIntentPlanner:
                 if attempt < LLM_INTENT_PARSE_MAX_ATTEMPTS:
                     continue
                 raise last_parse_error
+            if parsed_payload.error_code == "DATE_RANGE_INVALID" and should_retry_run_target_date_error(
+                question,
+                run_target_date=run_target_date,
+            ):
+                last_parse_error = MetricServiceError(
+                    "DATE_RANGE_INVALID",
+                    "intent parsing failed: DATE_RANGE_INVALID",
+                )
+                if attempt < LLM_INTENT_PARSE_MAX_ATTEMPTS:
+                    continue
+                raise last_parse_error
+            if parsed_payload.error_code == "METRIC_NOT_FOUND" and _mentions_supported_metric_surface(
+                question,
+                supported_metrics=supported_metrics,
+            ):
+                last_parse_error = MetricServiceError(
+                    "METRIC_NOT_FOUND",
+                    "intent parsing failed: METRIC_NOT_FOUND",
+                )
+                if attempt < LLM_INTENT_PARSE_MAX_ATTEMPTS:
+                    continue
+                raise last_parse_error
             if parsed_payload.error_code is not None:
                 raise MetricServiceError(parsed_payload.error_code, f"intent parsing failed: {parsed_payload.error_code}")
             try:
@@ -312,10 +358,39 @@ def _human_prompt(question: str, *, attempt: int) -> str:
         return question
     return (
         f"{question}\n\n"
-        "Previous parser attempt returned PARSE_FAILED or an invalid schema for this same question. "
+        "Previous parser attempt returned DATE_RANGE_INVALID, METRIC_NOT_FOUND, PARSE_FAILED, "
+        "or an invalid schema for this same question. "
         "Re-evaluate against the supported metrics, dimensions, values, and examples. "
+        "If the question text contains a supported metric surface from the system prompt, "
+        "return that supported metric_id rather than a metric-not-found error. "
+        "When RUN TARGET DATE is present and this is a relative-date or generic anomaly question, "
+        "return a single-date intent using RUN TARGET DATE. "
+        "Do not do this for true multi-day ranges or explicit current/future dates. "
         "If it is supported, return a valid structured intent; if it is truly unsupported, return the typed error."
     )
+
+
+def _mentions_supported_metric_surface(question: str, *, supported_metrics: list[str]) -> bool:
+    normalized_question = " ".join(question.casefold().split())
+    for metric_id in supported_metrics:
+        for surface in _metric_surfaces(metric_id):
+            pattern = _surface_pattern(surface)
+            if re.search(pattern, normalized_question):
+                return True
+    return False
+
+
+def _metric_surfaces(metric_id: str) -> tuple[str, ...]:
+    normalized_id = " ".join(str(metric_id).casefold().split())
+    spaced_id = " ".join(normalized_id.replace("_", " ").split())
+    if spaced_id == normalized_id:
+        return (normalized_id,)
+    return (normalized_id, spaced_id)
+
+
+def _surface_pattern(surface: str) -> str:
+    pieces = [re.escape(piece) for piece in surface.split()]
+    return r"(?<![a-z0-9_])" + r"\s+".join(pieces) + r"(?![a-z0-9_])"
 
 
 def build_system_prompt(
@@ -388,8 +463,7 @@ def _slice_examples(
                 f"question_family={family}, analysis_strategy=standard, dimension=product, "
                 f"element={product}, and filters containing dimension=product and value={product}."
             )
-        channel = _first_supported_value(supported_dimension_values, "channel")
-        if channel is not None:
+        for channel in supported_dimension_values.get("channel", []):
             channel_alias = channel.replace("_", " ")
             lines.append(
                 f'  "Why did {metric_phrase} fall in {channel_alias} yesterday?" is metric_id={metric_id}, '

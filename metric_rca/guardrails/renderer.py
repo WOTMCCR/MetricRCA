@@ -211,6 +211,10 @@ class SQLRenderer:
         )
 
     def _template_for(self, spec: QuerySpec) -> MetricTemplate:
-        if spec.signal_type == "campaign" and spec.metric_id == "gmv" and "channel" in spec.filters:
+        if (
+            spec.signal_type == "campaign"
+            and spec.metric_id == "gmv"
+            and ("channel" in spec.filters or "channel" in spec.group_by)
+        ):
             return MetricTemplate("fact_campaign", "SUM(fact_campaign.clicks)")
         return METRIC_TEMPLATES[spec.metric_id]

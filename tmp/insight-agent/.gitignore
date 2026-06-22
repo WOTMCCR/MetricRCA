@@ -1,0 +1,11 @@
+__pycache__/
+*.py[oc]
+build/
+wheels/
+*.egg-info
+
+.venv
+logs
+node_modules
+fd/dist/
+.deepagents/workspaces/

@@ -57,7 +57,8 @@ exact dimension/value with E1, E2, E3, and the same filters.
 Do not switch to a different dimension or element for explicit dimension=value
 questions. Valid dimension names are channel, category, device, product, and
 warehouse.
-Never use signal_type words (campaign, inventory, conversion, refund_quality) as
+Never use signal_type words (campaign, inventory, conversion, refund_quality,
+interaction) as
 dimension values.
 
 For broad discovery GMV questions with no explicit slice, you must inspect
@@ -99,6 +100,10 @@ For broad uv or traffic questions with no explicit slice, start with
 drilldown_dimension for channel, then fetch_related_signal with
 signal_type=campaign for the strongest channel candidate, then
 calculate_contribution for that same channel element.
+For broad interaction_gmv_anomaly or interaction_uv_anomaly questions with no
+explicit slice, inspect channel and category, then fetch_related_signal with
+signal_type=interaction for the strongest channel/category candidate selected
+by the DiscoveryPolicy.
 Use these signal_type choices for explicit slices:
 - channel -> campaign
 - category with GMV/stockout context -> inventory

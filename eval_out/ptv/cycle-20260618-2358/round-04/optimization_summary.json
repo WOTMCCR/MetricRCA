@@ -1,0 +1,66 @@
+{
+  "ptv_round": 4,
+  "cycle_id": "20260618-2358",
+  "created_at": "2026-06-19T14:39:14.547889+00:00",
+  "layer": "Layer 1 optimization summary",
+  "inputs": {
+    "gap_report": "eval_out/ptv/cycle-20260618-2358/round-04/gap_report.json",
+    "diagnosis": "eval_out/ptv/cycle-20260618-2358/round-04/diagnosis.jsonl",
+    "trajectory": "eval_out/ptv/cycle-20260618-2358/round-04/ptv_trajectory.jsonl",
+    "eval_result": "eval_out/ptv/cycle-20260618-2358/round-04/eval-result.json"
+  },
+  "metrics_before": {
+    "thresholds_met": false,
+    "per_family_gate": false,
+    "top1_rate": 0.804348,
+    "top3_rate": 0.891304,
+    "dominant_top1_rate": 0.804348,
+    "root_cause_set_recall_avg": 0.945652,
+    "root_cause_set_precision_avg": 0.662529,
+    "top3_contains_all_major_causes_rate": 0.891304,
+    "weighted_explanation_coverage_avg": 0.954348,
+    "multi_cause_top3_rate": null
+  },
+  "rule_c1_blocked_categories": [],
+  "rule_c1_reason": "No Round 4 fix has been applied yet; prior Round 3 FIX-D restored C14/MC06 execution and did not create a measured aggregate regression in this round.",
+  "rule_c2_deferred_categories": {
+    "FIX-A": 1,
+    "FIX-M": 1
+  },
+  "rule_c2_forced_category": null,
+  "rule_c3_discovery_priority_applied": true,
+  "rule_c3_reason": "Round 4 diagnosis contains active FIX-D candidate-set failures for MC04, MC06, MC07, and IX02. FIX-A/FIX-M symptoms are deferred because ranking/merge cannot recover root causes that are not discovered as first-class lanes.",
+  "rule_c4_revert_assessment": {
+    "triggered": false,
+    "aggregate_regressions": [],
+    "decision": "keep",
+    "justification": "Fresh full eval completed 46/46 with C14 execution restored; failures are remaining product gates rather than regressions caused by Round 3 lane aliasing."
+  },
+  "rule_c5_category_streak": {
+    "FIX-D": 1
+  },
+  "rule_c5_allowed": true,
+  "stall_analysis_used": true,
+  "anti_stall_decision": "Switching away from ranking self-lock; selecting discovery because current streak is below 2 and FIX-D is not blocked.",
+  "selected_fix_category": "FIX-D",
+  "target_layer": "policy",
+  "target_files": [
+    "metric_rca/business/policy_registry.py",
+    "metric_rca/runtime/plan_compiler.py",
+    "metric_rca/runtime/action_gate.py",
+    "tests/test_runtime_plan.py",
+    "tests/test_runtime_action_gate.py"
+  ],
+  "do_not_modify": [
+    "metric_rca/runtime/ranking.py"
+  ],
+  "case_targets": [
+    "MC04_gmv_weak_set",
+    "IX02_gmv_interaction_discovery",
+    "MC06_net_gmv_multi_driver"
+  ],
+  "expected_change": "Compile explicit multi-driver and broad GMV discovery into independent campaign/conversion/interaction lanes with distinct selection and E3 aliases, so missing conversion affiliate and interaction candidates enter E4 before ranking.",
+  "source_contamination_note": "A diagnosis-stage local rg command matched private ground-truth paths after Round 4 predictions and full eval were already complete. Controller decision relies on eval-result, persisted traces, gap_report, and diagnosis artifacts; no prediction artifact was modified from that source.",
+  "fix_commit": "47ef20dca0042ce7db604a5f573bc11bb6ea3cde",
+  "fix_status": "committed"
+}

@@ -1,0 +1,41 @@
+version: 1
+default_profile: regression
+profiles:
+  smoke:
+    description: Small local smoke profile bound to the regression scenario slice.
+    scenario_suite: regression
+    opt_in: false
+    destructive_reset: local_test_dsn_or_explicit_allow
+  regression:
+    description: Default deterministic 28-case regression data slice.
+    scenario_suite: regression
+    opt_in: false
+    destructive_reset: local_test_dsn_or_explicit_allow
+  acceptance:
+    description: Opt-in acceptance seed profile with production-scale entity cardinality.
+    scenario_suite: acceptance
+    opt_in: true
+    destructive_reset: local_test_dsn_or_explicit_allow
+    cardinality:
+      products: 200
+      categories: 20
+      channels: 8
+      devices: 4
+      warehouses: 10
+      campaigns: 100
+      users: 10000
+      history_days: 180
+  stress:
+    description: Opt-in stress seed profile for larger performance checks.
+    scenario_suite: stress
+    opt_in: true
+    destructive_reset: local_test_dsn_or_explicit_allow
+    cardinality:
+      products: 240
+      categories: 24
+      channels: 10
+      devices: 4
+      warehouses: 12
+      campaigns: 120
+      users: 12000
+      history_days: 210

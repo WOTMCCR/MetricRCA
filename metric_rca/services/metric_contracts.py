@@ -20,6 +20,8 @@ QuestionFamily = Literal[
     "complaint_rate_increase",
     "channel_gmv_anomaly",
     "category_gmv_anomaly",
+    "interaction_gmv_anomaly",
+    "interaction_uv_anomaly",
 ]
 
 AnalysisStrategy = Literal["standard", "channel_first", "product_first", "signal_first"]

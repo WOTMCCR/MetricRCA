@@ -1,0 +1,60 @@
+db:
+  # 数据库
+  driver: mysql # 数据库驱动
+  configs:
+    mysql:
+      host: ${oc.env:DB_HOST}
+      port: ${oc.env:DB_PORT}
+      user: ${oc.env:DB_USER}
+      password: ${oc.env:DB_PASSWORD}
+      database: ${oc.env:DB_NAME}
+
+redis:
+  # Redis
+  host: 127.0.0.1
+  port: 6379
+  password: ${oc.env:REDIS_PASSWORD}
+  db: 0
+
+log:
+  # 日志
+  level: INFO # 日志级别 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  max_file_size: 10MB # 单个日志文件最大大小
+
+lm_config:
+  active: deepseek-v4-flash-openrouter
+  models:
+    deepseek-v4-flash-openrouter:
+      model: deepseek/deepseek-v4-flash
+      base_url: https://openrouter.ai/api/v1
+      api_key: ${oc.env:OPENROUTER_API_KEY}
+      params: {}
+      profile:
+        max_input_tokens: 1048576 # 模型上下文长度，用于计算对话压缩阈值
+    qwen3.6-plus-openrouter:
+      model: qwen/qwen3.6-plus
+      base_url: https://openrouter.ai/api/v1
+      api_key: ${oc.env:OPENROUTER_API_KEY}
+      params: {}
+      profile:
+        max_input_tokens: 1000000 # 模型上下文长度，用于计算对话压缩阈值
+
+mcp:
+  # MCP 工具
+  tavily:
+    transport: streamable_http
+    url: https://mcp.tavily.com/mcp/?tavilyApiKey=${oc.env:TAVILY_API_KEY}
+
+auth_service:
+  # 认证服务
+  base_url: http://localhost:7100 # 认证服务 url
+  introspection: /api/introspection # 校验访问令牌端点
+
+data_agent:
+  # 数据查询 Agent
+  base_url: http://localhost:8000 # 数据查询 Agent url
+  query: /api/query # 数据查询端点
+
+cors_origins: [] # 允许跨域请求的源
+
+port: 7300

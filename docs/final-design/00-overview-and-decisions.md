@@ -1,3 +1,6 @@
+> Historical v2 design. Active production runtime decisions are superseded by
+> `docs/final-design/06-v3-repair-plan.md`.
+
 # MetricRCA 1 个月最终版（v2）— 总览与选型决策
 
 > 状态：accepted（2026-06-12 用户批准）。本目录是 1 个月最终版的设计源（design source of truth），

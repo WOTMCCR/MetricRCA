@@ -1,0 +1,95 @@
+{
+  "case_id": "C08_gmv_aov_drop",
+  "intent_ok": 1,
+  "anomaly_ok": 1,
+  "top1_ok": 1,
+  "top3_ok": 1,
+  "dominant_top1_ok": 1,
+  "root_cause_set_recall": 1.0,
+  "root_cause_set_precision": 1.0,
+  "weighted_explanation_coverage": 1.0,
+  "top3_contains_all_major_causes": 1,
+  "evidence_coverage": 1.0,
+  "sql_safe": 1,
+  "reflection_repair_ok": 1,
+  "report_traceable_ok": 1,
+  "memory_pollution_ok": 1,
+  "no_anomaly_task_ok": 1,
+  "adtributor_used": 1,
+  "multi_agent_path": "single_agent",
+  "detail": {
+    "status": "succeeded",
+    "metric_id": "gmv",
+    "expected_metric": "gmv",
+    "selected_candidate": {
+      "element": "2",
+      "verdict": "likely",
+      "dimension": "product",
+      "surprise_js": 0.05742109469161723,
+      "evidence_ids": [
+        "ptv-cycle-20260618-2358-round-327eb593:E1",
+        "ptv-cycle-20260618-2358-round-327eb593:E2_product",
+        "ptv-cycle-20260618-2358-round-327eb593:E_select_product",
+        "ptv-cycle-20260618-2358-round-327eb593:E3_prod",
+        "ptv-cycle-20260618-2358-round-327eb593:E4_product",
+        "ptv-cycle-20260618-2358-round-327eb593:E4",
+        "ptv-cycle-20260618-2358-round-327eb593:E_rank"
+      ],
+      "eng_confidence": 0.26488771221449403,
+      "root_cause_type": "aov_drop",
+      "signal_severity": 1.0,
+      "contribution_pct": 0.26488771221449403,
+      "evidence_support": 1.0,
+      "explanatory_power": 0.26488771221449403,
+      "reflection_factor": 1.0,
+      "dimension_elements": [
+        [
+          "product",
+          "2"
+        ]
+      ]
+    },
+    "expected_root_causes": [
+      {
+        "root_cause_type": "aov_drop",
+        "dimension": "product",
+        "element": "2",
+        "weight": 1.0
+      }
+    ],
+    "token_count": 0,
+    "latency_ms": 0,
+    "sql_count": 38,
+    "trace_step_count": 15,
+    "memory_read_seen": false,
+    "tool_sequence": [
+      "detect_anomaly",
+      "drilldown_dimension",
+      "drilldown_dimension",
+      "drilldown_dimension",
+      "select_signal_element",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "select_signal_element",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "select_signal_element",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "merge_contribution_sets",
+      "rank_root_causes"
+    ],
+    "memory_record_count": 1,
+    "memory_layers": [
+      "semantic"
+    ],
+    "eval_attempts": 1,
+    "final_run_id": "ptv-cycle-20260618-2358-round-327eb593",
+    "memory_enabled": false,
+    "tags": [
+      "p7",
+      "discovery"
+    ],
+    "scenario_family": "regression"
+  }
+}

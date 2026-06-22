@@ -26,16 +26,35 @@ encode the docs, then make the implementation pass those tests.
 - Use deterministic `QuerySpec -> SQLRenderer -> SQLGuard -> Repository` as the only data access path.
 - Avoid fallback-like behavior: no LLM-only bypass, no broad exception swallowing, no silent degradation, no default provider substitution, and no empty-data continuation.
 
+## Project Operational Authorization
+
+- The user has explicitly authorized this project to reset local seed/eval data
+  when needed for implementation or verification. Routine commands such as
+  `make seed SEED_PROFILE=regression` may rebuild the local MetricRCA database
+  without additional project-level confirmation.
+- The user has explicitly authorized deleting files in this repository when the
+  deletion is required by the current task or project plan. Do not delete
+  unrelated user data, and continue to obey any higher-priority system or tool
+  safety rule that requires a separate warning or confirmation.
+- Subagents are enabled by default for this project. Prefer dispatching bounded
+  subagents for eval execution, architecture/flow review, code review, or other
+  parallelizable side work when it materially improves progress or verification.
+
 ## Environment
 
-- Last preflight refresh: 2026-06-16T23:09:37+08:00; see `docs/env-setup.md`.
-- Runtime available: Python 3.12.3, Node v20.19.6, npm 10.8.2, GNU Make 4.3.
+- Last preflight refresh: 2026-06-18T12:05:56+08:00; see `docs/env-setup.md`.
+- Runtime available: Python 3.12.3, Node v20.19.6, npm 10.8.2, GNU Make 4.3, Docker 29.1.3, Docker Compose v2.40.3.
 - Network: GitHub, npm registry, and PyPI reachable through current environment.
 - Proxy: `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and lowercase variants are set to localhost proxy ports; `NO_PROXY` includes localhost loopback addresses.
 - Local service traffic must avoid proxy leakage; for Python `httpx` local calls use `trust_env=False`.
 - Project is in WSL on a native Linux path.
 - Python dependencies are installed in project-local `.venv`; `uv` is available and `uv pip install -e .` refreshed the editable install on 2026-06-16. Use `PATH=.venv/bin:$PATH make seed`, `PATH=.venv/bin:$PATH make test`, and `PATH=.venv/bin:$PATH python -m pytest ...` so Makefile `python` resolves correctly.
 - Frontend dependencies are installed under `frontend/node_modules`; `npm run test --prefix frontend -- --run --reporter=dot --passWithNoTests` starts successfully.
+- Docker was cleaned before the 2026-06-18 refresh; `PATH=.venv/bin:$PATH make up` restored `mysql:8.4` and started `metricrca-mysql-1` on port 3307.
+- Current Docker storage after restore: `mysql:8.4` image about 1.12GB, anonymous MySQL local volume about 220.5MB, running container about 36.86kB.
+- MySQL schema exists with 17 tables; regression seed was refreshed after the
+  2026-06-18 data optimization and loaded the 46-case regression slice.
+- `docker-compose.yml` does not define a named `/var/lib/mysql` volume; MySQL data currently lives in a Docker-managed anonymous volume, not a project-local directory.
 
 ## Strict Implementation Contract
 

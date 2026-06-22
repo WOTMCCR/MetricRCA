@@ -1,0 +1,1 @@
+{'products': 200, 'categories': 20, 'channels': 8, 'devices': 4, 'warehouses': 10, 'campaigns': 100, 'users': 10000, 'history_days': 180, 'ground_truth_cases': 28, 'ground_truth_profile_acceptance': 28}

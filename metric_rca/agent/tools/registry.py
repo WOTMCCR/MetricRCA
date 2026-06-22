@@ -9,12 +9,14 @@ from metric_rca.agent.tools.calculate_contribution import calculate_contribution
 from metric_rca.agent.tools.detect_anomaly import detect_anomaly
 from metric_rca.agent.tools.drilldown_dimension import drilldown_dimension
 from metric_rca.agent.tools.fetch_related_signal import fetch_related_signal
+from metric_rca.agent.tools.merge_contribution_sets import merge_contribution_sets
 from metric_rca.agent.tools.signal_policy import SIGNAL_RULES, SignalRule, SignalType, select_signal_type
 from metric_rca.agent.tools.schemas import (
     CalculateContributionArgs,
     DetectAnomalyArgs,
     DrilldownDimensionArgs,
     FetchRelatedSignalArgs,
+    MergeContributionSetsArgs,
     ToolResult,
 )
 from metric_rca.domain.models import StrictModel
@@ -33,6 +35,7 @@ ACTION_REGISTRY: dict[str, ActionSpec] = {
     "drilldown_dimension": ActionSpec("drilldown_dimension", DrilldownDimensionArgs, drilldown_dimension),
     "fetch_related_signal": ActionSpec("fetch_related_signal", FetchRelatedSignalArgs, fetch_related_signal, pass_settings=True),
     "calculate_contribution": ActionSpec("calculate_contribution", CalculateContributionArgs, calculate_contribution),
+    "merge_contribution_sets": ActionSpec("merge_contribution_sets", MergeContributionSetsArgs, merge_contribution_sets),
 }
 
 

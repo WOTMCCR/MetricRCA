@@ -1,0 +1,18 @@
+{
+  "agent_id": "019ee12d-74eb-7922-9c1a-b9c62eff20bf",
+  "type": "read_only_subagent_review",
+  "findings": [
+    "Confirmed C21 root cause: confidence-first conversion-only merge selected channel/social runner; merge source lookup required source_set.selected_candidate and failed.",
+    "Confirmed contribution_pct-first ordering is appropriate as a conversion-only merge exception, not a general ranking rewrite.",
+    "Confirmed merge_contribution_sets should resolve selected candidates by source_set.candidates membership while still fail-fast when absent.",
+    "Regression risks: MC03 channel-social/organic conversion merge must be guarded; MC06 low risk because mixed net_gmv is not conversion-only; precision gates depend on retained candidates and should not be broadened."
+  ],
+  "commands": [
+    "sed",
+    "rg",
+    "nl -ba",
+    "git status --short",
+    "git diff"
+  ],
+  "files_edited": []
+}

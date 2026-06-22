@@ -14,6 +14,7 @@ from metric_rca.reporting.projector import build_report_from_persisted_artifacts
 from metric_rca.runtime.dependencies import RuntimeDependencies
 from metric_rca.runtime.plan_compiler import RcaPlanCompiler
 from metric_rca.runtime.plan_compiler import PlanCompilerError
+from metric_rca.runtime.memory_service import RuntimeMemoryService
 from metric_rca.runtime.plan_executor import RcaPlanExecutor
 from metric_rca.runtime.run_context import RunContext
 from metric_rca.runtime.sdk_tools import ToolExecutor
@@ -33,6 +34,7 @@ class RunService:
         plan_executor: Any | None = None,
         reflection_verifier: ReflectionVerifier | None = None,
         report_projector: ReportProjector | None = None,
+        memory_service: Any | None = None,
     ) -> None:
         self.dependencies = dependencies
         self._plan_compiler = plan_compiler or RcaPlanCompiler(metric_service=dependencies.metric_service)
@@ -42,6 +44,7 @@ class RunService:
         )
         self._reflection_verifier = reflection_verifier or self._verify_reflection
         self._report_projector = report_projector or self._project_report
+        self._memory_service = memory_service or RuntimeMemoryService(dependencies=dependencies)
 
     def run(self, question: str, *, run_id: str | None = None) -> dict[str, Any]:
         resolved_run_id = run_id or f"run-{uuid4().hex}"
@@ -65,9 +68,11 @@ class RunService:
                 metric_id=parsed_intent.metric_id,
                 target_date=parsed_intent.target_date,
             )
+            memory_hints = self._read_memory_priors(resolved_run_id, parsed_intent)
             plan = self._plan_compiler.compile(
                 run_id=resolved_run_id,
                 parsed_intent=parsed_intent,
+                memory_hints=memory_hints,
                 budget=_budget_from_settings(self.dependencies.settings),
             )
             execution = self._plan_executor.execute(
@@ -76,6 +81,7 @@ class RunService:
                     metric_id=parsed_intent.metric_id,
                     target_date=parsed_intent.target_date,
                     explicit_scope=plan.explicit_scope,
+                    scope_mode=plan.scope_mode,
                     budget=plan.budget,
                     repository=self.dependencies.repository,
                 ),
@@ -83,24 +89,46 @@ class RunService:
             )
         except (MetricServiceError, PlanCompilerError) as exc:
             return self._fail(resolved_run_id, question, _code_from_exception(exc, "RUN_SERVICE_FAILED"))
+        except RuntimeError as exc:
+            error_code = _code_from_exception(exc, "RUN_SERVICE_FAILED")
+            if not error_code.startswith("MEMORY_"):
+                raise
+            return self._fail(resolved_run_id, question, error_code)
 
         if execution.status == "failed":
-            return self._fail(resolved_run_id, question, execution.error_code or "PLAN_EXECUTION_FAILED")
+            error_code = execution.error_code or "PLAN_EXECUTION_FAILED"
+            memory_error = self._write_failure_memory(resolved_run_id, error_code, parsed_intent, {})
+            if memory_error is not None:
+                return self._fail(resolved_run_id, question, memory_error)
+            return self._fail(resolved_run_id, question, error_code)
 
         reflection = self._reflection_verifier(resolved_run_id, 0, parsed_intent)
         try:
             reflection_passed = _reflection_passed(reflection)
             reflection_payload = _reflection_payload(reflection)
         except RuntimeError as exc:
-            return self._fail(resolved_run_id, question, _code_from_exception(exc, "REFLECTION_OUTPUT_INVALID"))
+            error_code = _code_from_exception(exc, "REFLECTION_OUTPUT_INVALID")
+            memory_error = self._write_failure_memory(resolved_run_id, error_code, parsed_intent, {})
+            if memory_error is not None:
+                return self._fail(resolved_run_id, question, memory_error)
+            return self._fail(resolved_run_id, question, error_code)
         if execution.status == "succeeded" and not reflection_passed:
+            memory_error = self._write_failure_memory(resolved_run_id, "REFLECTION_REPAIR_FAILED", parsed_intent, reflection_payload)
+            if memory_error is not None:
+                return self._fail(resolved_run_id, question, memory_error)
             return self._fail(resolved_run_id, question, "REFLECTION_REPAIR_FAILED")
 
         status = "no_anomaly" if execution.status == "no_anomaly" else "succeeded"
         report = self._report_projector(resolved_run_id, status)
         if report is None:
+            memory_error = self._write_failure_memory(resolved_run_id, "REPORT_PROJECTION_FAILED", parsed_intent, {})
+            if memory_error is not None:
+                return self._fail(resolved_run_id, question, memory_error)
             return self._fail(resolved_run_id, question, "REPORT_PROJECTION_FAILED")
         try:
+            memory_error = self._write_verified_memory(resolved_run_id, report, reflection, parsed_intent)
+            if memory_error is not None:
+                return self._fail(resolved_run_id, question, memory_error)
             self._create_required_tasks(resolved_run_id, report)
             self._finish_run(resolved_run_id, status=status, error_code=None)
         except (RuntimeError, TraceWriteError) as exc:
@@ -119,6 +147,44 @@ class RunService:
             "reflection": reflection_payload,
             "report": report,
         }
+
+    def _read_memory_priors(self, run_id: str, parsed_intent: ParsedIntent) -> list[Any]:
+        if not bool(getattr(self.dependencies.settings, "memory_enabled", False)):
+            return []
+        try:
+            return list(self._memory_service.read_priors(run_id, parsed_intent))
+        except RuntimeError as exc:
+            raise RuntimeError(_code_from_exception(exc, "MEMORY_READ_FAILED")) from exc
+
+    def _write_verified_memory(
+        self,
+        run_id: str,
+        report: dict[str, Any],
+        reflection: Any,
+        parsed_intent: ParsedIntent,
+    ) -> str | None:
+        if not bool(getattr(self.dependencies.settings, "memory_enabled", False)):
+            return None
+        try:
+            self._memory_service.write_verified_case(run_id, report, reflection, parsed_intent)
+        except RuntimeError as exc:
+            return _code_from_exception(exc, "MEMORY_WRITE_FAILED")
+        return None
+
+    def _write_failure_memory(
+        self,
+        run_id: str,
+        error_code: str,
+        parsed_intent: ParsedIntent,
+        extra: dict[str, Any] | None,
+    ) -> str | None:
+        if not bool(getattr(self.dependencies.settings, "memory_enabled", False)):
+            return None
+        try:
+            self._memory_service.write_reflection_failure(run_id, error_code, parsed_intent, extra)
+        except RuntimeError as exc:
+            return _code_from_exception(exc, "MEMORY_WRITE_FAILED")
+        return None
 
     def _fail(self, run_id: str, question: str, code: str) -> dict[str, Any]:
         try:
@@ -171,10 +237,9 @@ class RunService:
         candidates: list[RootCauseCandidate] = []
         if e4 is not None:
             summary = e4.result_summary or {}
-            raw_candidates = summary.get("candidates") or []
+            contribution_set = summary.get("contribution_set")
+            raw_candidates = contribution_set.get("candidates") if isinstance(contribution_set, dict) else []
             candidates = [RootCauseCandidate.model_validate(item) for item in raw_candidates]
-            if not candidates and isinstance(summary.get("selected_candidate"), dict):
-                candidates = [RootCauseCandidate.model_validate(summary["selected_candidate"])]
         run = self.dependencies.repository.get_agent_run(run_id) or {}
         trace_nodes = [row.get("action") or row.get("node") for row in self.dependencies.repository.get_trace_steps(run_id)]
         return {
@@ -249,7 +314,7 @@ def _parsed_intent_scope(parsed_intent: ParsedIntent | None) -> dict[str, str]:
 def _budget_from_settings(settings: Settings | Any) -> dict[str, int]:
     return {
         "max_steps": int(getattr(settings, "max_steps", 8)),
-        "max_query": int(getattr(settings, "max_query", 12)),
+        "max_query": int(getattr(settings, "max_query", 20)),
         "max_drilldown_depth": int(getattr(settings, "max_drilldown_depth", 3)),
     }
 

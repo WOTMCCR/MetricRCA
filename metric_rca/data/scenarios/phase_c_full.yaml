@@ -1,0 +1,1893 @@
+{
+  "schema_version": "metricrca-scenario-set-v1",
+  "scenario_set_id": "phase_c_full",
+  "scenarios": [
+    {
+      "scenario_id": "DG01_paid_ads_traffic_drop",
+      "question": "Why did paid ads GMV drop on 2026-06-05?",
+      "target_date": "2026-06-05",
+      "metric_id": "gmv",
+      "anomaly_direction": "drop",
+      "expected_anomaly": true,
+      "tags": [
+        "campaign",
+        "channel"
+      ],
+      "shocks": [
+        {
+          "shock_id": "paid-traffic",
+          "shock_type": "paid_ads_traffic_drop",
+          "selector": {
+            "channel": [
+              "paid_ads"
+            ]
+          },
+          "operations": [
+            {
+              "field": "uv",
+              "operation": "multiply",
+              "value": 0.42,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "sessions",
+              "operation": "multiply",
+              "value": 0.42,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.42,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_channel",
+            "E3_campaign_traffic_drop",
+            "E4_channel",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "organic-stable",
+          "selector": {
+            "channel": [
+              "organic"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.3,
+        "selector": {
+          "channel": [
+            "paid_ads"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG02_campaign_budget_cut",
+      "question": "Why did search generic campaign revenue fall on 2026-06-05?",
+      "target_date": "2026-06-06",
+      "metric_id": "gmv",
+      "anomaly_direction": "drop",
+      "expected_anomaly": true,
+      "tags": [
+        "campaign",
+        "budget"
+      ],
+      "shocks": [
+        {
+          "shock_id": "budget-cut",
+          "shock_type": "campaign_budget_cut",
+          "selector": {
+            "campaign": [
+              "search_generic"
+            ]
+          },
+          "operations": [
+            {
+              "field": "spend",
+              "operation": "multiply",
+              "value": 0.35,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "impressions",
+              "operation": "multiply",
+              "value": 0.4,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "clicks",
+              "operation": "multiply",
+              "value": 0.4,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "uv",
+              "operation": "multiply",
+              "value": 0.52,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "sessions",
+              "operation": "multiply",
+              "value": 0.52,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.52,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "campaign",
+          "element": "search_generic",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_campaign",
+            "E3_campaign_traffic_drop",
+            "E4_campaign",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "brand-search-stable",
+          "selector": {
+            "campaign": [
+              "search_brand"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.28,
+        "selector": {
+          "campaign": [
+            "search_generic"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG03_campaign_quality_drop",
+      "question": "Why did the generic search campaign convert poorly?",
+      "target_date": "2026-06-07",
+      "metric_id": "gmv",
+      "anomaly_direction": "drop",
+      "expected_anomaly": true,
+      "tags": [
+        "campaign",
+        "conversion"
+      ],
+      "shocks": [
+        {
+          "shock_id": "quality-drop",
+          "shock_type": "campaign_quality_drop",
+          "selector": {
+            "campaign": [
+              "search_generic"
+            ]
+          },
+          "operations": [
+            {
+              "field": "clicks",
+              "operation": "multiply",
+              "value": 0.7,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.45,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "campaign_quality_drop",
+          "dimension": "campaign",
+          "element": "search_generic",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_campaign",
+            "E3_campaign_quality_drop",
+            "E4_campaign",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "brand-search-quality",
+          "selector": {
+            "campaign": [
+              "search_brand"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.3,
+        "selector": {
+          "campaign": [
+            "search_generic"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG04_landing_page_cvr_drop",
+      "question": "Why did mobile campaign conversion fall on 2026-06-05?",
+      "target_date": "2026-06-08",
+      "metric_id": "pay_cvr",
+      "anomaly_direction": "drop",
+      "expected_anomaly": true,
+      "tags": [
+        "conversion",
+        "landing_page"
+      ],
+      "shocks": [
+        {
+          "shock_id": "landing-cvr",
+          "shock_type": "landing_page_cvr_drop",
+          "selector": {
+            "device": [
+              "mobile"
+            ],
+            "landing_page": [
+              "campaign"
+            ]
+          },
+          "operations": [
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.38,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "conversion_drop",
+          "dimension": "landing_page",
+          "element": "campaign",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_device",
+            "E2_landing_page",
+            "E3_conversion",
+            "E4_landing_page",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "mobile-product-page",
+          "selector": {
+            "device": [
+              "mobile"
+            ],
+            "landing_page": [
+              "product"
+            ]
+          },
+          "metric_id": "pay_cvr",
+          "max_abs_delta_ratio": 0.12
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.35,
+        "selector": {
+          "device": [
+            "mobile"
+          ],
+          "landing_page": [
+            "campaign"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG05_organic_seo_drop",
+      "question": "Why did organic performance fall on 2026-06-05?",
+      "target_date": "2026-06-09",
+      "metric_id": "gmv",
+      "anomaly_direction": "drop",
+      "expected_anomaly": true,
+      "tags": [
+        "organic",
+        "seo"
+      ],
+      "shocks": [
+        {
+          "shock_id": "seo-drop",
+          "shock_type": "organic_seo_drop",
+          "selector": {
+            "channel": [
+              "organic"
+            ]
+          },
+          "operations": [
+            {
+              "field": "uv",
+              "operation": "multiply",
+              "value": 0.48,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "sessions",
+              "operation": "multiply",
+              "value": 0.48,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.48,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "organic_traffic_drop",
+          "dimension": "channel",
+          "element": "organic",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_channel",
+            "E3_organic_traffic_drop",
+            "E4_channel",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "email-stable",
+          "selector": {
+            "channel": [
+              "email"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.32,
+        "selector": {
+          "channel": [
+            "organic"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG06_affiliate_weak_signal",
+      "question": "Did affiliate performance meaningfully affect GMV on 2026-06-05?",
+      "target_date": "2026-06-10",
+      "metric_id": "gmv",
+      "anomaly_direction": "drop",
+      "expected_anomaly": true,
+      "tags": [
+        "weak_signal",
+        "affiliate"
+      ],
+      "shocks": [
+        {
+          "shock_id": "affiliate-weak",
+          "shock_type": "affiliate_weak_signal",
+          "selector": {
+            "channel": [
+              "affiliate"
+            ]
+          },
+          "operations": [
+            {
+              "field": "uv",
+              "operation": "multiply",
+              "value": 0.82,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "sessions",
+              "operation": "multiply",
+              "value": 0.82,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.6,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "weak_signal_combination",
+          "dimension": "channel",
+          "element": "affiliate",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_channel",
+            "E3_weak_signal_combination",
+            "E4_channel",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "social-stable",
+          "selector": {
+            "channel": [
+              "social"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.25,
+        "selector": {
+          "channel": [
+            "affiliate"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG07_sku_stockout",
+      "question": "Why did phone SKU GMV collapse?",
+      "target_date": "2026-06-11",
+      "metric_id": "gmv",
+      "anomaly_direction": "drop",
+      "expected_anomaly": true,
+      "tags": [
+        "inventory",
+        "product"
+      ],
+      "shocks": [
+        {
+          "shock_id": "phone-stockout",
+          "shock_type": "sku_stockout",
+          "selector": {
+            "product": [
+              "sku_phone"
+            ]
+          },
+          "operations": [
+            {
+              "field": "stockout_hours",
+              "operation": "set",
+              "value": 22,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.22,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "stockout",
+          "dimension": "product",
+          "element": "sku_phone",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_product",
+            "E3_stockout",
+            "E4_product",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "headphones-in-stock",
+          "selector": {
+            "product": [
+              "sku_headphones"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.55,
+        "selector": {
+          "product": [
+            "sku_phone"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG08_category_inventory_constraint",
+      "question": "Why did electronics underperform on 2026-06-05?",
+      "target_date": "2026-06-12",
+      "metric_id": "gmv",
+      "anomaly_direction": "drop",
+      "expected_anomaly": true,
+      "tags": [
+        "inventory",
+        "category"
+      ],
+      "shocks": [
+        {
+          "shock_id": "electronics-constraint",
+          "shock_type": "category_inventory_constraint",
+          "selector": {
+            "category": [
+              "electronics"
+            ]
+          },
+          "operations": [
+            {
+              "field": "stockout_hours",
+              "operation": "add",
+              "value": 14,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.48,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "stockout",
+          "dimension": "category",
+          "element": "electronics",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_category",
+            "E3_stockout",
+            "E4_category",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "fashion-inventory",
+          "selector": {
+            "category": [
+              "fashion"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.35,
+        "selector": {
+          "category": [
+            "electronics"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG09_price_increase",
+      "question": "Why did sneaker GMV fall on 2026-06-05?",
+      "target_date": "2026-06-13",
+      "metric_id": "gmv",
+      "anomaly_direction": "drop",
+      "expected_anomaly": true,
+      "tags": [
+        "pricing",
+        "product"
+      ],
+      "shocks": [
+        {
+          "shock_id": "sneaker-price",
+          "shock_type": "price_increase",
+          "selector": {
+            "product": [
+              "sku_sneakers"
+            ]
+          },
+          "operations": [
+            {
+              "field": "unit_price",
+              "operation": "multiply",
+              "value": 1.2,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.38,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "price_increase",
+          "dimension": "product",
+          "element": "sku_sneakers",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_product",
+            "E3_price_increase",
+            "E4_product",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "dress-price",
+          "selector": {
+            "product": [
+              "sku_dress"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.35,
+        "selector": {
+          "product": [
+            "sku_sneakers"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG10_promotion_end",
+      "question": "Why did flash-sale GMV fall on 2026-06-05?",
+      "target_date": "2026-06-14",
+      "metric_id": "gmv",
+      "anomaly_direction": "drop",
+      "expected_anomaly": true,
+      "tags": [
+        "promotion"
+      ],
+      "shocks": [
+        {
+          "shock_id": "promotion-ended",
+          "shock_type": "promotion_end",
+          "selector": {
+            "promotion_type": [
+              "flash_sale"
+            ]
+          },
+          "operations": [
+            {
+              "field": "promotion_discount",
+              "operation": "set",
+              "value": 0.0,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.34,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "promotion_end",
+          "dimension": "promotion_type",
+          "element": "flash_sale",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_promotion_type",
+            "E3_promotion_end",
+            "E4_promotion_type",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "coupon-stable",
+          "selector": {
+            "promotion_type": [
+              "coupon"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.38,
+        "selector": {
+          "promotion_type": [
+            "flash_sale"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG11_refund_spike",
+      "question": "Why did fashion refund rate rise on 2026-06-05?",
+      "target_date": "2026-06-15",
+      "metric_id": "refund_rate",
+      "anomaly_direction": "rise",
+      "expected_anomaly": true,
+      "tags": [
+        "refund",
+        "quality"
+      ],
+      "shocks": [
+        {
+          "shock_id": "fashion-refunds",
+          "shock_type": "refund_spike",
+          "selector": {
+            "category": [
+              "fashion"
+            ]
+          },
+          "operations": [
+            {
+              "field": "refund_amount",
+              "operation": "multiply",
+              "value": 4.2,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "refund_spike",
+          "dimension": "category",
+          "element": "fashion",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_category",
+            "E3_refund_spike",
+            "E4_category",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "electronics-refunds",
+          "selector": {
+            "category": [
+              "electronics"
+            ]
+          },
+          "metric_id": "refund_rate",
+          "max_abs_delta_ratio": 0.15
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.8,
+        "selector": {
+          "category": [
+            "fashion"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG12_logistics_delay",
+      "question": "Why did JP Post GMV weaken on 2026-06-05?",
+      "target_date": "2026-06-16",
+      "metric_id": "gmv",
+      "anomaly_direction": "drop",
+      "expected_anomaly": true,
+      "tags": [
+        "logistics"
+      ],
+      "shocks": [
+        {
+          "shock_id": "jp-post-delay",
+          "shock_type": "logistics_delay",
+          "selector": {
+            "logistics_provider": [
+              "jp_post"
+            ]
+          },
+          "operations": [
+            {
+              "field": "delivery_delay_hours",
+              "operation": "add",
+              "value": 24,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.55,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "logistics_delay",
+          "dimension": "logistics_provider",
+          "element": "jp_post",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_logistics_provider",
+            "E3_logistics_delay",
+            "E4_logistics_provider",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "yamato-stable",
+          "selector": {
+            "logistics_provider": [
+              "yamato"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.28,
+        "selector": {
+          "logistics_provider": [
+            "jp_post"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG13_product_quality_complaints",
+      "question": "Why did dress complaint rate rise on 2026-06-05?",
+      "target_date": "2026-06-17",
+      "metric_id": "complaint_rate",
+      "anomaly_direction": "rise",
+      "expected_anomaly": true,
+      "tags": [
+        "quality",
+        "complaint"
+      ],
+      "shocks": [
+        {
+          "shock_id": "dress-quality",
+          "shock_type": "product_quality_complaints",
+          "selector": {
+            "product": [
+              "sku_dress"
+            ]
+          },
+          "operations": [
+            {
+              "field": "complaints",
+              "operation": "add",
+              "value": 2.5,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "refund_amount",
+              "operation": "multiply",
+              "value": 2.2,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "complaint_or_quality_issue",
+          "dimension": "product",
+          "element": "sku_dress",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_product",
+            "E3_complaint_or_quality_issue",
+            "E4_product",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "sneakers-quality",
+          "selector": {
+            "product": [
+              "sku_sneakers"
+            ]
+          },
+          "metric_id": "complaint_rate",
+          "max_abs_delta_ratio": 0.18
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 1.0,
+        "selector": {
+          "product": [
+            "sku_dress"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG14_seasonal_false_positive",
+      "question": "Was social performance abnormal on 2026-06-05?",
+      "target_date": "2026-06-18",
+      "metric_id": "gmv",
+      "anomaly_direction": "no_anomaly",
+      "expected_anomaly": false,
+      "tags": [
+        "seasonal",
+        "no_anomaly"
+      ],
+      "shocks": [
+        {
+          "shock_id": "seasonal-social",
+          "shock_type": "seasonal_false_positive",
+          "selector": {
+            "channel": [
+              "social"
+            ]
+          },
+          "operations": [
+            {
+              "field": "uv",
+              "operation": "multiply",
+              "value": 0.7,
+              "day_offset": 0,
+              "scope": "target_and_baseline"
+            },
+            {
+              "field": "sessions",
+              "operation": "multiply",
+              "value": 0.7,
+              "day_offset": 0,
+              "scope": "target_and_baseline"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.7,
+              "day_offset": 0,
+              "scope": "target_and_baseline"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [],
+      "negative_controls": [
+        {
+          "name": "social-seasonal-control",
+          "selector": {
+            "channel": [
+              "social"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.15,
+        "selector": {
+          "channel": [
+            "social"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG15_no_anomaly_noise",
+      "question": "Was marketplace performance abnormal on 2026-06-05?",
+      "target_date": "2026-06-19",
+      "metric_id": "gmv",
+      "anomaly_direction": "no_anomaly",
+      "expected_anomaly": false,
+      "tags": [
+        "noise",
+        "no_anomaly"
+      ],
+      "shocks": [
+        {
+          "shock_id": "small-noise",
+          "shock_type": "no_anomaly_noise",
+          "selector": {
+            "shop": [
+              "marketplace"
+            ]
+          },
+          "operations": [
+            {
+              "field": "uv",
+              "operation": "multiply",
+              "value": 0.99,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "sessions",
+              "operation": "multiply",
+              "value": 0.99,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.99,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [],
+      "negative_controls": [
+        {
+          "name": "marketplace-noise",
+          "selector": {
+            "shop": [
+              "marketplace"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.15,
+        "selector": {
+          "shop": [
+            "marketplace"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG16_positive_spike",
+      "question": "Why did paid ads GMV spike positively?",
+      "target_date": "2026-06-20",
+      "metric_id": "gmv",
+      "anomaly_direction": "spike",
+      "expected_anomaly": true,
+      "tags": [
+        "positive_spike"
+      ],
+      "shocks": [
+        {
+          "shock_id": "paid-spike",
+          "shock_type": "positive_spike",
+          "selector": {
+            "channel": [
+              "paid_ads"
+            ]
+          },
+          "operations": [
+            {
+              "field": "uv",
+              "operation": "multiply",
+              "value": 1.65,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "sessions",
+              "operation": "multiply",
+              "value": 1.65,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 1.65,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "positive_traffic_spike",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_channel",
+            "E3_positive_traffic_spike",
+            "E4_channel",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "organic-no-spike",
+          "selector": {
+            "channel": [
+              "organic"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.4,
+        "selector": {
+          "channel": [
+            "paid_ads"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG17_lagged_social_effect",
+      "question": "Why did social GMV drop on 2026-06-05?",
+      "target_date": "2026-06-21",
+      "metric_id": "gmv",
+      "anomaly_direction": "drop",
+      "expected_anomaly": true,
+      "tags": [
+        "lagged",
+        "social"
+      ],
+      "shocks": [
+        {
+          "shock_id": "lagged-social",
+          "shock_type": "lagged_social_effect",
+          "selector": {
+            "channel": [
+              "social"
+            ]
+          },
+          "operations": [
+            {
+              "field": "spend",
+              "operation": "multiply",
+              "value": 0.2,
+              "day_offset": -2,
+              "scope": "target"
+            },
+            {
+              "field": "clicks",
+              "operation": "multiply",
+              "value": 0.18,
+              "day_offset": -2,
+              "scope": "target"
+            },
+            {
+              "field": "uv",
+              "operation": "multiply",
+              "value": 0.45,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "sessions",
+              "operation": "multiply",
+              "value": 0.45,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.45,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "social",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_channel",
+            "E3_campaign_lagged",
+            "E4_channel",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "email-lag-control",
+          "selector": {
+            "channel": [
+              "email"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.35,
+        "selector": {
+          "channel": [
+            "social"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG18_channel_category_interaction",
+      "question": "Why did paid ads electronics GMV fall on 2026-06-05?",
+      "target_date": "2026-06-22",
+      "metric_id": "gmv",
+      "anomaly_direction": "drop",
+      "expected_anomaly": true,
+      "tags": [
+        "interaction",
+        "cross_dimension"
+      ],
+      "shocks": [
+        {
+          "shock_id": "paid-electronics-cell",
+          "shock_type": "channel_category_interaction",
+          "selector": {
+            "channel": [
+              "paid_ads"
+            ],
+            "category": [
+              "electronics"
+            ]
+          },
+          "operations": [
+            {
+              "field": "uv",
+              "operation": "multiply",
+              "value": 0.28,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "sessions",
+              "operation": "multiply",
+              "value": 0.28,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.28,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "interaction_channel_category",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_channel",
+            "E2_category",
+            "E3_interaction",
+            "E4_channel_category",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "paid-fashion-control",
+          "selector": {
+            "channel": [
+              "paid_ads"
+            ],
+            "category": [
+              "fashion"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        },
+        {
+          "name": "organic-electronics-control",
+          "selector": {
+            "channel": [
+              "organic"
+            ],
+            "category": [
+              "electronics"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.55,
+        "selector": {
+          "channel": [
+            "paid_ads"
+          ],
+          "category": [
+            "electronics"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG19_device_landing_interaction",
+      "question": "Why did mobile campaign users convert poorly on 2026-06-05?",
+      "target_date": "2026-06-23",
+      "metric_id": "pay_cvr",
+      "anomaly_direction": "drop",
+      "expected_anomaly": true,
+      "tags": [
+        "interaction",
+        "device",
+        "landing_page"
+      ],
+      "shocks": [
+        {
+          "shock_id": "mobile-campaign-cell",
+          "shock_type": "device_landing_page_interaction",
+          "selector": {
+            "device": [
+              "mobile"
+            ],
+            "landing_page": [
+              "campaign"
+            ]
+          },
+          "operations": [
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.3,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "interaction_device_landing_page",
+          "dimension": "device",
+          "element": "mobile",
+          "weight": 1.0,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_device",
+            "E2_landing_page",
+            "E3_interaction",
+            "E4_device_landing",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "mobile-product-control",
+          "selector": {
+            "device": [
+              "mobile"
+            ],
+            "landing_page": [
+              "product"
+            ]
+          },
+          "metric_id": "pay_cvr",
+          "max_abs_delta_ratio": 0.14
+        },
+        {
+          "name": "desktop-campaign-control",
+          "selector": {
+            "device": [
+              "desktop"
+            ],
+            "landing_page": [
+              "campaign"
+            ]
+          },
+          "metric_id": "pay_cvr",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.5,
+        "selector": {
+          "device": [
+            "mobile"
+          ],
+          "landing_page": [
+            "campaign"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "DG20_multi_cause_simultaneous",
+      "question": "Why did overall GMV drop on 2026-06-05?",
+      "target_date": "2026-06-24",
+      "metric_id": "gmv",
+      "anomaly_direction": "drop",
+      "expected_anomaly": true,
+      "tags": [
+        "multi_cause",
+        "campaign",
+        "inventory"
+      ],
+      "shocks": [
+        {
+          "shock_id": "multi-paid",
+          "shock_type": "multi_cause_simultaneous_driver",
+          "selector": {
+            "channel": [
+              "paid_ads"
+            ]
+          },
+          "operations": [
+            {
+              "field": "uv",
+              "operation": "multiply",
+              "value": 0.45,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "sessions",
+              "operation": "multiply",
+              "value": 0.45,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.45,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        },
+        {
+          "shock_id": "multi-electronics",
+          "shock_type": "multi_cause_simultaneous_driver",
+          "selector": {
+            "category": [
+              "electronics"
+            ]
+          },
+          "operations": [
+            {
+              "field": "stockout_hours",
+              "operation": "set",
+              "value": 18,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.42,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 0.55,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_channel",
+            "E3_campaign_traffic_drop",
+            "E4_channel",
+            "E_rank"
+          ]
+        },
+        {
+          "root_cause_type": "stockout",
+          "dimension": "category",
+          "element": "electronics",
+          "weight": 0.45,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_category",
+            "E3_stockout",
+            "E4_category",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "organic-fashion-control",
+          "selector": {
+            "channel": [
+              "organic"
+            ],
+            "category": [
+              "fashion"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.16,
+        "selector": {}
+      }
+    },
+    {
+      "scenario_id": "DG21_residual_dual_mechanism",
+      "question": "Why did GMV fall on 2026-06-05 after the primary driver was identified?",
+      "target_date": "2026-06-25",
+      "metric_id": "gmv",
+      "anomaly_direction": "drop",
+      "expected_anomaly": true,
+      "tags": [
+        "multi_cause",
+        "residual",
+        "aov"
+      ],
+      "shocks": [
+        {
+          "shock_id": "residual-paid",
+          "shock_type": "residual_dual_mechanism",
+          "selector": {
+            "channel": [
+              "paid_ads"
+            ]
+          },
+          "operations": [
+            {
+              "field": "uv",
+              "operation": "multiply",
+              "value": 0.48,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "sessions",
+              "operation": "multiply",
+              "value": 0.48,
+              "day_offset": 0,
+              "scope": "target"
+            },
+            {
+              "field": "orders",
+              "operation": "multiply",
+              "value": 0.48,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        },
+        {
+          "shock_id": "residual-fashion-aov",
+          "shock_type": "residual_dual_mechanism",
+          "selector": {
+            "category": [
+              "fashion"
+            ]
+          },
+          "operations": [
+            {
+              "field": "unit_price",
+              "operation": "multiply",
+              "value": 0.58,
+              "day_offset": 0,
+              "scope": "target"
+            }
+          ]
+        }
+      ],
+      "expected_causes": [
+        {
+          "root_cause_type": "campaign_traffic_drop",
+          "dimension": "channel",
+          "element": "paid_ads",
+          "weight": 0.58,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_channel",
+            "E3_campaign_traffic_drop",
+            "E4_channel",
+            "E_rank"
+          ]
+        },
+        {
+          "root_cause_type": "aov_drop",
+          "dimension": "category",
+          "element": "fashion",
+          "weight": 0.42,
+          "expected_evidence_chain": [
+            "E1",
+            "E2_category",
+            "E3_aov",
+            "E4_category",
+            "E_rank"
+          ]
+        }
+      ],
+      "negative_controls": [
+        {
+          "name": "organic-home-control",
+          "selector": {
+            "channel": [
+              "organic"
+            ],
+            "category": [
+              "home"
+            ]
+          },
+          "metric_id": "gmv",
+          "max_abs_delta_ratio": 0.14
+        }
+      ],
+      "baseline_comparison": {
+        "method": "prev_4_same_weekday",
+        "offset_days": [
+          -7,
+          -14,
+          -21,
+          -28
+        ],
+        "minimum_effect_ratio": 0.15,
+        "selector": {}
+      }
+    }
+  ]
+}

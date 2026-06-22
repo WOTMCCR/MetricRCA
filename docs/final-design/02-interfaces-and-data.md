@@ -1,3 +1,6 @@
+> Historical v2 design. Active production runtime decisions are superseded by
+> `docs/final-design/06-v3-repair-plan.md`.
+
 # 最终版接口与数据结构（v2 增量）
 
 > 本文只列相对 MVP 的**增量与变更**；未提及的契约（QuerySpec、SQLPlan、

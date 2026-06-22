@@ -1,0 +1,11 @@
+{
+  "cycle_id": "20260618-2358",
+  "round": 10,
+  "branch": "codex/c-complex-causal",
+  "base_commit": "889a19e1abeb977897152553c06d21f3760dca9e",
+  "total_cases": 46,
+  "created_at": "2026-06-19T16:03:22Z",
+  "previous_round": "eval_out/ptv/cycle-20260618-2358/round-09",
+  "previous_fix_commit": "b769be12eacfbbbb0b4061a274048e0cd5e2cf89",
+  "notes": "Round 10 starts after FIX-I configured run target date contract for C22_gmv_borderline."
+}

@@ -1,0 +1,97 @@
+{
+  "case_id": "IX03_uv_interaction_cell",
+  "intent_ok": 1,
+  "anomaly_ok": 1,
+  "top1_ok": 1,
+  "top3_ok": 1,
+  "dominant_top1_ok": 1,
+  "root_cause_set_recall": 1.0,
+  "root_cause_set_precision": 0.5,
+  "weighted_explanation_coverage": 1.0,
+  "top3_contains_all_major_causes": 1,
+  "evidence_coverage": 1.0,
+  "sql_safe": 1,
+  "reflection_repair_ok": 1,
+  "report_traceable_ok": 1,
+  "memory_pollution_ok": 1,
+  "no_anomaly_task_ok": 1,
+  "adtributor_used": 1,
+  "multi_agent_path": "single_agent",
+  "detail": {
+    "status": "succeeded",
+    "metric_id": "uv",
+    "expected_metric": "uv",
+    "selected_candidate": {
+      "element": "paid_ads",
+      "verdict": "confirmed",
+      "dimension": "channel",
+      "surprise_js": 0.021271696886721404,
+      "evidence_ids": [
+        "eval-result-IX03_uv_interaction_cell:E1",
+        "eval-result-IX03_uv_interaction_cell:E2_channel",
+        "eval-result-IX03_uv_interaction_cell:E_select_channel",
+        "eval-result-IX03_uv_interaction_cell:E3_ch",
+        "eval-result-IX03_uv_interaction_cell:E4_channel",
+        "eval-result-IX03_uv_interaction_cell:E4",
+        "eval-result-IX03_uv_interaction_cell:E_rank"
+      ],
+      "eng_confidence": 1.0,
+      "root_cause_type": "interaction_channel_category",
+      "signal_severity": 0.6694481830417227,
+      "contribution_pct": 1.0,
+      "evidence_support": 1.0,
+      "explanatory_power": 1.0,
+      "reflection_factor": 1.0,
+      "dimension_elements": [
+        [
+          "channel",
+          "paid_ads"
+        ],
+        [
+          "category",
+          "electronics"
+        ]
+      ]
+    },
+    "expected_root_causes": [
+      {
+        "root_cause_type": "interaction_channel_category",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "weight": 1.0
+      }
+    ],
+    "token_count": 0,
+    "latency_ms": 0,
+    "sql_count": 18,
+    "trace_step_count": 11,
+    "memory_read_seen": false,
+    "tool_sequence": [
+      "detect_anomaly",
+      "drilldown_dimension",
+      "drilldown_dimension",
+      "select_signal_element",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "select_signal_element",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "merge_contribution_sets",
+      "rank_root_causes"
+    ],
+    "memory_record_count": 1,
+    "memory_layers": [
+      "semantic"
+    ],
+    "eval_attempts": 1,
+    "final_run_id": "eval-result-IX03_uv_interaction_cell",
+    "memory_enabled": false,
+    "tags": [
+      "phase_c",
+      "interaction",
+      "cross_dimension",
+      "specified_slice"
+    ],
+    "scenario_family": "phase_c"
+  }
+}

@@ -1,0 +1,215 @@
+{
+  "eval_id": "eval-result",
+  "round": 16,
+  "status": "failed_partial",
+  "round_type": "eval_fatal",
+  "prediction_summary": {
+    "prediction_lines": 276,
+    "required_aspects": [
+      "intent",
+      "execution",
+      "evidence",
+      "memory",
+      "outcome",
+      "multi_cause_outcome"
+    ],
+    "prediction_generation_exit_status": 0,
+    "prediction_validation_exit_status": 0,
+    "prediction_diff": {
+      "compared_to_round": 15,
+      "changed_count": 276,
+      "same_keys_count": 276,
+      "changed_by_aspect": {
+        "intent": 46,
+        "execution": 46,
+        "evidence": 46,
+        "memory": 46,
+        "outcome": 46,
+        "multi_cause_outcome": 46
+      }
+    }
+  },
+  "eval_summary": {
+    "complete": false,
+    "eval_result_exists": false,
+    "eval_result_path": "eval_out/ptv/cycle-20260618-2358/round-16/eval-result.json",
+    "eval_stream_exit_status": 2,
+    "case_total_configured": 46,
+    "case_rows_streamed": 86,
+    "memory_case_rows_completed": 46,
+    "baseline_case_rows_completed_before_failure": 40,
+    "last_completed_case_id": "IX04_gmv_interaction_no_single_driver",
+    "thresholds_met": false,
+    "metrics_gate_valid": false,
+    "blocking_failure": "METRIC_NOT_FOUND: eval-result-LG01_gmv_lagged_social",
+    "fatal_error": {
+      "case_id": "LG01_gmv_lagged_social",
+      "error_code": "METRIC_NOT_FOUND",
+      "message": "METRIC_NOT_FOUND: eval-result-LG01_gmv_lagged_social"
+    },
+    "partial_metrics": {
+      "source": "eval-stream.log JSON rows before fatal error",
+      "complete": false,
+      "gate_valid": false,
+      "case_rows": 86,
+      "memory_rows": 46,
+      "baseline_rows": 40,
+      "top1_rate_partial": 0.930233,
+      "dominant_top1_rate_partial": 0.930233,
+      "top3_rate_partial": 1.0,
+      "root_cause_set_recall_avg_partial": 0.996124,
+      "root_cause_set_precision_avg_partial": 0.798173,
+      "weighted_explanation_coverage_avg_partial": 0.998256,
+      "evidence_coverage_avg_partial": 1.0,
+      "sql_safe_rate_partial": 1.0,
+      "memory_pollution_ok_rate_partial": 1.0,
+      "partial_non_top1_cases_sample": [
+        "MC06_net_gmv_multi_driver",
+        "IX02_gmv_interaction_discovery",
+        "IX03_uv_interaction_cell"
+      ]
+    }
+  },
+  "prediction_eval_barrier": {
+    "predictions_complete": true,
+    "prediction_validation_complete": true,
+    "prediction_validation_exit_status": 0,
+    "prediction_diff_written": true,
+    "eval_complete": false,
+    "eval_result_present": false,
+    "gap_analyzer_run": false,
+    "gap_analyzer_skipped_reason": "Round 16 is eval-fatal and eval-result.json is absent; make eval-gaps requires eval-result.json.",
+    "barrier_status": "blocked_at_eval"
+  },
+  "summary": {
+    "total": 276,
+    "accuracy": null,
+    "by_divergence": {
+      "incomplete": 276
+    },
+    "by_aspect": {
+      "intent": {
+        "incomplete": 46
+      },
+      "execution": {
+        "incomplete": 46
+      },
+      "evidence": {
+        "incomplete": 46
+      },
+      "memory": {
+        "incomplete": 46
+      },
+      "outcome": {
+        "incomplete": 46
+      },
+      "multi_cause_outcome": {
+        "incomplete": 46
+      }
+    },
+    "design_flaw_count": 1,
+    "complexity_gap_count": 0,
+    "incomplete": true,
+    "gate_valid": false,
+    "note": "Prediction accuracy cannot be computed because eval-result.json was not produced."
+  },
+  "gaps": [
+    {
+      "case_id": "LG01_gmv_lagged_social",
+      "aspect": "execution",
+      "divergence": "design_flaw",
+      "diagnosis": "design_flaw",
+      "detail": "Eval terminated before per-case scoring or trace artifact creation. The Round 16 prediction expected metric_id=gmv and a Round15-like 5-step execution for the explicit question 'Why did social GMV fall on June 1 after the weekend campaign change?', but the intent path produced typed METRIC_NOT_FOUND for eval-result-LG01_gmv_lagged_social.",
+      "predicted": {
+        "status": "succeeded",
+        "metric_id": "gmv",
+        "step_count": 5,
+        "tool_sequence": [
+          "detect_anomaly",
+          "drilldown_dimension",
+          "fetch_related_signal",
+          "calculate_contribution",
+          "rank_root_causes"
+        ]
+      },
+      "actual": {
+        "status": "failed_before_trace",
+        "error_code": "METRIC_NOT_FOUND",
+        "message": "METRIC_NOT_FOUND: eval-result-LG01_gmv_lagged_social",
+        "eval_result_written": false
+      }
+    }
+  ],
+  "partial_observations": [
+    {
+      "observation": "Round 16 partial stream still shows broad selected_candidate.dimension_elements on memory-phase precision-tail cases despite the Round 15 FIX-M change.",
+      "examples": [
+        {
+          "case_id": "C06_gmv_multi_channel_drop",
+          "phase": "memory",
+          "root_cause_set_precision": 0.428571,
+          "dimension_elements_sample": [
+            [
+              "channel",
+              "paid_ads"
+            ],
+            [
+              "channel",
+              "organic"
+            ],
+            [
+              "channel",
+              "social"
+            ],
+            [
+              "channel",
+              "affiliate"
+            ],
+            [
+              "category",
+              "electronics"
+            ],
+            [
+              "product",
+              "2"
+            ]
+          ]
+        },
+        {
+          "case_id": "C08_gmv_aov_drop",
+          "phase": "memory",
+          "root_cause_set_precision": 0.2,
+          "dimension_elements_sample": [
+            [
+              "product",
+              "2"
+            ],
+            [
+              "product",
+              "1"
+            ],
+            [
+              "product",
+              "5"
+            ],
+            [
+              "category",
+              "electronics"
+            ],
+            [
+              "channel",
+              "paid_ads"
+            ]
+          ]
+        }
+      ],
+      "recommendation": "Do not select FIX-M in Round 16 analysis: the eval fatal must be fixed first, and RULE-C5 blocks a third consecutive FIX-M after rounds 14 and 15."
+    }
+  ],
+  "input_hashes": {
+    "predictions": "sha256:f210662ec757b40abe692d9ca92bacf28ea577cea6770a24b72a577adf628b37",
+    "prediction_diff": "sha256:6ea032564db9d7e433d21b18d2b9cc5c15f2ab6799fb978e8fb9f57df91e4e34",
+    "eval_stream_log": "sha256:ca3588368b96b30d7f43807f71acb7ad5b1e23349b0f8587caaf9c33016033cc",
+    "eval_stream_exit_status": "sha256:53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
+  }
+}

@@ -9,12 +9,16 @@ from pydantic import Field, field_validator
 
 from metric_rca.domain.models import StrictModel
 
+ScopeMode = Literal["unscoped", "explicit_single", "explicit_multi_driver", "scoped_interaction"]
+
 
 RcaActionKind = Literal[
     "detect_anomaly",
     "drilldown_dimension",
+    "select_signal_element",
     "fetch_related_signal",
     "calculate_contribution",
+    "merge_contribution_sets",
     "rank_root_causes",
 ]
 
@@ -51,6 +55,7 @@ class RcaPlan(StrictModel):
     question_family: str
     family: Literal["gmv_family", "rate_family"]
     explicit_scope: dict[str, str] = Field(default_factory=dict)
+    scope_mode: ScopeMode = "unscoped"
     actions: list[RcaAction]
     budget: dict[str, int]
     memory_hints: list[CasePrior] = Field(default_factory=list)
@@ -74,4 +79,3 @@ class ExecutionResult(StrictModel):
     status: Literal["succeeded", "no_anomaly", "failed"]
     error_code: str | None = None
     produced_evidence_ids: list[str] = Field(default_factory=list)
-

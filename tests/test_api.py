@@ -282,6 +282,7 @@ def test_api_returns_top_k_candidates_from_persisted_e4_candidates() -> None:
             "eng_confidence": 0.25,
         },
     ]
+    e4["result_summary"]["contribution_set"]["candidates"] = e4["result_summary"]["candidates"]
 
     response = TestClient(create_app(ApiDependencies(repository=repo, rca_runner=_run_rca))).get(
         "/api/rca/runs/run-1"
@@ -839,13 +840,28 @@ def _evidences(run_id: str, *, candidate: dict[str, Any]) -> list[dict[str, Any]
         **candidate,
         "evidence_ids": [f"{run_id}:E1", f"{run_id}:E2", f"{run_id}:E3", f"{run_id}:E4", f"{run_id}:E_rank"],
     }
+    e4_summary = _e4_summary(run_candidate)
     return [
         _evidence(f"{run_id}:E1"),
         _evidence(f"{run_id}:E2"),
         _evidence(f"{run_id}:E3"),
-        _evidence(f"{run_id}:E4", summary={"selected_candidate": run_candidate}),
-        _evidence(f"{run_id}:E_rank", summary={"selected_candidate": run_candidate}),
+        _evidence(f"{run_id}:E4", summary=e4_summary),
+        _evidence(f"{run_id}:E_rank", summary=e4_summary),
     ]
+
+
+def _e4_summary(candidate: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "contribution_set": {
+            "selected_candidate": candidate,
+            "candidates": [candidate],
+            "evidence_ids": list(candidate["evidence_ids"]),
+            "factor_graph": {},
+            "selection_evidence_id": None,
+        },
+        "selected_candidate": candidate,
+        "candidates": [candidate],
+    }
 
 
 def _task(run_id: str) -> dict[str, Any]:

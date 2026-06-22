@@ -26,15 +26,28 @@ class DrilldownDimensionArgs(StrictModel):
     filters: dict[str, str] = Field(default_factory=dict)
 
 
+class SelectSignalElementArgs(StrictModel):
+    run_id: str
+    metric_id: str
+    target_date: date
+    signal_type: Literal["campaign", "inventory", "conversion", "refund_quality", "interaction"]
+    dimension: str
+    evidence_ids: list[str]
+    filters: dict[str, str] = Field(default_factory=dict)
+    element_selection: Literal["top_candidate", "signal_anomaly", "signal_level"] = "top_candidate"
+    evidence_alias: str | None = Field(default=None, pattern=r"^E_select(_[A-Za-z0-9]+)+$")
+
+
 class FetchRelatedSignalArgs(StrictModel):
     run_id: str
     metric_id: str
     target_date: date
-    signal_type: Literal["campaign", "inventory", "conversion", "refund_quality"]
+    signal_type: Literal["campaign", "inventory", "conversion", "refund_quality", "interaction"]
     dimension: str
     element: str
     evidence_ids: list[str]
     filters: dict[str, str] = Field(default_factory=dict)
+    evidence_alias: str | None = Field(default=None, pattern=r"^E3(_[A-Za-z0-9]+)+$")
 
 
 class CalculateContributionArgs(StrictModel):
@@ -45,6 +58,14 @@ class CalculateContributionArgs(StrictModel):
     element: str
     evidence_ids: list[str]
     filters: dict[str, str] = Field(default_factory=dict)
+    evidence_alias: str = "E4"
+
+
+class MergeContributionSetsArgs(StrictModel):
+    run_id: str
+    metric_id: str
+    target_date: date
+    source_evidence_aliases: list[str]
 
 
 class ToolResult(StrictModel):
@@ -52,4 +73,5 @@ class ToolResult(StrictModel):
     evidences: list[Evidence] = Field(default_factory=list)
     evidence_alias: str | None = None
     candidates: list[RootCauseCandidate] = Field(default_factory=list)
+    # Declared by the tool; repository sql_audit delta is authoritative.
     sql_count: int = 0

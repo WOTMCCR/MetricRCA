@@ -1,0 +1,132 @@
+{
+  "case_id": "MC08_gmv_channel_category_mix",
+  "intent_ok": 1,
+  "anomaly_ok": 1,
+  "top1_ok": 1,
+  "top3_ok": 1,
+  "dominant_top1_ok": 1,
+  "root_cause_set_recall": 1.0,
+  "root_cause_set_precision": 0.8,
+  "weighted_explanation_coverage": 1.0,
+  "top3_contains_all_major_causes": 1,
+  "evidence_coverage": 1.0,
+  "sql_safe": 1,
+  "reflection_repair_ok": 1,
+  "report_traceable_ok": 1,
+  "memory_pollution_ok": 1,
+  "no_anomaly_task_ok": 1,
+  "adtributor_used": 1,
+  "multi_agent_path": "single_agent",
+  "detail": {
+    "status": "succeeded",
+    "metric_id": "gmv",
+    "expected_metric": "gmv",
+    "selected_candidate": {
+      "element": "paid_ads",
+      "verdict": "confirmed",
+      "dimension": "channel",
+      "surprise_js": 0.004948688087420535,
+      "evidence_ids": [
+        "ptv-cycle-20260618-2358-round-26382173:E1",
+        "ptv-cycle-20260618-2358-round-26382173:E2_channel",
+        "ptv-cycle-20260618-2358-round-26382173:E_select_channel",
+        "ptv-cycle-20260618-2358-round-26382173:E3_ch",
+        "ptv-cycle-20260618-2358-round-26382173:E4_channel",
+        "ptv-cycle-20260618-2358-round-26382173:E_select_channel_conv",
+        "ptv-cycle-20260618-2358-round-26382173:E3_ch_conversion",
+        "ptv-cycle-20260618-2358-round-26382173:E4_channel_conversion",
+        "ptv-cycle-20260618-2358-round-26382173:E4",
+        "ptv-cycle-20260618-2358-round-26382173:E_rank"
+      ],
+      "eng_confidence": 0.4400983221117879,
+      "root_cause_type": "campaign_traffic_drop",
+      "signal_severity": 0.4400983221117879,
+      "contribution_pct": 1.0,
+      "evidence_support": 1.0,
+      "explanatory_power": 1.0,
+      "reflection_factor": 1.0,
+      "dimension_elements": [
+        [
+          "channel",
+          "paid_ads"
+        ],
+        [
+          "channel",
+          "affiliate"
+        ],
+        [
+          "category",
+          "electronics"
+        ],
+        [
+          "product",
+          "2"
+        ]
+      ]
+    },
+    "expected_root_causes": [
+      {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "paid_ads",
+        "weight": 0.45
+      },
+      {
+        "root_cause_type": "stockout",
+        "dimension": "category",
+        "element": "electronics",
+        "weight": 0.35
+      },
+      {
+        "root_cause_type": "campaign_traffic_drop",
+        "dimension": "channel",
+        "element": "affiliate",
+        "weight": 0.2
+      }
+    ],
+    "token_count": 0,
+    "latency_ms": 0,
+    "sql_count": 68,
+    "trace_step_count": 24,
+    "memory_read_seen": false,
+    "tool_sequence": [
+      "detect_anomaly",
+      "drilldown_dimension",
+      "drilldown_dimension",
+      "drilldown_dimension",
+      "select_signal_element",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "select_signal_element",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "select_signal_element",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "select_signal_element",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "select_signal_element",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "select_signal_element",
+      "fetch_related_signal",
+      "calculate_contribution",
+      "merge_contribution_sets",
+      "rank_root_causes"
+    ],
+    "memory_record_count": 1,
+    "memory_layers": [
+      "semantic"
+    ],
+    "eval_attempts": 1,
+    "final_run_id": "ptv-cycle-20260618-2358-round-26382173",
+    "memory_enabled": false,
+    "tags": [
+      "phase_c",
+      "multi_cause",
+      "discovery"
+    ],
+    "scenario_family": "multi_cause"
+  }
+}

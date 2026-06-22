@@ -1,0 +1,77 @@
+{
+  "cycle_id": "cycle-20260618-2358",
+  "round": 20,
+  "eval_id": "ptv-cycle-20260618-2358-round-20",
+  "controller_status": "fix_selected",
+  "selected_fix_category": "FIX-T",
+  "selected_layer": "tool",
+  "target_files": [
+    "metric_rca/agent/evidence_aliases.py",
+    "metric_rca/business/policy_registry.py",
+    "metric_rca/agent/tools/select_signal_element.py",
+    "metric_rca/runtime/plan_compiler.py",
+    "metric_rca/runtime/plan_executor.py",
+    "tests/test_runtime_plan.py",
+    "tests/test_runtime_plan_executor.py",
+    "tests/test_runtime_tool_executor.py",
+    "tests/test_business_signal_policy.py",
+    "tests/test_runtime_action_gate.py"
+  ],
+  "decision_basis": {
+    "gate_blocking_failure": {
+      "case_id": "C24_gmv_positive_spike",
+      "phase": "memory",
+      "failed_run_id": "ptv-cycle-20260618-2358-round-4c1db5ea-r2",
+      "failed_action": "select_signal_element",
+      "failed_signal_type": "interaction",
+      "failed_evidence_alias": "E_select_ch_interaction",
+      "declared_sql_count": 0,
+      "sql_audit_delta": 2
+    },
+    "trace_support": "Trace seq=18 shows select_signal_element executed two audited SQL statements, then failed before producing E_select_ch_interaction because the full evidence_id length exceeded the evidence.evidence_id VARCHAR(64) contract.",
+    "schema_support": {
+      "evidence_id_column": "VARCHAR(64)",
+      "failed_evidence_id_length": 65,
+      "failed_evidence_id": "ptv-cycle-20260618-2358-round-4c1db5ea-r2:E_select_ch_interaction"
+    },
+    "partial_eval_support": "The 23 completed memory-phase cases before C24 were green, including C07 selecting paid_ads. No baseline cases were scored, so aggregate gates are not valid for ranking/discovery decisions."
+  },
+  "optimization_summary": {
+    "primary_problem": "The discovery policy emitted aliases too long for the persisted evidence_id contract at long eval run_ids, and the executor let failed tool paths be masked as SQL-count mismatches.",
+    "selected_solution": "Shorten GMV multisignal selection aliases while keeping dimension prefixes, add plan-compiler evidence-id budget validation, and preserve typed failed-tool errors in the executor while recording authoritative SQL audit delta.",
+    "expected_effect": "Unblock C24 and any long-run-id GMV multisignal lane from evidence_id overflow and SQL-count masking without changing ranking behavior."
+  },
+  "rule_c_fields": {
+    "rule_c1_blocked_categories": [],
+    "rule_c1_reason": "Round 20 has no complete aggregate metrics; there is no gate-valid metric regression category to block.",
+    "rule_c2_triggered": true,
+    "rule_c2_promoted": "FIX-T",
+    "rule_c2_reason": "FIX-A remains deferred historically, but the current fatal tool contract prevents any baseline scoring; it must be fixed before ranking can be measured.",
+    "rule_c3_discovery_priority": false,
+    "rule_c3_reason": "No current FIX-D diagnosis is scoreable because the run aborts at a tool contract boundary before merge/rank.",
+    "rule_c4_revert_assessment": {
+      "triggered": false,
+      "regressed_metrics": [],
+      "revert_decision": "not_applicable",
+      "justification": "Round 20 completed 0 baseline cases, so partial memory rows are not aggregate regression evidence."
+    },
+    "rule_c5_triggered": false,
+    "rule_c5_reason": "The previous effective category was FIX-I x1; selecting FIX-T switches category and does not exceed the consecutive category limit."
+  },
+  "stall_analysis_used": {
+    "current_streak": {
+      "FIX-I": 1
+    },
+    "recommended_next_category": "FIX-T",
+    "stall_risk": "none_for_FIX-T",
+    "invalid_rationale_avoided": "Controller did not defer the fatal tool contract under a stabilize-ranking-first rationale."
+  },
+  "implementation_plan": [
+    "Add failing tests for evidence_id length at the max eval run-id boundary, failed-tool SQL audit delta preservation, and select_signal_element post-query persistence errors preserving sql_count.",
+    "Shorten GMV conversion/interaction lane aliases to dimension-preserving aliases that fit the persisted evidence_id budget.",
+    "Add plan compiler validation that raises EVIDENCE_ID_TOO_LONG before execution when run_id plus alias exceeds the schema contract.",
+    "Make RcaPlanExecutor preserve typed tool failures when a failed action's declared sql_count differs from the authoritative audit delta.",
+    "Return runtime_error(sql_count=2) from select_signal_element after the two signal queries have completed.",
+    "Run targeted tests, make seed, make test, no-fallback diff gate, subagent review, Claude Opus high review, then commit and push."
+  ]
+}

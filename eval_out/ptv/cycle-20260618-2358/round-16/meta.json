@@ -1,0 +1,21 @@
+{
+  "base_commit": "e7ccc97898bb725e7413c891c3e7f4a1e70b0902",
+  "branch": "codex/c-complex-causal",
+  "cycle_id": "cycle-20260618-2358",
+  "previous_fix_category": "FIX-M",
+  "previous_fix_commit": "f9a3981d7b7d97004d1841badb6386e526e03a9e",
+  "previous_round": "round-15",
+  "project_binding": "metricrca",
+  "required_aspects": [
+    "intent",
+    "execution",
+    "evidence",
+    "memory",
+    "outcome",
+    "multi_cause_outcome"
+  ],
+  "round": 16,
+  "started_at": "2026-06-19T19:18:00.010794+00:00",
+  "status": "in_progress",
+  "total_cases": 46
+}

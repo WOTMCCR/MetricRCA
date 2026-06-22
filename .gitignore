@@ -67,3 +67,6 @@ Thumbs.db
 
 # Playwright/pytest local run artifacts
 test-results/
+
+tmp/
+GPTPro/

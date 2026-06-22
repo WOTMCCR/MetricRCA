@@ -107,6 +107,180 @@ def test_action_gate_rejects_explicit_scope_dimension_switch() -> None:
     assert "dimension=category" in (decision.message or "")
 
 
+def test_action_gate_rejects_explicit_multi_driver_cross_dimension_lane_without_scope_filter() -> None:
+    ctx = RunContext(
+        run_id="run-1",
+        metric_id="net_gmv",
+        target_date=date(2026, 5, 29),
+        explicit_scope={"channel": "paid_ads"},
+        scope_mode="explicit_multi_driver",
+    )
+    action = RcaAction(
+        action_id="A3",
+        kind="drilldown_dimension",
+        args={
+            "metric_id": "net_gmv",
+            "target_date": date(2026, 5, 29),
+            "dimension": "category",
+            "filters": {},
+        },
+        requires=["E1"],
+    )
+    graph = EvidenceGraph(run_id="run-1", evidence_ids=["run-1:E1"])
+
+    decision = ActionGate().validate(ctx, action, graph)
+
+    assert decision.allowed is False
+    assert decision.error_code == "ACTION_SCHEMA_INVALID"
+    assert "filters.channel=paid_ads" in (decision.message or "")
+
+
+def test_action_gate_allows_explicit_multi_driver_cross_dimension_lane_with_scope_filter() -> None:
+    ctx = RunContext(
+        run_id="run-1",
+        metric_id="net_gmv",
+        target_date=date(2026, 5, 29),
+        explicit_scope={"channel": "paid_ads"},
+        scope_mode="explicit_multi_driver",
+    )
+    action = RcaAction(
+        action_id="A3",
+        kind="drilldown_dimension",
+        args={
+            "metric_id": "net_gmv",
+            "target_date": date(2026, 5, 29),
+            "dimension": "category",
+            "filters": {"channel": "paid_ads"},
+        },
+        requires=["E1"],
+    )
+    graph = EvidenceGraph(run_id="run-1", evidence_ids=["run-1:E1"])
+
+    decision = ActionGate().validate(ctx, action, graph)
+
+    assert decision.allowed is True
+
+
+def test_action_gate_allows_explicit_multi_driver_signal_selection_without_scope_filter() -> None:
+    ctx = RunContext(
+        run_id="run-1",
+        metric_id="net_gmv",
+        target_date=date(2026, 5, 29),
+        explicit_scope={"channel": "paid_ads"},
+        scope_mode="explicit_multi_driver",
+    )
+    action = RcaAction(
+        action_id="A6",
+        kind="select_signal_element",
+        args={
+            "metric_id": "net_gmv",
+            "target_date": date(2026, 5, 29),
+            "signal_type": "inventory",
+            "dimension": "category",
+            "filters": {},
+        },
+        requires=["E1", "E2_category"],
+    )
+    graph = EvidenceGraph(run_id="run-1", evidence_ids=["run-1:E1", "run-1:E2_category"])
+
+    decision = ActionGate().validate(ctx, action, graph)
+
+    assert decision.allowed is True
+
+
+def test_action_gate_rejects_explicit_multi_driver_filter_contradiction() -> None:
+    ctx = RunContext(
+        run_id="run-1",
+        metric_id="net_gmv",
+        target_date=date(2026, 5, 29),
+        explicit_scope={"channel": "paid_ads"},
+        scope_mode="explicit_multi_driver",
+    )
+    action = RcaAction(
+        action_id="A3",
+        kind="drilldown_dimension",
+        args={
+            "metric_id": "net_gmv",
+            "target_date": date(2026, 5, 29),
+            "dimension": "category",
+            "filters": {"channel": "affiliate"},
+        },
+        requires=["E1"],
+    )
+    graph = EvidenceGraph(run_id="run-1", evidence_ids=["run-1:E1"])
+
+    decision = ActionGate().validate(ctx, action, graph)
+
+    assert decision.allowed is False
+    assert decision.error_code == "ACTION_SCHEMA_INVALID"
+    assert "contradicts explicit question scope" in (decision.message or "")
+
+
+def test_action_gate_rejects_explicit_multi_driver_same_dimension_signal_without_bound_element() -> None:
+    ctx = RunContext(
+        run_id="run-1",
+        metric_id="net_gmv",
+        target_date=date(2026, 5, 29),
+        explicit_scope={"channel": "paid_ads"},
+        scope_mode="explicit_multi_driver",
+    )
+    action = RcaAction(
+        action_id="A5",
+        kind="fetch_related_signal",
+        args={
+            "metric_id": "net_gmv",
+            "target_date": date(2026, 5, 29),
+            "signal_type": "conversion",
+            "dimension": "channel",
+            "element": None,
+            "filters": {},
+        },
+        requires=["E1", "E2_channel", "E_select_channel"],
+    )
+    graph = EvidenceGraph(
+        run_id="run-1",
+        evidence_ids=["run-1:E1", "run-1:E2_channel", "run-1:E_select_channel"],
+    )
+
+    decision = ActionGate().validate(ctx, action, graph)
+
+    assert decision.allowed is False
+    assert decision.error_code == "ACTION_SCHEMA_INVALID"
+    assert "element=paid_ads" in (decision.message or "")
+
+
+def test_action_gate_allows_policy_marked_global_explanatory_same_dimension_lane() -> None:
+    ctx = RunContext(
+        run_id="run-1",
+        metric_id="net_gmv",
+        target_date=date(2026, 5, 29),
+        explicit_scope={"channel": "paid_ads"},
+        scope_mode="explicit_multi_driver",
+    )
+    action = RcaAction(
+        action_id="A5",
+        kind="fetch_related_signal",
+        args={
+            "metric_id": "net_gmv",
+            "target_date": date(2026, 5, 29),
+            "signal_type": "conversion",
+            "dimension": "channel",
+            "element": None,
+            "filters": {},
+            "explicit_scope_policy": "global_explanatory",
+        },
+        requires=["E1", "E2_channel", "E_select_channel_conv"],
+    )
+    graph = EvidenceGraph(
+        run_id="run-1",
+        evidence_ids=["run-1:E1", "run-1:E2_channel", "run-1:E_select_channel_conv"],
+    )
+
+    decision = ActionGate().validate(ctx, action, graph)
+
+    assert decision.allowed is True
+
+
 def test_action_gate_rejects_step_budget_exhaustion() -> None:
     ctx = RunContext(
         run_id="run-1",

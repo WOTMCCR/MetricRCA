@@ -1,0 +1,39 @@
+{
+  "eval_id": "round-05",
+  "summary": {
+    "total": 276,
+    "by_divergence": {
+      "design_flaw": 1
+    },
+    "by_aspect": {
+      "execution": {
+        "design_flaw": 1
+      }
+    },
+    "accuracy": null,
+    "design_flaw_count": 1,
+    "complexity_gap_count": 0,
+    "note": "Full aspect comparison skipped because eval-result contains no full cases after eval abort."
+  },
+  "gaps": [
+    {
+      "case_id": "C06_gmv_multi_channel_drop",
+      "aspect": "execution",
+      "divergence": "design_flaw",
+      "predicted": {
+        "round5_predictions_present": true
+      },
+      "actual": {
+        "eval_status": "eval_aborted",
+        "error_code": "SYSTEM_TABLE_WRITE_FAILED",
+        "trace_failure_run_id": "round-05-mem-C06_gmv_multi_ch-045c81b1",
+        "tool_error": "TOOL_SQL_COUNT_MISMATCH",
+        "failed_action": "select_signal_element",
+        "failed_signal_type": "conversion",
+        "declared_sql_count": 0,
+        "sql_audit_delta": 2
+      },
+      "detail": "Round 4 FIX-D added a second dynamic channel selection lane for conversion, but select_signal_element still persisted hard-coded E_select_channel and did not preserve sql_count on duplicate persistence failure. The eval aborted before full case scoring."
+    }
+  ]
+}

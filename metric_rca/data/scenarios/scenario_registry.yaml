@@ -1,0 +1,56 @@
+version: 1
+suites:
+  regression:
+    description: v3 iteration 4 regression eval slice with public questions and private answers.
+    seed_profile: regression
+    case_count: 46
+    public_cases_file: ../../evals/regression_public_cases.jsonl
+    private_ground_truth_file: ../../evals/regression_private_ground_truth.jsonl
+    data_slice:
+      business_today: "2026-06-06"
+      target_date: "2026-06-05"
+      history_days: 60
+  acceptance:
+    description: Opt-in acceptance data profile with production-scale cardinality; currently reuses regression questions until blind cases land.
+    seed_profile: acceptance
+    case_count: 46
+    public_cases_file: ../../evals/regression_public_cases.jsonl
+    private_ground_truth_file: ../../evals/regression_private_ground_truth.jsonl
+    data_slice:
+      business_today: "2026-06-06"
+      target_date: "2026-06-05"
+      history_days: 180
+      products: 200
+      categories: 20
+      channels: 8
+      devices: 4
+      warehouses: 10
+      campaigns: 100
+      users: 10000
+  memory-treatment:
+    description: Dedicated treatment suite proving runtime memory changes planning without becoming final evidence.
+    seed_profile: regression
+    case_count: 1
+    public_cases_file: ../../evals/memory_treatment_public_cases.jsonl
+    private_ground_truth_file: ../../evals/memory_treatment_private_ground_truth.jsonl
+    data_slice:
+      business_today: "2026-06-06"
+      target_date: "2026-06-05"
+      history_days: 60
+  stress:
+    description: Larger deterministic stress data profile for performance checks.
+    seed_profile: stress
+    case_count: 46
+    public_cases_file: ../../evals/regression_public_cases.jsonl
+    private_ground_truth_file: ../../evals/regression_private_ground_truth.jsonl
+    data_slice:
+      business_today: "2026-06-06"
+      target_date: "2026-06-05"
+      history_days: 210
+      products: 240
+      categories: 24
+      channels: 10
+      devices: 4
+      warehouses: 12
+      campaigns: 120
+      users: 12000

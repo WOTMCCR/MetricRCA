@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from metric_rca.evals.models import GroundTruth, PersistedArtifacts
+from metric_rca.evals.models import GroundTruth, PersistedArtifacts, RootCauseTruth
 from metric_rca.guardrails.sql_guard import guard_sql
 from metric_rca.observability.summary import build_token_summary
 
@@ -28,12 +28,13 @@ def score_case(
 
     intent_ok = agent_run.get("metric_id") == ground_truth.metric_id
     anomaly_ok = _anomaly_ok(agent_run=agent_run, ground_truth=ground_truth, artifacts=artifacts)
-    top1_ok = _matches_ground_truth(selected_candidate, ground_truth)
-    top3_ok = (
-        top1_ok
-        if not ground_truth.expected_anomaly
-        else any(_matches_ground_truth(candidate, ground_truth) for candidate in candidate_list)
-    )
+    dominant_top1_ok = _dominant_top1_ok(selected_candidate, ground_truth)
+    root_cause_set_recall = _root_cause_set_recall(candidate_list, ground_truth)
+    root_cause_set_precision = _root_cause_set_precision(candidate_list, ground_truth)
+    weighted_explanation_coverage = _weighted_explanation_coverage(candidate_list, ground_truth)
+    top3_contains_all_major_causes = _top3_contains_all_major_causes(candidate_list, ground_truth)
+    top1_ok = dominant_top1_ok
+    top3_ok = top3_contains_all_major_causes
     evidence_coverage = _evidence_coverage(selected_candidate, artifacts)
     sql_safe = _sql_safe(artifacts.sql_audit)
     reflection_repair_ok = _reflection_repair_ok(artifacts)
@@ -55,18 +56,17 @@ def score_case(
     no_anomaly_task_ok = _no_anomaly_task_ok(agent_run=agent_run, artifacts=artifacts)
     adtributor_used = _adtributor_used(selected_candidate=selected_candidate, artifacts=artifacts)
     multi_agent_path = _multi_agent_path(artifacts.trace_steps)
-    required_dimension_elements = _required_dimension_elements(case_id)
-    dimension_elements_required = bool(required_dimension_elements)
-    if required_dimension_elements and not _has_dimension_elements(selected_candidate, required_dimension_elements):
-        top1_ok = False
-        top3_ok = False
-
     return {
         "case_id": case_id,
         "intent_ok": int(intent_ok),
         "anomaly_ok": int(anomaly_ok),
         "top1_ok": int(top1_ok),
         "top3_ok": int(top3_ok),
+        "dominant_top1_ok": int(dominant_top1_ok),
+        "root_cause_set_recall": root_cause_set_recall,
+        "root_cause_set_precision": root_cause_set_precision,
+        "weighted_explanation_coverage": weighted_explanation_coverage,
+        "top3_contains_all_major_causes": int(top3_contains_all_major_causes),
         "evidence_coverage": evidence_coverage,
         "sql_safe": int(sql_safe),
         "reflection_repair_ok": int(reflection_repair_ok),
@@ -80,11 +80,12 @@ def score_case(
             "metric_id": agent_run.get("metric_id"),
             "expected_metric": ground_truth.metric_id,
             "selected_candidate": selected_candidate,
-            "dimension_elements_required": dimension_elements_required,
-            "required_dimension_elements": sorted(required_dimension_elements),
+            "expected_root_causes": [_truth_dict(cause) for cause in _expected_causes(ground_truth)],
             "token_count": token_summary["total_tokens"],
             "latency_ms": token_summary["latency_ms"],
+            "sql_count": len(artifacts.sql_audit),
             "trace_step_count": len(artifacts.trace_steps),
+            "memory_read_seen": any(row.get("node") == "memory_read" for row in artifacts.trace_steps),
             "tool_sequence": _tool_sequence(artifacts.trace_steps),
             "memory_record_count": len(artifacts.memory_records),
             "memory_layers": sorted({str(row.get("layer")) for row in artifacts.memory_records}),
@@ -110,6 +111,20 @@ def summarize_scores(
         "intent_accuracy": _rate(case_scores, "intent_ok"),
         "top1_rate": _rate(case_scores, "top1_ok"),
         "top3_rate": _rate(case_scores, "top3_ok"),
+        "dominant_top1_rate": _rate(case_scores, "dominant_top1_ok"),
+        "root_cause_set_recall_avg": round(
+            sum(float(row.get("root_cause_set_recall", 0.0)) for row in case_scores) / total,
+            6,
+        ),
+        "root_cause_set_precision_avg": round(
+            sum(float(row.get("root_cause_set_precision", 0.0)) for row in case_scores) / total,
+            6,
+        ),
+        "weighted_explanation_coverage_avg": round(
+            sum(float(row.get("weighted_explanation_coverage", 0.0)) for row in case_scores) / total,
+            6,
+        ),
+        "top3_contains_all_major_causes_rate": _rate(case_scores, "top3_contains_all_major_causes"),
         "anomaly_accuracy": _rate(case_scores, "anomaly_ok"),
         "evidence_coverage_avg": round(
             sum(float(row["evidence_coverage"]) for row in case_scores) / total,
@@ -130,6 +145,8 @@ def summarize_scores(
         sum(_detail_number(row, "latency_ms") for row in case_scores) / total,
         6,
     )
+    summary["p95_latency_ms"] = _p95([_detail_number(row, "latency_ms") for row in case_scores])
+    summary["p95_sql_count"] = _p95([_detail_number(row, "sql_count") for row in case_scores])
     summary["multi_agent_path_distribution"] = _multi_agent_path_distribution(case_scores)
     return summary
 
@@ -179,6 +196,14 @@ def _detail_number(row: dict[str, Any], key: str) -> float:
     return float(value)
 
 
+def _p95(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, int(round((len(ordered) - 1) * 0.95)))
+    return round(float(ordered[index]), 6)
+
+
 def _multi_agent_path(trace_steps: list[dict[str, Any]]) -> str:
     for row in trace_steps:
         if row.get("node") != "triage":
@@ -215,11 +240,109 @@ def _matches_ground_truth(candidate: dict[str, Any] | None, ground_truth: Ground
         return candidate is None
     if candidate is None:
         return False
-    return (
-        candidate.get("root_cause_type") == ground_truth.root_cause_type
-        and candidate.get("dimension") == ground_truth.dimension
-        and str(candidate.get("element")) == str(ground_truth.element)
+    return any(_matches_truth(candidate, cause) for cause in _expected_causes(ground_truth))
+
+
+def _dominant_top1_ok(candidate: dict[str, Any] | None, ground_truth: GroundTruth) -> bool:
+    if not ground_truth.expected_anomaly:
+        return candidate is None
+    dominant = _dominant_cause(ground_truth)
+    return dominant is not None and _matches_truth(candidate, dominant)
+
+
+def _root_cause_set_recall(candidates: list[dict[str, Any]], ground_truth: GroundTruth) -> float:
+    expected = _expected_causes(ground_truth)
+    if not ground_truth.expected_anomaly:
+        return 1.0 if not candidates else 0.0
+    if not expected:
+        return 0.0
+    matched = sum(1 for cause in expected if any(_matches_truth(candidate, cause) for candidate in candidates))
+    return round(matched / len(expected), 6)
+
+
+def _root_cause_set_precision(candidates: list[dict[str, Any]], ground_truth: GroundTruth) -> float:
+    expected = _expected_causes(ground_truth)
+    if not ground_truth.expected_anomaly:
+        return 1.0 if not candidates else 0.0
+    if not candidates:
+        return 0.0
+    matched = sum(1 for candidate in candidates if any(_matches_truth(candidate, cause) for cause in expected))
+    return round(matched / len(candidates), 6)
+
+
+def _weighted_explanation_coverage(candidates: list[dict[str, Any]], ground_truth: GroundTruth) -> float:
+    expected = _expected_causes(ground_truth)
+    if not ground_truth.expected_anomaly:
+        return 1.0 if not candidates else 0.0
+    total_weight = sum(max(float(cause.weight), 0.0) for cause in expected)
+    if total_weight <= 0:
+        return 0.0
+    covered = sum(
+        max(float(cause.weight), 0.0)
+        for cause in expected
+        if any(_matches_truth(candidate, cause) for candidate in candidates)
     )
+    return round(covered / total_weight, 6)
+
+
+def _top3_contains_all_major_causes(candidates: list[dict[str, Any]], ground_truth: GroundTruth) -> bool:
+    if not ground_truth.expected_anomaly:
+        return not candidates
+    major = [cause for cause in _expected_causes(ground_truth) if float(cause.weight) >= 0.20]
+    if not major:
+        return False
+    top3 = candidates[:3]
+    return all(any(_matches_truth(candidate, cause) for candidate in top3) for cause in major)
+
+
+def _expected_causes(ground_truth: GroundTruth) -> tuple[RootCauseTruth, ...]:
+    if ground_truth.root_causes:
+        return ground_truth.root_causes
+    if not ground_truth.expected_anomaly:
+        return ()
+    return (
+        RootCauseTruth(
+            root_cause_type=str(ground_truth.root_cause_type),
+            dimension=ground_truth.dimension,
+            element=ground_truth.element,
+            weight=1.0,
+        ),
+    )
+
+
+def _dominant_cause(ground_truth: GroundTruth) -> RootCauseTruth | None:
+    causes = _expected_causes(ground_truth)
+    if not causes:
+        return None
+    return max(causes, key=lambda cause: float(cause.weight))
+
+
+def _matches_truth(candidate: dict[str, Any] | None, cause: RootCauseTruth) -> bool:
+    if candidate is None:
+        return False
+    if candidate.get("root_cause_type") != cause.root_cause_type:
+        return False
+    if candidate.get("dimension") == cause.dimension and str(candidate.get("element")) == str(cause.element):
+        return True
+    dimension_elements = candidate.get("dimension_elements") or []
+    if not isinstance(dimension_elements, list):
+        return False
+    return any(
+        isinstance(item, (list, tuple))
+        and len(item) == 2
+        and item[0] == cause.dimension
+        and str(item[1]) == str(cause.element)
+        for item in dimension_elements
+    )
+
+
+def _truth_dict(cause: RootCauseTruth) -> dict[str, Any]:
+    return {
+        "root_cause_type": cause.root_cause_type,
+        "dimension": cause.dimension,
+        "element": cause.element,
+        "weight": cause.weight,
+    }
 
 
 def _evidence_coverage(candidate: dict[str, Any] | None, artifacts: PersistedArtifacts) -> float:
@@ -291,7 +414,9 @@ def _report_traceable(*, report: dict[str, Any] | None, evidences: list[dict[str
         row = by_id.get(evidence_id)
         if row is None:
             return False
-        selected = (row.get("result_summary") or {}).get("selected_candidate")
+        summary = row.get("result_summary") or {}
+        contribution_set = summary.get("contribution_set") if isinstance(summary, dict) else None
+        selected = contribution_set.get("selected_candidate") if isinstance(contribution_set, dict) else summary.get("selected_candidate")
         if not isinstance(selected, dict) or selected.get(name) != value:
             return False
     return True
@@ -588,6 +713,11 @@ def _selected_candidate(
     report: dict[str, Any] | None,
     e4_summary: dict[str, Any],
 ) -> dict[str, Any] | None:
+    contribution_set = e4_summary.get("contribution_set")
+    if isinstance(contribution_set, dict):
+        selected = contribution_set.get("selected_candidate")
+        if isinstance(selected, dict):
+            return selected
     selected = e4_summary.get("selected_candidate")
     if isinstance(selected, dict):
         return selected
@@ -595,6 +725,11 @@ def _selected_candidate(
 
 
 def _candidate_list(e4_summary: dict[str, Any]) -> list[dict[str, Any]]:
+    contribution_set = e4_summary.get("contribution_set")
+    if isinstance(contribution_set, dict):
+        candidates = contribution_set.get("candidates")
+        if isinstance(candidates, list):
+            return [dict(item) for item in candidates if isinstance(item, dict)]
     candidates = e4_summary.get("candidates")
     if isinstance(candidates, list):
         return [dict(item) for item in candidates if isinstance(item, dict)]
@@ -623,30 +758,6 @@ def _tool_sequence(trace_steps: list[dict[str, Any]]) -> list[str]:
         if isinstance(value, str) and value:
             sequence.append(value)
     return sequence
-
-
-def _required_dimension_elements(case_id: str) -> set[tuple[str, str]]:
-    if case_id == "C06_gmv_multi_channel_drop":
-        return {("channel", "paid_ads"), ("channel", "social")}
-    if case_id == "C07_gmv_category_channel_cross":
-        return {("channel", "paid_ads"), ("category", "electronics")}
-    if case_id == "C27_composite_cause":
-        return {("channel", "paid_ads"), ("category", "electronics")}
-    return set()
-
-
-def _has_dimension_elements(candidate: dict[str, Any] | None, required: set[tuple[str, str]]) -> bool:
-    if candidate is None:
-        return False
-    dimension_elements = candidate.get("dimension_elements")
-    if not isinstance(dimension_elements, list):
-        return False
-    observed = {
-        (str(item[0]), str(item[1]))
-        for item in dimension_elements
-        if isinstance(item, list | tuple) and len(item) == 2
-    }
-    return required.issubset(observed)
 
 
 def _evidence_id_matches_alias(evidence_id: str, *, run_id: str, alias: str) -> bool:

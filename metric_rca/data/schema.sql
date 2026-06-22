@@ -106,12 +106,19 @@ CREATE TABLE metric_definition (
 -- 评估真因：eval 据此逐 case 判定 anomaly / top1 / top3（不靠人读）。
 CREATE TABLE anomaly_ground_truth (
   case_id          VARCHAR(64) PRIMARY KEY,
+  scenario_id      VARCHAR(96),
+  split            VARCHAR(32) NOT NULL DEFAULT 'regression',
+  seed             INT,
+  profile          VARCHAR(32) NOT NULL DEFAULT 'regression',
   business_date    DATE NOT NULL,
   metric_id        VARCHAR(32) NOT NULL,
   expected_anomaly TINYINT NOT NULL,
   root_cause_type  VARCHAR(64),
   dimension        VARCHAR(32),
-  element          VARCHAR(64)
+  element          VARCHAR(64),
+  root_causes      JSON,
+  confounders      JSON,
+  expected_behavior JSON
 ) ENGINE=InnoDB;
 
 -- ========== Agent 系统表 ==========
@@ -123,6 +130,7 @@ CREATE TABLE agent_run (
   target_date DATE NOT NULL,
   status      VARCHAR(16) NOT NULL,
   error_code  VARCHAR(48),
+  runtime_version INT NOT NULL DEFAULT 3,
   total_tokens INT,
   total_latency_ms INT,
   token_breakdown JSON NULL,
@@ -149,8 +157,10 @@ CREATE TABLE trace_step (
 
 -- 证据：每次取数的结构化快照（数值来源），结论必须绑定当前 run 的证据。
 CREATE TABLE evidence (
-  evidence_id   VARCHAR(64) PRIMARY KEY,
+  evidence_pk   BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  evidence_id   VARCHAR(192) NOT NULL,
   run_id        VARCHAR(64) NOT NULL,
+  alias         VARCHAR(96) NOT NULL,
   query_spec    JSON NOT NULL,
   sql_text      TEXT NOT NULL,
   sql_hash      CHAR(64) NOT NULL,
@@ -158,6 +168,8 @@ CREATE TABLE evidence (
   result_summary JSON NOT NULL,
   data_source   VARCHAR(128) NOT NULL,
   created_at    DATETIME NOT NULL,
+  UNIQUE KEY uq_evidence_id (evidence_id),
+  UNIQUE KEY uq_evidence_run_alias (run_id, alias),
   KEY idx_run (run_id),
   KEY idx_hash (sql_hash)
 ) ENGINE=InnoDB;

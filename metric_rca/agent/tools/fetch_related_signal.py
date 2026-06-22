@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import hashlib
 from typing import Any
 
-from metric_rca.agent.evidence_aliases import e3_alias_for_dimension
+from metric_rca.runtime.evidence_identity import e3_alias_for_dimension
 from metric_rca.agent.tools.runtime import (
     ToolRuntimeError,
     current_run_guarded_evidence,
@@ -20,7 +20,8 @@ from metric_rca.agent.tools.runtime import (
     tool_error,
 )
 from metric_rca.agent.tools.schemas import FetchRelatedSignalArgs, ToolResult
-from metric_rca.agent.tools.signal_policy import select_signal_type_for_metric_dimension
+from metric_rca.agent.tools.signal_policy import select_signal_type, select_signal_type_for_metric_dimension
+from metric_rca.business.policy_registry import root_cause_type_for_metric_dimension
 from metric_rca.config.settings import Settings, get_settings
 from metric_rca.domain.models import Evidence, Observation
 from metric_rca.guardrails.query_spec import QuerySpecError, build_query_spec
@@ -44,8 +45,16 @@ def fetch_related_signal(
     run_error = run_context_error(repository, args.run_id, args.metric_id, args.target_date)
     if run_error:
         return tool_error(action, run_error, "run_id is not an active matching run")
-    if not current_run_guarded_evidence(repository, args.run_id, args.evidence_ids, {"E1", "E2"}):
-        evidence_hint = current_run_guarded_evidence_hint(repository, args.run_id, ["E1", "E2"])
+    try:
+        has_base_evidence = current_run_guarded_evidence(repository, args.run_id, args.evidence_ids, {"E1", "E2"})
+        evidence_hint = (
+            []
+            if has_base_evidence
+            else current_run_guarded_evidence_hint(repository, args.run_id, ["E1", "E2"])
+        )
+    except ToolRuntimeError as exc:
+        return runtime_error(action, exc)
+    if not has_base_evidence:
         retry_hint = evidence_hint or [f"{args.run_id}:E1", f"{args.run_id}:E2"]
         return tool_error(
             action,
@@ -57,8 +66,21 @@ def fetch_related_signal(
             ),
         )
     required_e2_alias = f"E2_{args.dimension}"
-    if not current_run_guarded_evidence(repository, args.run_id, args.evidence_ids, {"E1", required_e2_alias}):
-        evidence_hint = current_run_guarded_evidence_hint(repository, args.run_id, ["E1", required_e2_alias])
+    try:
+        has_dimension_evidence = current_run_guarded_evidence(
+            repository,
+            args.run_id,
+            args.evidence_ids,
+            {"E1", required_e2_alias},
+        )
+        evidence_hint = (
+            []
+            if has_dimension_evidence
+            else current_run_guarded_evidence_hint(repository, args.run_id, ["E1", required_e2_alias])
+        )
+    except ToolRuntimeError as exc:
+        return runtime_error(action, exc)
+    if not has_dimension_evidence:
         retry_hint = evidence_hint or [f"{args.run_id}:E1", f"{args.run_id}:{required_e2_alias}"]
         return tool_error(
             action,
@@ -76,27 +98,28 @@ def fetch_related_signal(
         )
     except ValueError as exc:
         return tool_error(action, str(exc), "signal policy missing for metric/dimension")
-    if args.signal_type != expected_signal_type:
+    if args.signal_type != expected_signal_type and not _is_allowed_explicit_signal_type(args):
         return tool_error(
             action,
             "QUERY_SPEC_INVALID",
             f"signal_type must be {expected_signal_type} for metric_id={args.metric_id} dimension={args.dimension}",
         )
-    if args.filters and {str(key): str(value) for key, value in args.filters.items()} != {args.dimension: args.element}:
+    filters = {str(key): str(value) for key, value in args.filters.items()}
+    if filters.get(args.dimension) not in {None, args.element}:
         return tool_error(
             action,
             "QUERY_SPEC_INVALID",
-            "filters must be empty or exactly match the selected signal dimension/element",
+            "filters conflict with selected signal dimension/element",
         )
     existing = _existing_signal_result(args, repository=repository)
     if existing is not None:
         return existing
     renderer = renderer or SQLRenderer()
     settings = settings or get_settings()
-    signal_metric_id = settings.signal_metric_by_type.get(args.signal_type)
+    signal_metric_id = _signal_metric_id(args.metric_id, args.signal_type, settings=settings)
     if signal_metric_id is None:
         return tool_error(action, "CONFIG_INVALID", f"signal metric missing: {args.signal_type}")
-    filters = {args.dimension: args.element}
+    filters = {**filters, args.dimension: args.element}
     signal_hint = "campaign" if args.signal_type == "campaign" else "metric"
     try:
         metric_definition = metric_service.get_metric_definition(signal_metric_id)
@@ -136,12 +159,18 @@ def fetch_related_signal(
         z_thresh=1.0,
     )
     if not signal.ok:
-        return tool_error(action, signal.error_code or "SIGNAL_INSUFFICIENT", "signal data insufficient")
+        return tool_error(
+            action,
+            signal.error_code or "SIGNAL_INSUFFICIENT",
+            "signal data insufficient",
+            sql_count=2,
+        )
     result_summary = {
         "signal_type": args.signal_type,
         "signal_metric_id": signal_metric_id,
         "dimension": args.dimension,
         "element": args.element,
+        "filters": filters,
         "input_evidence_ids": args.evidence_ids,
         "query_sources": query_sources(current_plan=current_plan, baseline_plan=baseline_plan),
         **signal.result_summary,
@@ -160,7 +189,7 @@ def fetch_related_signal(
     try:
         persist_evidence(repository=repository, row=evidence_row(args.run_id, evidence))
     except ToolRuntimeError as exc:
-        return runtime_error(action, exc)
+        return runtime_error(action, exc, sql_count=2)
     return ToolResult(
         observation=Observation(
             action_name=action,
@@ -206,6 +235,8 @@ def _existing_signal_result(args: FetchRelatedSignalArgs, *, repository: Any) ->
 
 
 def _signal_evidence_alias(args: FetchRelatedSignalArgs) -> str:
+    if args.evidence_alias is not None:
+        return args.evidence_alias
     dimension_prefix = e3_alias_for_dimension(args.dimension)
     dimension_token = (
         dimension_prefix.removeprefix("E3_")
@@ -213,6 +244,29 @@ def _signal_evidence_alias(args: FetchRelatedSignalArgs) -> str:
         else _alias_token(args.dimension)
     )
     return f"E3_{dimension_token}_{_alias_token(args.element)}"
+
+
+def _signal_metric_id(metric_id: str, signal_type: str, *, settings: Settings) -> str | None:
+    if signal_type == "interaction":
+        return metric_id
+    return settings.signal_metric_by_type.get(signal_type)
+
+
+def _is_allowed_explicit_signal_type(args: FetchRelatedSignalArgs) -> bool:
+    try:
+        root_cause_type = root_cause_type_for_metric_dimension(
+            metric_id=args.metric_id,
+            dimension=args.dimension,
+            signal_type=args.signal_type,
+        )
+        expected = select_signal_type(
+            metric_id=args.metric_id,
+            dimension=args.dimension,
+            root_cause_type=root_cause_type,
+        )
+    except ValueError:
+        return False
+    return expected == args.signal_type
 
 
 def _alias_token(value: str) -> str:
