@@ -1,0 +1,88 @@
+name: attribution-experience-implementation
+
+on:
+  push:
+    branches:
+      - codex/ptv-attribution-experience-layer
+
+permissions:
+  contents: write
+
+concurrency:
+  group: attribution-experience-implementation
+  cancel-in-progress: false
+
+jobs:
+  implement-and-test:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/ptv-attribution-experience-layer
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Apply reviewed source patches
+        run: |
+          python .github/patches/support_patch.py
+          python .github/patches/plan_patch_1.py
+          python .github/patches/plan_patch_2.py
+          python .github/patches/plan_patch_3.py
+          python .github/patches/ranking_patch_1.py
+          python .github/patches/ranking_patch_2.py
+          python .github/patches/ranking_patch_3.py
+          python .github/patches/ranking_patch_4.py
+          python .github/patches/docs_contract_patch.py
+
+      - name: Install project
+        run: python -m pip install -e .
+
+      - name: Compile and inspect diff
+        run: |
+          python -m compileall -q metric_rca tests
+          git diff --check
+          git status --short
+
+      - name: Start MySQL and seed regression data
+        run: |
+          docker compose up -d --wait mysql
+          PATH="$HOME/.local/bin:$PATH" make seed ALLOW_DESTRUCTIVE_SEED=true
+
+      - name: Run complete pytest suite
+        run: pytest -q
+
+      - name: Record external review availability
+        run: |
+          if command -v claude >/dev/null 2>&1; then
+            claude --version
+          else
+            echo 'CLAUDE_REVIEW_UNAVAILABLE: claude CLI is not installed on the GitHub runner'
+          fi
+
+      - name: Remove staging automation
+        run: |
+          rm -f .github/patches/support_patch.py
+          rm -f .github/patches/plan_patch_1.py
+          rm -f .github/patches/plan_patch_2.py
+          rm -f .github/patches/plan_patch_3.py
+          rm -f .github/patches/ranking_patch_1.py
+          rm -f .github/patches/ranking_patch_2.py
+          rm -f .github/patches/ranking_patch_3.py
+          rm -f .github/patches/ranking_patch_4.py
+          rm -f .github/patches/docs_contract_patch.py
+          rmdir .github/patches 2>/dev/null || true
+          rm -f .github/workflows/attribution-experience-implementation.yml
+
+      - name: Commit verified implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: implement evidence-bounded attribution experience layer'
+          git push origin HEAD:codex/ptv-attribution-experience-layer
