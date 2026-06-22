@@ -103,6 +103,7 @@ def test_two_sided_interaction_evidence_beats_same_cell_campaign() -> None:
     assert _signal_verified_ranked_candidate(
         repository=repository,
         run_id="run",
+        metric_id="gmv",
         persisted_selected_candidate=interaction,
         ranked_candidates=[campaign, interaction],
     ) is None

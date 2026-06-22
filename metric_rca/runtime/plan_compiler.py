@@ -459,9 +459,6 @@ def _parallel_broad_contribution_chains(
     )
     lanes = _prioritize_discovery_lanes(canonical_lanes, experience_advice)
     actions: list[RcaAction] = []
-    e4_aliases: list[str] = []
-    selection_aliases: list[str] = []
-    e3_aliases: list[str] = []
     e4_alias_by_lane: dict[tuple[str, str, str | None], str] = {}
     selection_alias_by_lane: dict[tuple[str, str, str | None], str] = {}
     e3_alias_by_lane: dict[tuple[str, str, str | None], str] = {}
@@ -506,8 +503,6 @@ def _parallel_broad_contribution_chains(
             raise PlanCompilerError("DISCOVERY_LANE_ALIAS_CONFLICT", f"duplicate E3 alias {e3_alias}")
         e4_alias_set.add(e4_alias)
         e3_alias_set.add(e3_alias)
-        e4_aliases.append(e4_alias)
-        e3_aliases.append(e3_alias)
         lane_key = _discovery_lane_key(lane)
         e4_alias_by_lane[lane_key] = e4_alias
         e3_alias_by_lane[lane_key] = e3_alias
@@ -520,7 +515,6 @@ def _parallel_broad_contribution_chains(
                     f"multiple dynamic discovery lanes require {selection_alias}",
                 )
             dynamic_selection_aliases.add(selection_alias)
-            selection_aliases.append(selection_alias)
             selection_alias_by_lane[lane_key] = selection_alias
             actions.append(
                 RcaAction(

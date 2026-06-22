@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any
 
+from metric_rca.business.policy_registry import select_signal_type
 from metric_rca.domain.enums import RootCauseType
 from metric_rca.domain.models import ContributionSet, Evidence, Observation, QuerySpec, RootCauseCandidate, TimeRange
 from metric_rca.runtime.tool_models import ToolExecutionResult
@@ -59,6 +60,7 @@ def rank_from_persisted_e4(
     embedded_verified_candidate = _embedded_verified_ranked_candidate(
         repository=repository,
         run_id=run_id,
+        metric_id=metric_id,
         persisted_selected_candidate=persisted_selected_candidate,
         ranked_candidates=ranked_candidates,
         adtributor_audit=adtributor_audit,
@@ -74,6 +76,7 @@ def rank_from_persisted_e4(
         _signal_verified_non_interaction_candidate_for_unverified_interaction(
             repository=repository,
             run_id=run_id,
+            metric_id=metric_id,
             persisted_selected_candidate=persisted_selected_candidate,
             ranked_candidates=ranked_candidates,
         )
@@ -81,6 +84,7 @@ def rank_from_persisted_e4(
     signal_verified_candidate = _signal_verified_ranked_candidate(
         repository=repository,
         run_id=run_id,
+        metric_id=metric_id,
         persisted_selected_candidate=persisted_selected_candidate,
         ranked_candidates=ranked_candidates,
     )
@@ -296,6 +300,7 @@ def _signal_verified_ranked_candidate(
     *,
     repository: Any,
     run_id: str,
+    metric_id: str,
     persisted_selected_candidate: RootCauseCandidate | None,
     ranked_candidates: list[RootCauseCandidate],
 ) -> RootCauseCandidate | None:
@@ -308,7 +313,10 @@ def _signal_verified_ranked_candidate(
         run_id=run_id,
         candidate=persisted_selected_candidate,
         required_bad_direction=_target_bad_direction(repository=repository, run_id=run_id),
-        required_signal_type=_signal_type_for_candidate(persisted_selected_candidate),
+        required_signal_type=_signal_type_for_candidate(
+            metric_id=metric_id,
+            candidate=persisted_selected_candidate,
+        ),
     ):
         return None
     for candidate in ranked_candidates:
@@ -354,6 +362,7 @@ def _signal_verified_non_interaction_candidate_for_unverified_interaction(
     *,
     repository: Any,
     run_id: str,
+    metric_id: str,
     persisted_selected_candidate: RootCauseCandidate | None,
     ranked_candidates: list[RootCauseCandidate],
 ) -> RootCauseCandidate | None:
@@ -382,7 +391,10 @@ def _signal_verified_non_interaction_candidate_for_unverified_interaction(
             run_id=run_id,
             candidate=candidate,
             required_bad_direction=required_bad_direction,
-            required_signal_type=_signal_type_for_candidate(candidate),
+            required_signal_type=_signal_type_for_candidate(
+                metric_id=metric_id,
+                candidate=candidate,
+            ),
         ):
             return candidate
     return None
@@ -392,6 +404,7 @@ def _embedded_verified_ranked_candidate(
     *,
     repository: Any,
     run_id: str,
+    metric_id: str,
     persisted_selected_candidate: RootCauseCandidate | None,
     ranked_candidates: list[RootCauseCandidate],
     adtributor_audit: dict[str, str],
@@ -432,7 +445,10 @@ def _embedded_verified_ranked_candidate(
             run_id=run_id,
             candidate=candidate,
             required_bad_direction=required_bad_direction,
-            required_signal_type="campaign",
+            required_signal_type=_signal_type_for_candidate(
+                metric_id=metric_id,
+                candidate=candidate,
+            ),
         ):
             continue
         candidate_pair_rank = adtributor_pair_ranks.get(primary_pair)
@@ -626,15 +642,21 @@ def _has_verified_interaction_mechanism_evidence(
     return True
 
 
-def _signal_type_for_candidate(candidate: RootCauseCandidate) -> str | None:
-    by_root_cause = {
-        RootCauseType.CAMPAIGN_TRAFFIC_DROP.value: "campaign",
-        RootCauseType.CONVERSION_DROP.value: "conversion",
-        RootCauseType.STOCKOUT.value: "inventory",
-        RootCauseType.COMPLAINT_OR_QUALITY_ISSUE.value: "refund_quality",
-        RootCauseType.INTERACTION_CHANNEL_CATEGORY.value: "interaction",
-    }
-    return by_root_cause.get(candidate.root_cause_type)
+def _signal_type_for_candidate(
+    *,
+    metric_id: str,
+    candidate: RootCauseCandidate,
+) -> str | None:
+    if candidate.dimension is None:
+        return None
+    try:
+        return select_signal_type(
+            metric_id=metric_id,
+            dimension=candidate.dimension,
+            root_cause_type=candidate.root_cause_type,
+        )
+    except ValueError:
+        return None
 
 
 def _has_any_pair_matching_signal_evidence(
