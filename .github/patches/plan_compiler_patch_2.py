@@ -1,0 +1,21 @@
+from __future__ import annotations
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[2]
+
+def replace_once(relative: str, old: str, new: str) -> None:
+    path = ROOT / relative
+    source = path.read_text(encoding="utf-8")
+    count = source.count(old)
+    if count != 1:
+        raise RuntimeError(f"{relative}: expected one replacement, found {count}")
+    path.write_text(source.replace(old, new, 1), encoding="utf-8")
+
+replace_once('metric_rca/runtime/plan_compiler.py', 'def _broad_actions(parsed_intent: ParsedIntent, policy: DiscoveryPolicy, *, validate_dimensions: Any) -> list[RcaAction]:\n', 'def _broad_actions(\n    parsed_intent: ParsedIntent,\n    policy: DiscoveryPolicy,\n    *,\n    validate_dimensions: Any,\n    experience_advice: AttributionExperienceAdvice | None = None,\n) -> list[RcaAction]:\n')
+
+replace_once('metric_rca/runtime/plan_compiler.py', '                policy=policy,\n                first_action_index=len(actions) + 2,\n                validate_dimensions=validate_dimensions,\n            )\n        )\n        return actions\n    next_index = len(actions) + 2\n', '                policy=policy,\n                first_action_index=len(actions) + 2,\n                validate_dimensions=validate_dimensions,\n                experience_advice=experience_advice,\n            )\n        )\n        return actions\n    next_index = len(actions) + 2\n')
+
+replace_once('metric_rca/runtime/plan_compiler.py', 'def _parallel_broad_contribution_chains(\n    *,\n    parsed_intent: ParsedIntent,\n    policy: DiscoveryPolicy,\n    first_action_index: int,\n    validate_dimensions: Any,\n    scoped_elements: dict[str, str] | None = None,\n    scoped_filters: dict[str, dict[str, str]] | None = None,\n    explicit_scope: dict[str, str] | None = None,\n) -> list[RcaAction]:\n    lanes = _discovery_lanes(\n        parsed_intent=parsed_intent,\n        policy=policy,\n        validate_dimensions=validate_dimensions,\n    )\n    actions: list[RcaAction] = []\n    e4_aliases: list[str] = []\n    selection_aliases: list[str] = []\n    e3_aliases: list[str] = []\n', 'def _parallel_broad_contribution_chains(\n    *,\n    parsed_intent: ParsedIntent,\n    policy: DiscoveryPolicy,\n    first_action_index: int,\n    validate_dimensions: Any,\n    scoped_elements: dict[str, str] | None = None,\n    scoped_filters: dict[str, dict[str, str]] | None = None,\n    explicit_scope: dict[str, str] | None = None,\n    experience_advice: AttributionExperienceAdvice | None = None,\n) -> list[RcaAction]:\n    canonical_lanes = _discovery_lanes(\n        parsed_intent=parsed_intent,\n        policy=policy,\n        validate_dimensions=validate_dimensions,\n    )\n    lanes = _prioritize_discovery_lanes(canonical_lanes, experience_advice)\n    actions: list[RcaAction] = []\n    e4_aliases: list[str] = []\n    selection_aliases: list[str] = []\n    e3_aliases: list[str] = []\n    e4_alias_by_lane: dict[tuple[str, str, str | None], str] = {}\n    selection_alias_by_lane: dict[tuple[str, str, str | None], str] = {}\n    e3_alias_by_lane: dict[tuple[str, str, str | None], str] = {}\n')
+
+replace_once('metric_rca/runtime/plan_compiler.py', '        e4_alias_set.add(e4_alias)\n        e3_alias_set.add(e3_alias)\n        e4_aliases.append(e4_alias)\n        e3_aliases.append(e3_alias)\n        scope_policy_args = _explicit_scope_policy_args(lane, explicit_scope=explicit_scope)\n', '        e4_alias_set.add(e4_alias)\n        e3_alias_set.add(e3_alias)\n        e4_aliases.append(e4_alias)\n        e3_aliases.append(e3_alias)\n        lane_key = _discovery_lane_key(lane)\n        e4_alias_by_lane[lane_key] = e4_alias\n        e3_alias_by_lane[lane_key] = e3_alias\n        scope_policy_args = _explicit_scope_policy_args(lane, explicit_scope=explicit_scope)\n')
+
+replace_once('metric_rca/runtime/plan_compiler.py', '            dynamic_selection_aliases.add(selection_alias)\n            selection_aliases.append(selection_alias)\n            actions.append(\n', '            dynamic_selection_aliases.add(selection_alias)\n            selection_aliases.append(selection_alias)\n            selection_alias_by_lane[lane_key] = selection_alias\n            actions.append(\n')
