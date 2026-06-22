@@ -1,9 +1,6 @@
 name: attribution-experience-implementation
 
 on:
-  push:
-    branches:
-      - codex/ptv-attribution-experience-layer
   pull_request:
     branches:
       - main
@@ -58,7 +55,18 @@ jobs:
           PATH="$HOME/.local/bin:$PATH" make seed ALLOW_DESTRUCTIVE_SEED=true
 
       - name: Run complete pytest suite
-        run: pytest -q
+        run: |
+          set -o pipefail
+          pytest -q 2>&1 | tee pytest.log
+
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: attribution-experience-pytest
+          path: pytest.log
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Record external review availability
         run: |
