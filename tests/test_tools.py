@@ -2354,6 +2354,7 @@ def test_rank_root_causes_promotes_cross_chain_interaction_when_single_dimension
         "run_id": "run-1",
         "guard_status": "passed",
         "result_summary": {
+            "signal_type": "campaign",
             "dimension": "channel",
             "element": "paid_ads",
             "delta_pct": 0.02,
@@ -2366,11 +2367,36 @@ def test_rank_root_causes_promotes_cross_chain_interaction_when_single_dimension
         "run_id": "run-1",
         "guard_status": "passed",
         "result_summary": {
+            "signal_type": "inventory",
             "dimension": "category",
             "element": "electronics",
             "delta_pct": 0.01,
             "is_anomaly": False,
             "bad_direction": False,
+        },
+    }
+    repo.persisted_evidence["run-1:E3_ch_int"] = {
+        "evidence_id": "run-1:E3_ch_int",
+        "run_id": "run-1",
+        "guard_status": "passed",
+        "result_summary": {
+            "signal_type": "interaction",
+            "dimension": "channel",
+            "element": "paid_ads",
+            "is_anomaly": True,
+            "bad_direction": True,
+        },
+    }
+    repo.persisted_evidence["run-1:E3_cat_int"] = {
+        "evidence_id": "run-1:E3_cat_int",
+        "run_id": "run-1",
+        "guard_status": "passed",
+        "result_summary": {
+            "signal_type": "interaction",
+            "dimension": "category",
+            "element": "electronics",
+            "is_anomaly": True,
+            "bad_direction": True,
         },
     }
     repo.persisted_evidence["run-1:E4_channel"] = {
@@ -2429,7 +2455,8 @@ def test_rank_root_causes_promotes_cross_chain_interaction_when_single_dimension
     assert selected["element"] == "paid_ads"
     assert ("category", "electronics") in [tuple(item) for item in selected["dimension_elements"]]
     assert "run-1:E2_category" in selected["evidence_ids"]
-    assert "run-1:E3_cat_electronics" in selected["evidence_ids"]
+    assert "run-1:E3_ch_int" in selected["evidence_ids"]
+    assert "run-1:E3_cat_int" in selected["evidence_ids"]
     assert "run-1:E4_category" in selected["evidence_ids"]
 
 

@@ -67,6 +67,8 @@ def merge_contribution_sets(args: MergeContributionSetsArgs, *, repository: Any)
         "merge_strategy": "cross_chain_contribution_set_builder",
         "candidate_composition_strategy": COMPOSITION_STRATEGY,
     }
+    if args.experience_advice is not None:
+        result_summary["experience_advice"] = args.experience_advice.model_dump(mode="json")
     decomposition = selected_source_summary.get("decomposition")
     if isinstance(decomposition, dict):
         result_summary["decomposition"] = decomposition

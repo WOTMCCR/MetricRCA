@@ -229,11 +229,11 @@ playbooks:
     lane_priority:
       - dimension: channel
         signal_type: interaction
-      - dimension: category
-        signal_type: interaction
       - dimension: channel
         signal_type: campaign
         alias_discriminator: campaign
+      - dimension: category
+        signal_type: interaction
     hypotheses:
       - hypothesis_id: channel-category-interaction
         root_cause_types: [interaction_channel_category]
