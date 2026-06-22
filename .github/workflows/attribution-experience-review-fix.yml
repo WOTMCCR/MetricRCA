@@ -30,8 +30,10 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Apply review fix
-        run: python .github/patches/policy_signal_patch.py
+      - name: Apply review fixes
+        run: |
+          python .github/patches/policy_signal_patch.py
+          python .github/patches/policy_signal_test_patch.py
 
       - name: Install dependencies
         run: |
@@ -71,11 +73,11 @@ jobs:
             echo 'CLAUDE_REVIEW_UNAVAILABLE: claude CLI is not installed on the GitHub runner'
           fi
 
-      - name: Commit verified review fix
+      - name: Commit verified implementation
         run: |
-          rm -f .github/patches/policy_signal_patch.py
-          rmdir .github/patches 2>/dev/null || true
+          rm -rf .github/patches
           rm -f .github/workflows/attribution-experience-review-fix.yml
+          rm -f .github/workflows/attribution-experience-apply-and-test.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
