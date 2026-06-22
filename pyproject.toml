@@ -25,6 +25,9 @@ dependencies = [
 [tool.setuptools.packages.find]
 include = ["metric_rca*"]
 
+[tool.setuptools.package-data]
+"metric_rca.business" = ["attribution_playbooks.yaml"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

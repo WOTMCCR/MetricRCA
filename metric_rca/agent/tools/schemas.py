@@ -7,6 +7,7 @@ from typing import Literal
 
 from pydantic import Field
 
+from metric_rca.business.attribution_experience import AttributionExperienceAdvice
 from metric_rca.domain.models import Evidence, Observation, RootCauseCandidate, StrictModel
 
 
@@ -66,6 +67,7 @@ class MergeContributionSetsArgs(StrictModel):
     metric_id: str
     target_date: date
     source_evidence_aliases: list[str]
+    experience_advice: AttributionExperienceAdvice | None = None
 
 
 class ToolResult(StrictModel):

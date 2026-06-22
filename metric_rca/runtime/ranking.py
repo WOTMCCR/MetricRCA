@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any
 
+from metric_rca.business.policy_registry import select_signal_type
 from metric_rca.domain.enums import RootCauseType
 from metric_rca.domain.models import ContributionSet, Evidence, Observation, QuerySpec, RootCauseCandidate, TimeRange
 from metric_rca.runtime.tool_models import ToolExecutionResult
@@ -59,25 +60,39 @@ def rank_from_persisted_e4(
     embedded_verified_candidate = _embedded_verified_ranked_candidate(
         repository=repository,
         run_id=run_id,
+        metric_id=metric_id,
         persisted_selected_candidate=persisted_selected_candidate,
         ranked_candidates=ranked_candidates,
         adtributor_audit=adtributor_audit,
         adtributor_pair_ranks=adtributor_pair_ranks,
     )
-    signal_verified_non_interaction_candidate = _signal_verified_non_interaction_candidate_for_interaction(
+    interaction_verified_candidate = _interaction_verified_ranked_candidate(
         repository=repository,
         run_id=run_id,
-        persisted_selected_candidate=persisted_selected_candidate,
+        metric_id=metric_id,
         ranked_candidates=ranked_candidates,
+    )
+    signal_verified_non_interaction_candidate = (
+        _signal_verified_non_interaction_candidate_for_unverified_interaction(
+            repository=repository,
+            run_id=run_id,
+            metric_id=metric_id,
+            persisted_selected_candidate=persisted_selected_candidate,
+            ranked_candidates=ranked_candidates,
+        )
     )
     signal_verified_candidate = _signal_verified_ranked_candidate(
         repository=repository,
         run_id=run_id,
+        metric_id=metric_id,
         persisted_selected_candidate=persisted_selected_candidate,
         ranked_candidates=ranked_candidates,
     )
     if embedded_verified_candidate is not None:
         selected_candidate = embedded_verified_candidate
+        candidates = _selected_first_with_diverse_top3(selected_candidate, ranked_candidates)
+    elif interaction_verified_candidate is not None:
+        selected_candidate = interaction_verified_candidate
         candidates = _selected_first_with_diverse_top3(selected_candidate, ranked_candidates)
     elif signal_verified_non_interaction_candidate is not None:
         selected_candidate = signal_verified_non_interaction_candidate
@@ -285,16 +300,23 @@ def _signal_verified_ranked_candidate(
     *,
     repository: Any,
     run_id: str,
+    metric_id: str,
     persisted_selected_candidate: RootCauseCandidate | None,
     ranked_candidates: list[RootCauseCandidate],
 ) -> RootCauseCandidate | None:
     if persisted_selected_candidate is None:
+        return None
+    if persisted_selected_candidate.root_cause_type == RootCauseType.INTERACTION_CHANNEL_CATEGORY.value:
         return None
     if not _has_matching_signal_evidence(
         repository=repository,
         run_id=run_id,
         candidate=persisted_selected_candidate,
         required_bad_direction=_target_bad_direction(repository=repository, run_id=run_id),
+        required_signal_type=_signal_type_for_candidate(
+            metric_id=metric_id,
+            candidate=persisted_selected_candidate,
+        ),
     ):
         return None
     for candidate in ranked_candidates:
@@ -303,10 +325,44 @@ def _signal_verified_ranked_candidate(
     return _candidate_with_rank_evidence(persisted_selected_candidate, f"{run_id}:E_rank")
 
 
-def _signal_verified_non_interaction_candidate_for_interaction(
+def _interaction_verified_ranked_candidate(
     *,
     repository: Any,
     run_id: str,
+    metric_id: str,
+    ranked_candidates: list[RootCauseCandidate],
+) -> RootCauseCandidate | None:
+    if metric_id not in {"gmv", "uv"}:
+        return None
+    if not _target_is_bad_direction_anomaly(repository=repository, run_id=run_id):
+        return None
+    for candidate in ranked_candidates:
+        if candidate.root_cause_type != RootCauseType.INTERACTION_CHANNEL_CATEGORY.value:
+            continue
+        if _has_verified_interaction_mechanism_evidence(
+            repository=repository,
+            run_id=run_id,
+            candidate=candidate,
+            required_bad_direction=True,
+        ):
+            return candidate.model_copy(
+                update={
+                    "evidence_ids": _interaction_evidence_ids(
+                        repository=repository,
+                        run_id=run_id,
+                        pairs=_candidate_pairs(candidate),
+                        base_evidence_ids=candidate.evidence_ids,
+                    )
+                }
+            )
+    return None
+
+
+def _signal_verified_non_interaction_candidate_for_unverified_interaction(
+    *,
+    repository: Any,
+    run_id: str,
+    metric_id: str,
     persisted_selected_candidate: RootCauseCandidate | None,
     ranked_candidates: list[RootCauseCandidate],
 ) -> RootCauseCandidate | None:
@@ -314,17 +370,17 @@ def _signal_verified_non_interaction_candidate_for_interaction(
         return None
     if persisted_selected_candidate.root_cause_type != RootCauseType.INTERACTION_CHANNEL_CATEGORY.value:
         return None
-    required_bad_direction = _target_bad_direction(repository=repository, run_id=run_id)
-    if not _has_matching_signal_evidence(
+    if _has_verified_interaction_mechanism_evidence(
         repository=repository,
         run_id=run_id,
         candidate=persisted_selected_candidate,
-        required_bad_direction=required_bad_direction,
+        required_bad_direction=True,
     ):
         return None
     selected_primary_pair = _primary_pair(persisted_selected_candidate)
     if selected_primary_pair is None:
         return None
+    required_bad_direction = _target_bad_direction(repository=repository, run_id=run_id)
     for candidate in ranked_candidates:
         if candidate.root_cause_type == RootCauseType.INTERACTION_CHANNEL_CATEGORY.value:
             continue
@@ -335,6 +391,10 @@ def _signal_verified_non_interaction_candidate_for_interaction(
             run_id=run_id,
             candidate=candidate,
             required_bad_direction=required_bad_direction,
+            required_signal_type=_signal_type_for_candidate(
+                metric_id=metric_id,
+                candidate=candidate,
+            ),
         ):
             return candidate
     return None
@@ -344,6 +404,7 @@ def _embedded_verified_ranked_candidate(
     *,
     repository: Any,
     run_id: str,
+    metric_id: str,
     persisted_selected_candidate: RootCauseCandidate | None,
     ranked_candidates: list[RootCauseCandidate],
     adtributor_audit: dict[str, str],
@@ -384,6 +445,10 @@ def _embedded_verified_ranked_candidate(
             run_id=run_id,
             candidate=candidate,
             required_bad_direction=required_bad_direction,
+            required_signal_type=_signal_type_for_candidate(
+                metric_id=metric_id,
+                candidate=candidate,
+            ),
         ):
             continue
         candidate_pair_rank = adtributor_pair_ranks.get(primary_pair)
@@ -412,6 +477,8 @@ def _has_matching_signal_evidence(
     run_id: str,
     candidate: RootCauseCandidate,
     required_bad_direction: bool | None = None,
+    required_signal_type: str | None = None,
+    excluded_signal_type: str | None = None,
 ) -> bool:
     if candidate.dimension is None or candidate.element is None:
         return False
@@ -421,6 +488,8 @@ def _has_matching_signal_evidence(
         dimension=candidate.dimension,
         element=str(candidate.element),
         required_bad_direction=required_bad_direction,
+        required_signal_type=required_signal_type,
+        excluded_signal_type=excluded_signal_type,
     )
 
 
@@ -431,6 +500,8 @@ def _has_matching_signal_for_pair(
     dimension: str,
     element: str,
     required_bad_direction: bool | None = None,
+    required_signal_type: str | None = None,
+    excluded_signal_type: str | None = None,
 ) -> bool:
     rows = repository.get_evidences(run_id)
     if not rows:
@@ -443,6 +514,16 @@ def _has_matching_signal_for_pair(
             continue
         summary = row.get("result_summary")
         if not isinstance(summary, dict):
+            continue
+        signal_type = summary.get("signal_type")
+        if required_signal_type == "interaction" and signal_type != "interaction":
+            continue
+        if (
+            required_signal_type not in {None, "interaction"}
+            and signal_type not in {None, required_signal_type}
+        ):
+            continue
+        if excluded_signal_type is not None and signal_type == excluded_signal_type:
             continue
         if summary.get("dimension") != dimension or str(summary.get("element")) != element:
             continue
@@ -466,33 +547,49 @@ def _interaction_promoted_candidate(
     if not _target_is_bad_direction_anomaly(repository=repository, run_id=run_id):
         return None
     for candidate in ranked_candidates:
+        pairs = _candidate_pairs(candidate)
         if candidate.root_cause_type == RootCauseType.INTERACTION_CHANNEL_CATEGORY.value:
+            if not _has_verified_interaction_mechanism_evidence(
+                repository=repository,
+                run_id=run_id,
+                candidate=candidate,
+                required_bad_direction=True,
+            ):
+                continue
             return candidate.model_copy(
                 update={
                     "evidence_ids": _interaction_evidence_ids(
                         repository=repository,
                         run_id=run_id,
-                        pairs=_candidate_pairs(candidate),
+                        pairs=pairs,
                         base_evidence_ids=candidate.evidence_ids,
                     )
                 }
             )
         if candidate.dimension not in {"channel", "category"}:
             continue
+        if not _has_dimension(pairs, "channel") or not _has_dimension(pairs, "category"):
+            continue
         if _has_matching_signal_evidence(
             repository=repository,
             run_id=run_id,
             candidate=candidate,
             required_bad_direction=True,
+            excluded_signal_type="interaction",
         ):
-            continue
-        pairs = _candidate_pairs(candidate)
-        if not _has_dimension(pairs, "channel") or not _has_dimension(pairs, "category"):
             continue
         if _has_any_pair_matching_signal_evidence(
             repository=repository,
             run_id=run_id,
             pairs=pairs,
+            required_bad_direction=True,
+            excluded_signal_type="interaction",
+        ):
+            continue
+        if not _has_verified_interaction_mechanism_evidence(
+            repository=repository,
+            run_id=run_id,
+            candidate=candidate,
             required_bad_direction=True,
         ):
             continue
@@ -514,12 +611,62 @@ def _interaction_promoted_candidate(
     return None
 
 
+def _has_verified_interaction_mechanism_evidence(
+    *,
+    repository: Any,
+    run_id: str,
+    candidate: RootCauseCandidate,
+    required_bad_direction: bool,
+) -> bool:
+    pairs = _candidate_pairs(candidate)
+    if not _has_dimension(pairs, "channel") or not _has_dimension(pairs, "category"):
+        return False
+    for dimension in ("channel", "category"):
+        dimension_pairs = [
+            (pair_dimension, element)
+            for pair_dimension, element in pairs
+            if pair_dimension == dimension
+        ]
+        if not any(
+            _has_matching_signal_for_pair(
+                repository=repository,
+                run_id=run_id,
+                dimension=pair_dimension,
+                element=element,
+                required_bad_direction=required_bad_direction,
+                required_signal_type="interaction",
+            )
+            for pair_dimension, element in dimension_pairs
+        ):
+            return False
+    return True
+
+
+def _signal_type_for_candidate(
+    *,
+    metric_id: str,
+    candidate: RootCauseCandidate,
+) -> str | None:
+    if candidate.dimension is None:
+        return None
+    try:
+        return select_signal_type(
+            metric_id=metric_id,
+            dimension=candidate.dimension,
+            root_cause_type=candidate.root_cause_type,
+        )
+    except ValueError:
+        return None
+
+
 def _has_any_pair_matching_signal_evidence(
     *,
     repository: Any,
     run_id: str,
     pairs: set[tuple[str, str]],
     required_bad_direction: bool,
+    required_signal_type: str | None = None,
+    excluded_signal_type: str | None = None,
 ) -> bool:
     for dimension, element in pairs:
         if dimension not in {"channel", "category"}:
@@ -530,6 +677,8 @@ def _has_any_pair_matching_signal_evidence(
             dimension=dimension,
             element=element,
             required_bad_direction=required_bad_direction,
+            required_signal_type=required_signal_type,
+            excluded_signal_type=excluded_signal_type,
         ):
             return True
     return False
@@ -559,14 +708,20 @@ def _interaction_evidence_ids(
         if alias in {f"E2_{dimension}" for dimension in dimensions}:
             evidence_ids.append(evidence_id)
             continue
-        if alias in {f"E_select_{dimension}" for dimension in dimensions}:
+        if any(
+            alias == f"E_select_{dimension}" or alias.startswith(f"E_select_{dimension}_")
+            for dimension in dimensions
+        ):
             evidence_ids.append(evidence_id)
             continue
-        if alias in {f"E4_{dimension}" for dimension in dimensions}:
+        if any(
+            alias == f"E4_{dimension}" or alias.startswith(f"E4_{dimension}_")
+            for dimension in dimensions
+        ):
             evidence_ids.append(evidence_id)
             continue
         if alias == "E3" or alias.startswith("E3_"):
-            if not isinstance(summary, dict):
+            if not isinstance(summary, dict) or summary.get("signal_type") != "interaction":
                 continue
             pair = (str(summary.get("dimension")), str(summary.get("element")))
             if pair in interaction_pairs:

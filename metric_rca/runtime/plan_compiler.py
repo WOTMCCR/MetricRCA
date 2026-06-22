@@ -9,6 +9,10 @@ from metric_rca.runtime.evidence_identity import (
     lane_evidence_aliases,
 )
 from metric_rca.runtime.plan_validator import PlanValidationError, validate_plan_actions
+from metric_rca.business.attribution_experience import (
+    AttributionExperienceAdvice,
+    AttributionExperienceAdvisor,
+)
 from metric_rca.business.discovery_policy import DiscoveryLane, DiscoveryPolicy, discovery_policy_from_intent
 from metric_rca.business.policy_registry import allowed_dimensions_validator_from_metric_definition
 from metric_rca.runtime.plan_models import CasePrior, RcaAction, RcaPlan
@@ -27,8 +31,14 @@ class PlanCompilerError(ValueError):
 
 
 class RcaPlanCompiler:
-    def __init__(self, *, metric_service: MetricMetadataProvider | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        metric_service: MetricMetadataProvider | None = None,
+        experience_advisor: AttributionExperienceAdvisor | None = None,
+    ) -> None:
         self._metric_service = metric_service
+        self._experience_advisor = experience_advisor or AttributionExperienceAdvisor()
 
     def compile(
         self,
@@ -54,15 +64,27 @@ class RcaPlanCompiler:
         explicit_dimension, explicit_element = _explicit_dimension_element(parsed_intent)
         validate_dimensions = self._allowed_dimensions_validator()
         scope_mode = "unscoped"
+        experience_advice: AttributionExperienceAdvice | None = None
         if explicit_dimension is not None and explicit_element is not None:
             discovery_policy = _discovery_policy_for_intent(parsed_intent, validate_dimensions=validate_dimensions)
             if discovery_policy.scope_mode == "explicit_multi_driver":
+                experience_advice = self._experience_advisor.advise(
+                    parsed_intent=parsed_intent,
+                    available_lanes=_discovery_lanes(
+                        parsed_intent=parsed_intent,
+                        policy=discovery_policy,
+                        validate_dimensions=validate_dimensions,
+                    ),
+                    memory_hints=(),
+                    allow_memory_priority=False,
+                )
                 actions.extend(
                     _discovery_actions(
                         parsed_intent,
                         discovery_policy,
                         validate_dimensions=validate_dimensions,
                         explicit_scope=explicit_scope,
+                        experience_advice=experience_advice,
                     )
                 )
                 scope_mode = "explicit_multi_driver"
@@ -86,16 +108,22 @@ class RcaPlanCompiler:
             scope_mode = "scoped_interaction"
         else:
             discovery_policy = _discovery_policy_for_intent(parsed_intent, validate_dimensions=validate_dimensions)
+            experience_advice = self._experience_advisor.advise(
+                parsed_intent=parsed_intent,
+                available_lanes=_discovery_lanes(
+                    parsed_intent=parsed_intent,
+                    policy=discovery_policy,
+                    validate_dimensions=validate_dimensions,
+                ),
+                memory_hints=memory_hints or [],
+                allow_memory_priority=not explicit_scope,
+            )
             actions.extend(
                 _broad_actions(
                     parsed_intent,
-                    _policy_with_memory_hints(
-                        parsed_intent,
-                        discovery_policy,
-                        memory_hints or [],
-                        validate_dimensions=validate_dimensions,
-                    ),
+                    discovery_policy,
                     validate_dimensions=validate_dimensions,
+                    experience_advice=experience_advice,
                 )
             )
         _validate_evidence_identifiers(run_id=run_id, actions=actions)
@@ -110,6 +138,7 @@ class RcaPlanCompiler:
             actions=actions,
             budget=_plan_budget(actions, budget),
             memory_hints=memory_hints or [],
+            experience_advice=experience_advice,
         )
 
     def _metric_family(self, metric_id: str) -> str:
@@ -213,6 +242,7 @@ def _discovery_actions(
     *,
     validate_dimensions: Any,
     explicit_scope: dict[str, str] | None = None,
+    experience_advice: AttributionExperienceAdvice | None = None,
 ) -> list[RcaAction]:
     if not policy.required_drilldowns:
         raise PlanCompilerError("DISCOVERY_POLICY_MISSING", "discovery policy requires drilldowns")
@@ -244,6 +274,7 @@ def _discovery_actions(
             validate_dimensions=validate_dimensions,
             explicit_scope=explicit_scope,
             scoped_filters=scoped_filters if explicit_scope else None,
+            experience_advice=experience_advice,
         )
     )
     return actions
@@ -305,7 +336,13 @@ def _scoped_interaction_actions(
     return actions
 
 
-def _broad_actions(parsed_intent: ParsedIntent, policy: DiscoveryPolicy, *, validate_dimensions: Any) -> list[RcaAction]:
+def _broad_actions(
+    parsed_intent: ParsedIntent,
+    policy: DiscoveryPolicy,
+    *,
+    validate_dimensions: Any,
+    experience_advice: AttributionExperienceAdvice | None = None,
+) -> list[RcaAction]:
     if not policy.required_drilldowns:
         raise PlanCompilerError("DISCOVERY_POLICY_MISSING", "unscoped RCA requires discovery policy")
     actions: list[RcaAction] = []
@@ -335,6 +372,7 @@ def _broad_actions(parsed_intent: ParsedIntent, policy: DiscoveryPolicy, *, vali
                 policy=policy,
                 first_action_index=len(actions) + 2,
                 validate_dimensions=validate_dimensions,
+                experience_advice=experience_advice,
             )
         )
         return actions
@@ -412,16 +450,18 @@ def _parallel_broad_contribution_chains(
     scoped_elements: dict[str, str] | None = None,
     scoped_filters: dict[str, dict[str, str]] | None = None,
     explicit_scope: dict[str, str] | None = None,
+    experience_advice: AttributionExperienceAdvice | None = None,
 ) -> list[RcaAction]:
-    lanes = _discovery_lanes(
+    canonical_lanes = _discovery_lanes(
         parsed_intent=parsed_intent,
         policy=policy,
         validate_dimensions=validate_dimensions,
     )
+    lanes = _prioritize_discovery_lanes(canonical_lanes, experience_advice)
     actions: list[RcaAction] = []
-    e4_aliases: list[str] = []
-    selection_aliases: list[str] = []
-    e3_aliases: list[str] = []
+    e4_alias_by_lane: dict[tuple[str, str, str | None], str] = {}
+    selection_alias_by_lane: dict[tuple[str, str, str | None], str] = {}
+    e3_alias_by_lane: dict[tuple[str, str, str | None], str] = {}
     next_index = first_action_index
     dynamic_selection_aliases: set[str] = set()
     e4_alias_set: set[str] = set()
@@ -463,8 +503,9 @@ def _parallel_broad_contribution_chains(
             raise PlanCompilerError("DISCOVERY_LANE_ALIAS_CONFLICT", f"duplicate E3 alias {e3_alias}")
         e4_alias_set.add(e4_alias)
         e3_alias_set.add(e3_alias)
-        e4_aliases.append(e4_alias)
-        e3_aliases.append(e3_alias)
+        lane_key = _discovery_lane_key(lane)
+        e4_alias_by_lane[lane_key] = e4_alias
+        e3_alias_by_lane[lane_key] = e3_alias
         scope_policy_args = _explicit_scope_policy_args(lane, explicit_scope=explicit_scope)
 
         if first_signal_element is None:
@@ -474,7 +515,7 @@ def _parallel_broad_contribution_chains(
                     f"multiple dynamic discovery lanes require {selection_alias}",
                 )
             dynamic_selection_aliases.add(selection_alias)
-            selection_aliases.append(selection_alias)
+            selection_alias_by_lane[lane_key] = selection_alias
             actions.append(
                 RcaAction(
                     action_id=f"A{next_index}",
@@ -543,16 +584,26 @@ def _parallel_broad_contribution_chains(
         )
         next_index += 2
 
+    canonical_e4_aliases = [e4_alias_by_lane[_discovery_lane_key(lane)] for lane in canonical_lanes]
+    canonical_e3_aliases = [e3_alias_by_lane[_discovery_lane_key(lane)] for lane in canonical_lanes]
+    canonical_selection_aliases = [
+        selection_alias_by_lane[_discovery_lane_key(lane)]
+        for lane in canonical_lanes
+        if _discovery_lane_key(lane) in selection_alias_by_lane
+    ]
+    merge_args: dict[str, Any] = {
+        "metric_id": parsed_intent.metric_id,
+        "target_date": parsed_intent.target_date,
+        "source_evidence_aliases": canonical_e4_aliases,
+    }
+    if experience_advice is not None:
+        merge_args["experience_advice"] = experience_advice.model_dump(mode="json")
     actions.append(
         RcaAction(
             action_id=f"A{next_index}",
             kind="merge_contribution_sets",
-            args={
-                "metric_id": parsed_intent.metric_id,
-                "target_date": parsed_intent.target_date,
-                "source_evidence_aliases": e4_aliases,
-            },
-            requires=e4_aliases,
+            args=merge_args,
+            requires=canonical_e4_aliases,
             produces=["E4"],
         )
     )
@@ -565,9 +616,9 @@ def _parallel_broad_contribution_chains(
                 [
                     "E1",
                     *[f"E2_{dimension}" for dimension in policy.required_drilldowns],
-                    *selection_aliases,
-                    *e3_aliases,
-                    *e4_aliases,
+                    *canonical_selection_aliases,
+                    *canonical_e3_aliases,
+                    *canonical_e4_aliases,
                     "E4",
                 ]
             ),
@@ -575,6 +626,30 @@ def _parallel_broad_contribution_chains(
         )
     )
     return actions
+
+
+def _prioritize_discovery_lanes(
+    canonical_lanes: list[DiscoveryLane],
+    experience_advice: AttributionExperienceAdvice | None,
+) -> list[DiscoveryLane]:
+    if experience_advice is None or experience_advice.memory_mode != "priority_only":
+        return list(canonical_lanes)
+    lanes_by_key = {_discovery_lane_key(lane): lane for lane in canonical_lanes}
+    prioritized: list[DiscoveryLane] = []
+    for lane_ref in experience_advice.execution_lane_priority:
+        lane = lanes_by_key.get(lane_ref.key())
+        if lane is not None and lane not in prioritized:
+            prioritized.append(lane)
+    for lane in canonical_lanes:
+        if lane not in prioritized:
+            prioritized.append(lane)
+    if {_discovery_lane_key(lane) for lane in prioritized} != set(lanes_by_key):
+        raise PlanCompilerError("EXPERIENCE_POLICY_INVALID", "experience priority changed lane coverage")
+    return prioritized
+
+
+def _discovery_lane_key(lane: DiscoveryLane) -> tuple[str, str, str | None]:
+    return (lane.dimension, lane.signal_type, lane.alias_discriminator)
 
 
 def _compatibility_alias(*, field: str, declared: str | None, allocated: str) -> str:
@@ -720,45 +795,6 @@ def _explicit_dimension_element(parsed_intent: ParsedIntent) -> tuple[str | None
     if len(parsed_intent.filters) == 1:
         return next(iter(parsed_intent.filters.items()))
     return None, None
-
-
-def _policy_with_memory_hints(
-    parsed_intent: ParsedIntent,
-    policy: DiscoveryPolicy,
-    memory_hints: list[CasePrior],
-    *,
-    validate_dimensions: Any,
-) -> DiscoveryPolicy:
-    if parsed_intent.analysis_strategy != "standard":
-        return policy
-    if not memory_hints or not policy.required_drilldowns:
-        return policy
-    for hint in sorted(memory_hints, key=lambda item: item.confidence, reverse=True):
-        if hint.metric_id != parsed_intent.metric_id or hint.confidence < 0.70:
-            continue
-        preferred_signal_types = set(hint.preferred_signal_types)
-        for dimension in hint.preferred_dimensions:
-            if dimension not in policy.required_drilldowns:
-                continue
-            try:
-                signal_type = _signal_type_for_metric_dimension(
-                    parsed_intent.metric_id,
-                    dimension,
-                    validate_dimensions=validate_dimensions,
-                )
-            except PlanCompilerError:
-                continue
-            if preferred_signal_types and signal_type not in preferred_signal_types:
-                continue
-            return DiscoveryPolicy(
-                required_drilldowns=policy.required_drilldowns,
-                first_signal_dimension=dimension,
-                first_signal_type=signal_type,
-                first_signal_element=None,
-                enforce_first_signal_top_candidate=False,
-                element_selection=policy.element_selection,
-            )
-    return policy
 
 
 def _signal_type_for_metric_dimension(metric_id: str, dimension: str, *, validate_dimensions: Any = None) -> str:

@@ -697,3 +697,59 @@ def test_evidence_graph_add_ids_fails_fast_on_corrupt_evidence_id() -> None:
         graph.add_ids(["not-canonical"])
 
     assert excinfo.value.code == "EVIDENCE_ID_INVALID"
+def test_memory_priority_preserves_full_lane_coverage_and_canonical_merge_order() -> None:
+    parsed = ParsedIntent(
+        metric_id="gmv",
+        target_date=date(2026, 6, 5),
+        question_family="gmv_drop",
+        analysis_strategy="standard",
+    )
+    prior = CasePrior(
+        metric_id="gmv",
+        preferred_dimensions=["product"],
+        preferred_signal_types=["inventory"],
+        prior_root_causes=["stockout"],
+        confidence=0.95,
+        source_memory_ids=["memory-product"],
+    )
+
+    baseline = _compiler().compile(run_id="run-baseline", parsed_intent=parsed)
+    with_memory = _compiler().compile(
+        run_id="run-memory",
+        parsed_intent=parsed,
+        memory_hints=[prior],
+    )
+
+    baseline_fetches = [
+        (
+            action.args["dimension"],
+            action.args["signal_type"],
+            action.args.get("evidence_alias"),
+        )
+        for action in baseline.actions
+        if action.kind == "fetch_related_signal"
+    ]
+    memory_fetches = [
+        (
+            action.args["dimension"],
+            action.args["signal_type"],
+            action.args.get("evidence_alias"),
+        )
+        for action in with_memory.actions
+        if action.kind == "fetch_related_signal"
+    ]
+    baseline_merge = next(action for action in baseline.actions if action.kind == "merge_contribution_sets")
+    memory_merge = next(action for action in with_memory.actions if action.kind == "merge_contribution_sets")
+
+    assert len(baseline_fetches) == len(memory_fetches) == 6
+    assert set(baseline_fetches) == set(memory_fetches)
+    assert memory_fetches[0][:2] == ("product", "inventory")
+    assert (
+        memory_merge.args["source_evidence_aliases"]
+        == baseline_merge.args["source_evidence_aliases"]
+    )
+    assert with_memory.experience_advice is not None
+    assert with_memory.experience_advice.memory_mode == "priority_only"
+    assert with_memory.experience_advice.source_memory_ids == ["memory-product"]
+    assert len(with_memory.experience_advice.required_lanes) == 6
+    assert memory_merge.args["experience_advice"]["memory_mode"] == "priority_only"

@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
+from metric_rca.business.attribution_experience import AttributionExperienceAdvice
 from metric_rca.domain.models import StrictModel
 
 ScopeMode = Literal["unscoped", "explicit_single", "explicit_multi_driver", "scoped_interaction"]
@@ -59,6 +60,7 @@ class RcaPlan(StrictModel):
     actions: list[RcaAction]
     budget: dict[str, int]
     memory_hints: list[CasePrior] = Field(default_factory=list)
+    experience_advice: AttributionExperienceAdvice | None = None
 
     @field_validator("actions")
     @classmethod

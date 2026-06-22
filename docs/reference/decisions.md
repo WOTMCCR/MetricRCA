@@ -1,3 +1,37 @@
+## ADL-0055: attribution experience is priority-only and evidence-bounded
+
+| Field | Value |
+|---|---|
+| Date | 2026-06-22 |
+| Status | accepted |
+| Scope | experience catalog, plan compiler, memory priority, interaction ranking |
+
+### Decision
+
+Add a strict attribution-experience catalog for generic hypotheses, evidence
+branches, retention guidance, and residual-gap guidance. Resolve the complete
+discovery lane set from `MetricPolicyRegistry` first. Experience and memory may
+reorder that set for execution, but merge source aliases remain in canonical
+policy order and the complete set is always executed.
+
+Interaction selection is mechanism-specific. It requires current-run
+`signal_type=interaction` evidence for both channel and category in the target
+bad direction. Other signal types cannot verify an interaction candidate.
+
+### Rationale
+
+Separating canonical coverage from execution priority makes memory influence
+monotonic and auditable. It also prevents evidence from one business mechanism
+from being reused as proof for another mechanism.
+
+### Rejected alternatives
+
+A case-answer catalog, concrete element mappings, final-candidate bonuses, and
+memory-controlled lane removal were rejected. A global interaction score bonus
+was also rejected because it could misclassify independent mechanisms.
+
+---
+
 ## ADL-0054: decouple evidence identity and formalize runtime accounting
 
 | 字段 | 值 |

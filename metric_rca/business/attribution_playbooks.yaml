@@ -1,0 +1,386 @@
+version: 1
+playbooks:
+  - playbook_id: gmv-business-decomposition-v1
+    metric_ids: [gmv]
+    lane_priority:
+      - dimension: channel
+        signal_type: campaign
+      - dimension: channel
+        signal_type: conversion
+        alias_discriminator: conversion
+      - dimension: category
+        signal_type: inventory
+      - dimension: product
+        signal_type: inventory
+      - dimension: channel
+        signal_type: interaction
+        alias_discriminator: interaction
+      - dimension: category
+        signal_type: interaction
+        alias_discriminator: interaction
+    hypotheses:
+      - hypothesis_id: traffic-volume
+        root_cause_types: [campaign_traffic_drop]
+        evidence_lanes:
+          - dimension: channel
+            signal_type: campaign
+        factor_graphs: [uv_pay_cvr_aov]
+        continue_when:
+          - observation: signal_anomaly
+            operator: eq
+            value: true
+            next_hypotheses: [traffic-volume]
+        deprioritize_when:
+          - observation: signal_anomaly
+            operator: eq
+            value: false
+        pitfalls:
+          - Do not equate the largest marginal channel drop with the final cause.
+      - hypothesis_id: conversion-quality
+        root_cause_types: [conversion_drop]
+        evidence_lanes:
+          - dimension: channel
+            signal_type: conversion
+            alias_discriminator: conversion
+        factor_graphs: [uv_pay_cvr_aov]
+        continue_when:
+          - observation: factor_dominance
+            operator: eq
+            value: pay_cvr
+            next_hypotheses: [conversion-quality]
+      - hypothesis_id: inventory-availability
+        root_cause_types: [stockout]
+        evidence_lanes:
+          - dimension: category
+            signal_type: inventory
+          - dimension: product
+            signal_type: inventory
+        factor_graphs: [uv_pay_cvr_aov]
+        continue_when:
+          - observation: signal_anomaly
+            operator: eq
+            value: true
+            next_hypotheses: [inventory-availability]
+      - hypothesis_id: basket-value
+        root_cause_types: [aov_drop]
+        factor_graphs: [uv_pay_cvr_aov]
+        continue_when:
+          - observation: factor_dominance
+            operator: eq
+            value: aov
+            next_hypotheses: [basket-value]
+      - hypothesis_id: channel-category-interaction
+        root_cause_types: [interaction_channel_category]
+        evidence_lanes:
+          - dimension: channel
+            signal_type: interaction
+            alias_discriminator: interaction
+          - dimension: category
+            signal_type: interaction
+            alias_discriminator: interaction
+        continue_when:
+          - observation: cross_dimension_support
+            operator: eq
+            value: true
+            next_hypotheses: [channel-category-interaction]
+        pitfalls:
+          - Require current-run support from both interaction dimensions.
+      - hypothesis_id: residual-gap
+        root_cause_types: []
+        factor_graphs: [uv_pay_cvr_aov]
+        continue_when:
+          - observation: explained_share
+            operator: lt
+            value: 0.85
+            next_hypotheses:
+              - conversion-quality
+              - inventory-availability
+              - basket-value
+              - channel-category-interaction
+    retention:
+      minimum_material_contribution: 0.20
+      weak_signal_severity_floor: 0.10
+      preserve_root_cause_diversity: true
+      preserve_cross_dimension_interaction: true
+      max_candidates: 6
+    residual:
+      continue_below_explained_share: 0.85
+      converge_at_explained_share: 0.90
+
+  - playbook_id: gmv-interaction-v1
+    metric_ids: [gmv]
+    question_families: [interaction_gmv_anomaly]
+    lane_priority:
+      - dimension: channel
+        signal_type: interaction
+      - dimension: category
+        signal_type: interaction
+    hypotheses:
+      - hypothesis_id: channel-category-interaction
+        root_cause_types: [interaction_channel_category]
+        evidence_lanes:
+          - dimension: channel
+            signal_type: interaction
+          - dimension: category
+            signal_type: interaction
+        continue_when:
+          - observation: cross_dimension_support
+            operator: eq
+            value: true
+            next_hypotheses: [channel-category-interaction]
+        deprioritize_when:
+          - observation: cross_dimension_support
+            operator: eq
+            value: false
+        pitfalls:
+          - A same-cell campaign anomaly is a competing mechanism, not proof against interaction.
+    retention:
+      minimum_material_contribution: 0.20
+      weak_signal_severity_floor: 0.10
+      preserve_root_cause_diversity: true
+      preserve_cross_dimension_interaction: true
+      max_candidates: 5
+    residual:
+      continue_below_explained_share: 0.85
+      converge_at_explained_share: 0.90
+
+  - playbook_id: net-gmv-chain-v1
+    metric_ids: [net_gmv]
+    lane_priority:
+      - dimension: channel
+        signal_type: campaign
+      - dimension: channel
+        signal_type: conversion
+        alias_discriminator: conversion
+      - dimension: category
+        signal_type: inventory
+    hypotheses:
+      - hypothesis_id: gross-demand
+        root_cause_types: [campaign_traffic_drop, conversion_drop, stockout, aov_drop]
+        evidence_lanes:
+          - dimension: channel
+            signal_type: campaign
+          - dimension: channel
+            signal_type: conversion
+            alias_discriminator: conversion
+          - dimension: category
+            signal_type: inventory
+        factor_graphs: [net_gmv_chain, uv_pay_cvr_aov]
+        continue_when:
+          - observation: factor_dominance
+            operator: eq
+            value: gmv
+            next_hypotheses: [gross-demand]
+      - hypothesis_id: refund-and-quality
+        root_cause_types: [complaint_or_quality_issue]
+        factor_graphs: [net_gmv_chain]
+        continue_when:
+          - observation: factor_dominance
+            operator: eq
+            value: refund
+            next_hypotheses: [refund-and-quality]
+      - hypothesis_id: residual-gap
+        root_cause_types: []
+        factor_graphs: [net_gmv_chain]
+        continue_when:
+          - observation: explained_share
+            operator: lt
+            value: 0.85
+            next_hypotheses: [gross-demand, refund-and-quality]
+    retention:
+      minimum_material_contribution: 0.20
+      weak_signal_severity_floor: 0.10
+      preserve_root_cause_diversity: true
+      preserve_cross_dimension_interaction: false
+      max_candidates: 6
+    residual:
+      continue_below_explained_share: 0.85
+      converge_at_explained_share: 0.90
+
+  - playbook_id: uv-channel-v1
+    metric_ids: [uv]
+    lane_priority:
+      - dimension: channel
+        signal_type: campaign
+    hypotheses:
+      - hypothesis_id: acquisition-traffic
+        root_cause_types: [campaign_traffic_drop]
+        evidence_lanes:
+          - dimension: channel
+            signal_type: campaign
+        continue_when:
+          - observation: signal_anomaly
+            operator: eq
+            value: true
+            next_hypotheses: [acquisition-traffic]
+    retention:
+      minimum_material_contribution: 0.20
+      weak_signal_severity_floor: 0.10
+      preserve_root_cause_diversity: true
+      preserve_cross_dimension_interaction: false
+      max_candidates: 5
+    residual:
+      continue_below_explained_share: 0.85
+      converge_at_explained_share: 0.90
+
+  - playbook_id: uv-interaction-v1
+    metric_ids: [uv]
+    question_families: [interaction_uv_anomaly]
+    lane_priority:
+      - dimension: channel
+        signal_type: interaction
+      - dimension: channel
+        signal_type: campaign
+        alias_discriminator: campaign
+      - dimension: category
+        signal_type: interaction
+    hypotheses:
+      - hypothesis_id: channel-category-interaction
+        root_cause_types: [interaction_channel_category]
+        evidence_lanes:
+          - dimension: channel
+            signal_type: interaction
+          - dimension: category
+            signal_type: interaction
+        continue_when:
+          - observation: cross_dimension_support
+            operator: eq
+            value: true
+            next_hypotheses: [channel-category-interaction]
+      - hypothesis_id: acquisition-traffic
+        root_cause_types: [campaign_traffic_drop]
+        evidence_lanes:
+          - dimension: channel
+            signal_type: campaign
+            alias_discriminator: campaign
+        continue_when:
+          - observation: signal_anomaly
+            operator: eq
+            value: true
+            next_hypotheses: [acquisition-traffic]
+        pitfalls:
+          - Preserve campaign as a competing candidate when interaction is fully supported.
+    retention:
+      minimum_material_contribution: 0.20
+      weak_signal_severity_floor: 0.10
+      preserve_root_cause_diversity: true
+      preserve_cross_dimension_interaction: true
+      max_candidates: 5
+    residual:
+      continue_below_explained_share: 0.85
+      converge_at_explained_share: 0.90
+
+  - playbook_id: conversion-rate-v1
+    metric_ids: [pay_cvr]
+    lane_priority:
+      - dimension: channel
+        signal_type: conversion
+      - dimension: device
+        signal_type: conversion
+    hypotheses:
+      - hypothesis_id: conversion-friction
+        root_cause_types: [conversion_drop]
+        evidence_lanes:
+          - dimension: channel
+            signal_type: conversion
+          - dimension: device
+            signal_type: conversion
+        continue_when:
+          - observation: signal_anomaly
+            operator: eq
+            value: true
+            next_hypotheses: [conversion-friction]
+    retention:
+      minimum_material_contribution: 0.20
+      weak_signal_severity_floor: 0.10
+      preserve_root_cause_diversity: true
+      preserve_cross_dimension_interaction: false
+      max_candidates: 5
+    residual:
+      continue_below_explained_share: 0.85
+      converge_at_explained_share: 0.90
+
+  - playbook_id: refund-quality-v1
+    metric_ids: [refund_rate, complaint_rate]
+    lane_priority:
+      - dimension: product
+        signal_type: refund_quality
+      - dimension: category
+        signal_type: refund_quality
+    hypotheses:
+      - hypothesis_id: refund-and-quality
+        root_cause_types: [complaint_or_quality_issue]
+        evidence_lanes:
+          - dimension: product
+            signal_type: refund_quality
+          - dimension: category
+            signal_type: refund_quality
+        continue_when:
+          - observation: signal_anomaly
+            operator: eq
+            value: true
+            next_hypotheses: [refund-and-quality]
+    retention:
+      minimum_material_contribution: 0.20
+      weak_signal_severity_floor: 0.10
+      preserve_root_cause_diversity: true
+      preserve_cross_dimension_interaction: false
+      max_candidates: 5
+    residual:
+      continue_below_explained_share: 0.85
+      converge_at_explained_share: 0.90
+
+  - playbook_id: inventory-availability-v1
+    metric_ids: [stockout_rate]
+    lane_priority:
+      - dimension: warehouse
+        signal_type: inventory
+      - dimension: category
+        signal_type: inventory
+      - dimension: product
+        signal_type: inventory
+    hypotheses:
+      - hypothesis_id: inventory-availability
+        root_cause_types: [stockout]
+        evidence_lanes:
+          - dimension: warehouse
+            signal_type: inventory
+          - dimension: category
+            signal_type: inventory
+          - dimension: product
+            signal_type: inventory
+        continue_when:
+          - observation: signal_anomaly
+            operator: eq
+            value: true
+            next_hypotheses: [inventory-availability]
+    retention:
+      minimum_material_contribution: 0.20
+      weak_signal_severity_floor: 0.10
+      preserve_root_cause_diversity: true
+      preserve_cross_dimension_interaction: false
+      max_candidates: 5
+    residual:
+      continue_below_explained_share: 0.85
+      converge_at_explained_share: 0.90
+
+  - playbook_id: average-order-value-v1
+    metric_ids: [aov]
+    hypotheses:
+      - hypothesis_id: basket-value
+        root_cause_types: [aov_drop]
+        factor_graphs: [dimension_delta]
+        continue_when:
+          - observation: signal_anomaly
+            operator: eq
+            value: true
+            next_hypotheses: [basket-value]
+    retention:
+      minimum_material_contribution: 0.20
+      weak_signal_severity_floor: 0.10
+      preserve_root_cause_diversity: true
+      preserve_cross_dimension_interaction: false
+      max_candidates: 5
+    residual:
+      continue_below_explained_share: 0.85
+      converge_at_explained_share: 0.90

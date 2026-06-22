@@ -44,6 +44,9 @@ def test_pyproject_declares_current_phase_dependencies() -> None:
     assert set(declared) == required
     assert forbidden_phase_gt1.isdisjoint(declared)
     assert declared["openai-agents"] == "openai-agents==0.17.5"
+    assert pyproject["tool"]["setuptools"]["package-data"]["metric_rca.business"] == [
+        "attribution_playbooks.yaml"
+    ]
 
     installed = metadata("metric_rca")
     assert installed["Name"] == "metric_rca"
