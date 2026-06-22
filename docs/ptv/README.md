@@ -15,6 +15,7 @@ PTV 是一套通用的 agent eval 优化协议。它的核心假设是：如果�
 | [04-diagnosis-protocol.md](04-diagnosis-protocol.md) | 诊断输出格式、分类框架、升级触发条件 |
 | [05-grpo-bridge.md](05-grpo-bridge.md) | PTV 轨迹如何转化为 GRPO 训练数据的通用映射 |
 | [06-enforcement.md](06-enforcement.md) | 反作弊检测规则和对抗性审查清单 |
+| [07-known-issues.md](07-known-issues.md) | 已验证但留待后续优化的 PTV 缺陷记录 |
 
 ## Layer 2: 项目绑定（MetricRCA 特化）
 
